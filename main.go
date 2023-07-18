@@ -19,7 +19,8 @@ func main() {
 		}
 		log.Infof("netlink(s): %d", len(nll))
 		for _, l := range nll {
-			log.Infof("netlink: %v", l)
+			log.Infof("netlink type: %v", l.Type())
+			log.Infof("netlink attr: %#v", l.Attrs())
 		}
 
 		time.Sleep(5 * time.Second)

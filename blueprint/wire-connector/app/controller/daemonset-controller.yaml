@@ -16,7 +16,7 @@ spec:
         app.kubernetes.io/name: wire-connector
         app.kubernetes.io/part-of: wire-connector
         app.kubernetes.io/version: tbd
-        fn.kptgen.dev/controller: wire-controller-controller
+        fn.kptgen.dev/controller: wire-connector-controller
     spec:
       hostNetwork: true
       tolerations:
@@ -25,7 +25,7 @@ spec:
       serviceAccountName: wire-connector-controller
       containers:
       - name: wire-connector
-        image: image: europe-docker.pkg.dev/srlinux/eu.gcr.io/wire-connector:latest
+        image: europe-docker.pkg.dev/srlinux/eu.gcr.io/wire-connector:latest
         command:
         - /manager
         env:
