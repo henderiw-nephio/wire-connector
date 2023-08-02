@@ -2,6 +2,7 @@ package cri
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	internalapi "k8s.io/cri-api/pkg/apis"
@@ -52,5 +53,6 @@ func (r *cri) GetContainerPiD(ctx context.Context, containerID string) (string, 
 	if err != nil {
 		return "", err
 	}
+	fmt.Printf("leaf1: info: %v", resp.Info)
 	return resp.Info["pid"], nil
 }
