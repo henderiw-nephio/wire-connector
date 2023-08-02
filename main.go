@@ -44,6 +44,14 @@ func main() {
 			}
 
 			log.Infof("container name %s, id: %s, state: %s", containerName, container.GetId(), container.GetState())
+
+			if containerName == "leaf1" {
+				pid, err := c.GetContainerPiD(context.TODO(), container.GetId())
+				if err != nil {
+					log.Error(err)
+				}
+				log.Infof("container name %s, pid %s", containerName, pid)
+			}
 		}
 		time.Sleep(5 * time.Second)
 	}

@@ -17,6 +17,7 @@ const (
 
 type CRI interface {
 	ListContainers(ctx context.Context, filter *criv1.ContainerFilter) ([]*criv1.Container, error)
+	GetContainerPiD(ctx context.Context, containerID string) (string, error)
 }
 
 type cri struct {
@@ -44,4 +45,12 @@ func New() (CRI, error) {
 
 func (r *cri) ListContainers(ctx context.Context, filter *criv1.ContainerFilter) ([]*criv1.Container, error) {
 	return r.runtimeClient.ListContainers(context.TODO(), filter)
+}
+
+func (r *cri) GetContainerPiD(ctx context.Context, containerID string) (string, error) {
+	resp, err := r.runtimeClient.ContainerStatus(context.TODO(), containerID, true)
+	if err != nil {
+		return "", err
+	}
+	return resp.Info["pid"], nil
 }
