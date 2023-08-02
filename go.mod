@@ -3,6 +3,8 @@ module github.com/henderiw-nephio/wire-connector
 go 1.20
 
 require (
+	github.com/gogo/protobuf v1.3.2
+	github.com/golang/protobuf v1.5.3
 	github.com/sirupsen/logrus v1.9.3
 	github.com/vishvananda/netlink v1.1.0
 	k8s.io/cri-api v0.27.3
@@ -23,8 +25,6 @@ require (
 	github.com/go-openapi/jsonpointer v0.19.6 // indirect
 	github.com/go-openapi/jsonreference v0.20.1 // indirect
 	github.com/go-openapi/swag v0.22.3 // indirect
-	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/google/gnostic v0.5.7-v3refs // indirect
 	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/google/gofuzz v1.1.0 // indirect
