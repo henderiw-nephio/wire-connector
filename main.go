@@ -36,6 +36,7 @@ func main() {
 		if err != nil {
 			log.Error(err)
 		}
+		log.Infof("containers: %d", len(containers))
 		for _, container := range containers {
 			log.Infof("container info: %v", *container)
 		}
