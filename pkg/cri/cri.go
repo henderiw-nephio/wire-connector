@@ -2,9 +2,9 @@ package cri
 
 import (
 	"context"
-	"fmt"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	internalapi "k8s.io/cri-api/pkg/apis"
 	criv1 "k8s.io/cri-api/pkg/apis/runtime/v1"
 	"k8s.io/kubernetes/pkg/kubelet/cri/remote"
@@ -49,10 +49,11 @@ func (r *cri) ListContainers(ctx context.Context, filter *criv1.ContainerFilter)
 }
 
 func (r *cri) GetContainerPiD(ctx context.Context, containerID string) (string, error) {
+	log.Infof("GetContainerPiD: containerID: %s", containerID)
 	resp, err := r.runtimeClient.ContainerStatus(context.TODO(), containerID, true)
 	if err != nil {
 		return "", err
 	}
-	fmt.Printf("leaf1: info: %v", resp.Info)
+	log.Infof("leaf1: info: %v", resp)
 	return resp.Info["pid"], nil
 }
