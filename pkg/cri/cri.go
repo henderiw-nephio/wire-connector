@@ -2,6 +2,8 @@ package cri
 
 import (
 	"context"
+	"encoding/json"
+	"reflect"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -18,7 +20,7 @@ const (
 
 type CRI interface {
 	ListContainers(ctx context.Context, filter *criv1.ContainerFilter) ([]*criv1.Container, error)
-	GetContainerPiD(ctx context.Context, containerID string) (string, error)
+	GetContainerPiD(ctx context.Context, containerID string) (any, error)
 }
 
 type cri struct {
@@ -48,13 +50,20 @@ func (r *cri) ListContainers(ctx context.Context, filter *criv1.ContainerFilter)
 	return r.runtimeClient.ListContainers(ctx, filter)
 }
 
-func (r *cri) GetContainerPiD(ctx context.Context, containerID string) (string, error) {
+func (r *cri) GetContainerPiD(ctx context.Context, containerID string) (any, error) {
 	log.Infof("GetContainerPiD: containerID: %s", containerID)
 	resp, err := r.runtimeClient.ContainerStatus(ctx, containerID, true)
 	if err != nil {
 		return "", err
 	}
-	log.Infof("leaf1: info: %v", resp.GetInfo())
-	log.Infof("leaf1: status: %v", resp.GetStatus())
-	return resp.Info["pid"], nil
+	log.Infof("leaf1: info: %v", resp.GetInfo()["info"])
+
+	x := map[string]any{}
+	if err := json.Unmarshal([]byte(resp.GetInfo()["info"]), &x); err != nil {
+		return "", err
+	}
+	log.Infof("leaf1: pid: %v", x["pid"])
+	log.Infof("leaf1: pid type: %v", reflect.TypeOf(x["pid"]).Name())
+
+	return x["pid"], nil
 }
