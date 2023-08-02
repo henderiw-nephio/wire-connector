@@ -45,12 +45,12 @@ func New() (CRI, error) {
 }
 
 func (r *cri) ListContainers(ctx context.Context, filter *criv1.ContainerFilter) ([]*criv1.Container, error) {
-	return r.runtimeClient.ListContainers(context.TODO(), filter)
+	return r.runtimeClient.ListContainers(ctx, filter)
 }
 
 func (r *cri) GetContainerPiD(ctx context.Context, containerID string) (string, error) {
 	log.Infof("GetContainerPiD: containerID: %s", containerID)
-	resp, err := r.runtimeClient.ContainerStatus(context.TODO(), containerID, true)
+	resp, err := r.runtimeClient.ContainerStatus(ctx, containerID, true)
 	if err != nil {
 		return "", err
 	}
