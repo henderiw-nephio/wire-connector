@@ -58,7 +58,7 @@ func (r *cri) GetContainerPiD(ctx context.Context, containerID string) (any, err
 	}
 	log.Infof("leaf1: info: %v", resp.GetInfo()["info"])
 
-	x := map[string]any{}
+	x := map[string]string{}
 	if err := json.Unmarshal([]byte(resp.GetInfo()["info"]), &x); err != nil {
 		return "", err
 	}
