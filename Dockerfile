@@ -38,6 +38,10 @@ RUN apk add --update && \
     apk add bonding && \
     apk add openssh && \
     rm -rf /tmp/*/var/cache/apk/*
+RUN curl -sL https://get-gnmic.kmrd.dev | sh
+RUN curl -L https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.26.0/crictl-v1.26.0-linux-amd64.tar.gz --output crictl-v1.26.0-linux-amd64.tar.gz
+RUN tar zxvf crictl-v1.26.0-linux-amd64.tar.gz -C /usr/local/bin
+RUN rm -f crictl-v1.26.0-linux-amd64.tar.gz
 WORKDIR /
 COPY --from=builder /workspace/manager .
 ENTRYPOINT ["/manager"]
