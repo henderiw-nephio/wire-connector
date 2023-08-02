@@ -38,7 +38,12 @@ func main() {
 		}
 		log.Infof("containers: %d", len(containers))
 		for _, container := range containers {
-			log.Infof("container info: %v", *container)
+			containerName := ""
+			if container.GetMetadata() != nil {
+				containerName = container.GetMetadata().GetName()
+			}
+
+			log.Infof("container name %s, id: %s, state: %s", containerName, container.GetId(), container.GetState())
 		}
 		time.Sleep(5 * time.Second)
 	}

@@ -17,6 +17,7 @@ RUN go mod download
 
 # Copy the go source
 COPY main.go main.go
+COPY pkg/ pkg/
 
 # Build
 # the GOARCH has not a default value to allow the binary be built according to the host where the command
@@ -37,7 +38,7 @@ RUN apk add --update && \
     apk add ethtool && \
     apk add bonding && \
     apk add openssh && \
-    apk add ipoute2 && \
+    apk add iproute2 && \
     rm -rf /tmp/*/var/cache/apk/*
 RUN curl -sL https://get-gnmic.kmrd.dev | sh
 #RUN curl -L https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.26.0/crictl-v1.26.0-linux-amd64.tar.gz --output crictl-v1.26.0-linux-amd64.tar.gz
