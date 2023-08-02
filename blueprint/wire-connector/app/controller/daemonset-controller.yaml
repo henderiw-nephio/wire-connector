@@ -1,8 +1,10 @@
 apiVersion: apps/v1
 kind: DaemonSet
-metadata:
+metadata: 
   name: wire-connectore-controller
   namespace: network-system
+  annotations:
+    internal.kpt.dev/upstream-identifier: 'apps|DaemonSet|network-system|wire-connectore-controller'
 spec:
   selector:
     matchLabels:
@@ -45,6 +47,18 @@ spec:
             cpu: "100m"
             memory: "50Mi"
         securityContext:
-          privileged: false
+          privileged: true
           capabilities:
             add: ["NET_RAW", "NET_ADMIN"]
+        volumeMounts: 
+        - mountPath: /var/run/containerd
+          name: containerd-sock 
+        - mountPath: /proc
+          name: proc
+      volumes:
+      - name: containerd-sock 
+        hostPath: 
+          path: /var/run/containerd
+      - name: proc 
+        hostPath: 
+          path: /proc

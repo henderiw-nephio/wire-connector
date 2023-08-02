@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"flag"
+	"os"
 	"time"
 
+	"github.com/henderiw-nephio/wire-connector/pkg/cri"
 	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 )
@@ -11,6 +14,12 @@ import (
 func main() {
 	flag.Parse()
 	log.SetLevel(log.InfoLevel)
+
+	c, err := cri.New()
+	if err != nil {
+		log.Error(err)
+		os.Exit(1)
+	}
 
 	for {
 		nll, err := netlink.LinkList()
@@ -23,6 +32,13 @@ func main() {
 			log.Infof("netlink attr: %#v", l.Attrs())
 		}
 
+		containers, err := c.ListContainers(context.TODO(), nil)
+		if err != nil {
+			log.Error(err)
+		}
+		for _, container := range containers {
+			log.Infof("container info: %v", *container)
+		}
 		time.Sleep(5 * time.Second)
 	}
 }
