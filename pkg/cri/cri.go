@@ -54,6 +54,7 @@ func (r *cri) GetContainerPiD(ctx context.Context, containerID string) (string, 
 	if err != nil {
 		return "", err
 	}
-	log.Infof("leaf1: info: %v", resp)
+	log.Infof("leaf1: info: %v", resp.GetInfo())
+	log.Infof("leaf1: status: %v", resp.GetStatus())
 	return resp.Info["pid"], nil
 }
