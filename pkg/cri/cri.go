@@ -20,7 +20,7 @@ const (
 
 type CRI interface {
 	ListContainers(ctx context.Context, filter *criv1.ContainerFilter) ([]*criv1.Container, error)
-	GetContainerPiD(ctx context.Context, containerID string) (any, error)
+	GetContainerPiD(ctx context.Context, containerID string) (string, error)
 }
 
 type cri struct {
@@ -50,13 +50,11 @@ func (r *cri) ListContainers(ctx context.Context, filter *criv1.ContainerFilter)
 	return r.runtimeClient.ListContainers(ctx, filter)
 }
 
-func (r *cri) GetContainerPiD(ctx context.Context, containerID string) (any, error) {
-	log.Infof("GetContainerPiD: containerID: %s", containerID)
+func (r *cri) GetContainerPiD(ctx context.Context, containerID string) (string, error) {
 	resp, err := r.runtimeClient.ContainerStatus(ctx, containerID, true)
 	if err != nil {
 		return "", err
 	}
-	log.Infof("leaf1: info: %v", resp.GetInfo()["info"])
 
 	x := map[string]string{}
 	if err := json.Unmarshal([]byte(resp.GetInfo()["info"]), &x); err != nil {
