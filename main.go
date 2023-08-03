@@ -1,58 +1,140 @@
+/*
+Copyright 2022 Nokia.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package main
 
 import (
-	"context"
 	"flag"
+	"fmt"
 	"os"
-	"time"
+	"strings"
 
+	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
+	// to ensure that exec-entrypoint and run can make use of them.
+	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
+	_ "github.com/henderiw-nephio/wire-connector/controllers/pod"
 	"github.com/henderiw-nephio/wire-connector/pkg/cri"
-	log "github.com/sirupsen/logrus"
-	"github.com/vishvananda/netlink"
+	"github.com/henderiw-nephio/wire-connector/pkg/pod"
+	reconciler "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
+	"go.uber.org/zap/zapcore"
+	"golang.org/x/exp/slices"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes/scheme"
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	//+kubebuilder:scaffold:imports
+)
+
+var (
+	setupLog = ctrl.Log.WithName("setup")
 )
 
 func main() {
-	flag.Parse()
-	log.SetLevel(log.InfoLevel)
+	var enabledReconcilersString string
 
-	c, err := cri.New()
-	if err != nil {
-		log.Error(err)
+	opts := zap.Options{
+		Development: true,
+		TimeEncoder: zapcore.ISO8601TimeEncoder,
+	}
+	opts.BindFlags(flag.CommandLine)
+	flag.Parse()
+
+	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	runScheme := runtime.NewScheme()
+	if err := scheme.AddToScheme(runScheme); err != nil {
+		setupLog.Error(err, "cannot initializer schema")
 		os.Exit(1)
 	}
 
-	for {
-		nll, err := netlink.LinkList()
-		if err != nil {
-			log.Error(err)
-		}
-		log.Infof("netlink(s): %d", len(nll))
-		for _, l := range nll {
-			log.Infof("netlink type: %v", l.Type())
-			log.Infof("netlink attr: %#v", l.Attrs())
-		}
-
-		containers, err := c.ListContainers(context.TODO(), nil)
-		if err != nil {
-			log.Error(err)
-		}
-		log.Infof("containers: %d", len(containers))
-		for _, container := range containers {
-			containerName := ""
-			if container.GetMetadata() != nil {
-				containerName = container.GetMetadata().GetName()
-			}
-
-			log.Infof("container name %s, id: %s, state: %s", containerName, container.GetId(), container.GetState())
-
-			if containerName == "leaf1" {
-				pid, err := c.GetContainerPiD(context.TODO(), container.GetId())
-				if err != nil {
-					log.Error(err)
-				}
-				log.Infof("container name %s, pid %s", containerName, pid)
-			}
-		}
-		time.Sleep(5 * time.Second)
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+		Scheme: runScheme,
+	})
+	if err != nil {
+		setupLog.Error(err, "unable to start manager")
+		os.Exit(1)
 	}
+
+	setupLog.Info("setup controller")
+	ctx := ctrl.SetupSignalHandler()
+
+	cri, err := cri.New()
+	if err != nil {
+		setupLog.Error(err, "unable to initialize cri")
+		os.Exit(1)
+	}
+	ctrlCfg := &ctrlconfig.ControllerConfig{
+		PodManager: pod.NewManager(),
+		CRI:        cri,
+	}
+
+	enabledReconcilers := parseReconcilers(enabledReconcilersString)
+	var enabled []string
+	for name, r := range reconciler.Reconcilers {
+		if !reconcilerIsEnabled(enabledReconcilers, name) {
+			continue
+		}
+		if _, err = r.SetupWithManager(ctx, mgr, ctrlCfg); err != nil {
+			setupLog.Error(err, "cannot setup with manager", "reconciler", name)
+			os.Exit(1)
+		}
+		enabled = append(enabled, name)
+	}
+
+	if len(enabled) == 0 {
+		setupLog.Info("no reconcilers are enabled; did you forget to pass the --reconcilers flag?")
+	} else {
+		setupLog.Info("enabled reconcilers", "reconcilers", strings.Join(enabled, ","))
+	}
+
+	//+kubebuilder:scaffold:builder
+
+	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+		setupLog.Error(err, "unable to set up health check")
+		os.Exit(1)
+	}
+	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+		setupLog.Error(err, "unable to set up ready check")
+		os.Exit(1)
+	}
+
+	setupLog.Info("starting manager")
+	if err := mgr.Start(ctx); err != nil {
+		setupLog.Error(err, "problem running manager")
+		os.Exit(1)
+	}
+}
+
+func parseReconcilers(reconcilers string) []string {
+	return strings.Split(reconcilers, ",")
+}
+
+func reconcilerIsEnabled(reconcilers []string, reconciler string) bool {
+	if slices.Contains(reconcilers, "*") {
+		return true
+	}
+	if slices.Contains(reconcilers, reconciler) {
+		return true
+	}
+	if v, found := os.LookupEnv(fmt.Sprintf("RECONCILER_%s", strings.ToUpper(reconciler))); found {
+		if v == "true" {
+			return true
+		}
+	}
+	return false
 }
