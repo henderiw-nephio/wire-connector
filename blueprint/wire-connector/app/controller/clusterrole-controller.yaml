@@ -12,3 +12,16 @@ metadata:
     app.kubernetes.io/version: tbd
   name: wire-connector-controller-role
 rules:
+- apiGroups:
+  - '*'
+  resources:
+  - events
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  - create
+  - delete
