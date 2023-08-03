@@ -26,8 +26,10 @@ import (
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
+	_ "github.com/henderiw-nephio/wire-connector/controllers/node"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/pod"
 	"github.com/henderiw-nephio/wire-connector/pkg/cri"
+	"github.com/henderiw-nephio/wire-connector/pkg/node"
 	"github.com/henderiw-nephio/wire-connector/pkg/pod"
 	reconciler "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
 	"go.uber.org/zap/zapcore"
@@ -80,9 +82,11 @@ func main() {
 		os.Exit(1)
 	}
 	podManager := pod.NewManager()
+	nodeManager := node.NewManager()
 	ctrlCfg := &ctrlconfig.ControllerConfig{
-		PodManager: podManager,
-		CRI:        cri,
+		PodManager:  podManager,
+		NodeManager: nodeManager,
+		CRI:         cri,
 	}
 
 	enabledReconcilers := parseReconcilers(enabledReconcilersString)
@@ -117,8 +121,13 @@ func main() {
 
 	go func() {
 		for {
+			setupLog.Info("containers...")
 			for podNsn, containersCtx := range podManager.ListPods() {
 				setupLog.Info("pod", "Name", podNsn, "Containers", containersCtx)
+			}
+			setupLog.Info("nodes...")
+			for nodeName, n := range nodeManager.ListNodes() {
+				setupLog.Info("node", "Name", nodeName, "NodeSpec", n)
 			}
 			time.Sleep(5 * time.Second)
 		}

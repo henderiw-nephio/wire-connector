@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/henderiw-nephio/wire-connector/pkg/cri"
+	"github.com/henderiw-nephio/wire-connector/pkg/node"
 	"github.com/henderiw-nephio/wire-connector/pkg/pod"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 )
@@ -28,6 +29,7 @@ type ControllerConfig struct {
 	Poll  time.Duration
 	Copts controller.Options
 
-	PodManager pod.Manager
-	CRI        cri.CRI
+	PodManager  pod.Manager
+	NodeManager node.Manager
+	CRI         cri.CRI
 }

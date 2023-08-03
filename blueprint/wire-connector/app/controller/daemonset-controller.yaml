@@ -47,6 +47,8 @@ spec:
               fieldPath: status.hostIP
         - name: RECONCILER_PODS
           value: "true"
+        - name: RECONCILER_NODES
+          value: "true"
         resources:
           requests:
             cpu: "100m"
