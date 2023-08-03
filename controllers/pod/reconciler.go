@@ -127,10 +127,10 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		}
 		info, err := r.cri.GetContainerInfo(ctx, c.GetId())
 		if err != nil {
-
 			r.l.Error(err, "cannot get container info name: %s, id: %s", containerName, c.GetId())
 			return ctrl.Result{}, err
 		}
+		r.l.Info("container", "name", containerName, "name", fmt.Sprintf("%s=%s", cr.GetName(), info.PodName), "namespace", fmt.Sprintf("%s=%s", cr.GetNamespace(), info.Namespace))
 		if info.PodName == cr.GetName() && info.Namespace == cr.GetNamespace() {
 			r.podManager.UpsertContainer(req.NamespacedName, containerName, &pod.ContainerCtx{
 				ID:    info.PiD,
