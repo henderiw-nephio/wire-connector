@@ -127,7 +127,7 @@ func main() {
 			}
 			setupLog.Info("nodes...")
 			for nodeName, n := range nodeManager.ListNodes() {
-				setupLog.Info("node", "Name", nodeName, "NodeSpec", n)
+				setupLog.Info("node", "Name", nodeName, "NodeSpec", n.Status.Addresses)
 			}
 			time.Sleep(5 * time.Second)
 		}
