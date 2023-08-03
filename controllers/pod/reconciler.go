@@ -19,6 +19,7 @@ package pod
 import (
 	"context"
 	"fmt"
+	"os"
 	"reflect"
 
 	"github.com/go-logr/logr"
@@ -105,13 +106,20 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, nil
 	}
 
+	// annotations indicate if this pod is relevant for wiring
 	if len(cr.Annotations) == 0 || cr.Annotations[invv1alpha1.NephioWiringKey] != "true" {
 		// we are only interested pods that we have to wire to
 		return ctrl.Result{}, nil
 	}
-	r.l.Info("reconcile")
 
-	// update pod
+	// if the host IP does not match the host we do not need to track the pod
+	if cr.Status.HostIP == "" || cr.Status.HostIP != os.Getenv("NODE_IP") {
+		// assumption is that we get a new event when the status changes
+		return ctrl.Result{}, nil
+	}
+
+	r.l.Info("reconcile")
+	// update (add/update) pod
 	r.podManager.UpsertPod(req.NamespacedName, cr)
 
 	containers, err := r.cri.ListContainers(ctx, nil)
@@ -133,7 +141,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		r.l.Info("container", "name", containerName, "name", fmt.Sprintf("%s=%s", cr.GetName(), info.PodName), "namespace", fmt.Sprintf("%s=%s", cr.GetNamespace(), info.Namespace))
 		if info.PodName == cr.GetName() && info.Namespace == cr.GetNamespace() {
 			r.podManager.UpsertContainer(req.NamespacedName, containerName, &pod.ContainerCtx{
-				ID:    info.PiD,
+				ID:    c.GetId(),
 				Pid:   info.PiD,
 				State: c.GetState(),
 			})
