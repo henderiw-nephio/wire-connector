@@ -64,7 +64,7 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 	return nil,
 		ctrl.NewControllerManagedBy(mgr).
 			Named("NodeController").
-			For(&corev1.Pod{}).
+			For(&corev1.Node{}).
 			Complete(r)
 }
 
