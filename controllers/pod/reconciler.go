@@ -105,7 +105,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, nil
 	}
 
-	if len(cr.Annotations) == 0 || cr.Annotations[invv1alpha1.NephioWiringKey] == "true" {
+	if len(cr.Annotations) == 0 || cr.Annotations[invv1alpha1.NephioWiringKey] != "true" {
 		return ctrl.Result{}, nil
 	}
 	r.l.Info("reconcile")
