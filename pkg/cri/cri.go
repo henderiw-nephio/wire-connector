@@ -64,15 +64,15 @@ func (r *cri) GetContainerInfo(ctx context.Context, containerID string) (*Contai
 	}
 
 	containerInfo := &ContainerInfo{}
-	containerInfo.PiD, err = outputStatusInfo(status, resp.Info, "{{.info.pid}}")
+	containerInfo.PiD, err = outputStatusInfo(status, resp.Info, `{{.info.pid}}`)
 	if err != nil {
 		return nil, err
 	}
-	containerInfo.PodName, err = outputStatusInfo(status, resp.Info, "{{ index .info.config.labels 'io.kubernetes.pod.name'}}")
+	containerInfo.PodName, err = outputStatusInfo(status, resp.Info, `{{ index .info.config.labels "io.kubernetes.pod.name"}}`)
 	if err != nil {
 		return nil, err
 	}
-	containerInfo.Namespace, err = outputStatusInfo(status, resp.Info, "{{ index .info.config.labels 'io.kubernetes.pod.namespace'}}")
+	containerInfo.Namespace, err = outputStatusInfo(status, resp.Info, `{{ index .info.config.labels "io.kubernetes.pod.namespace"}}`)
 	if err != nil {
 		return nil, err
 	}
