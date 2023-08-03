@@ -106,6 +106,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	if len(cr.Annotations) == 0 || cr.Annotations[invv1alpha1.NephioWiringKey] != "true" {
+		// we are only interested pods that we have to wire to
 		return ctrl.Result{}, nil
 	}
 	r.l.Info("reconcile")
