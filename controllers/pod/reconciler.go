@@ -26,6 +26,7 @@ import (
 	"github.com/henderiw-nephio/wire-connector/pkg/cri"
 	"github.com/henderiw-nephio/wire-connector/pkg/pod"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
+	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
 	"github.com/nephio-project/nephio/controllers/pkg/resource"
 	"github.com/nokia/k8s-ipam/pkg/meta"
 	"github.com/pkg/errors"
@@ -83,7 +84,6 @@ type reconciler struct {
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	r.l = log.FromContext(ctx)
-	r.l.Info("reconcile", "req", req)
 
 	cr := &corev1.Pod{}
 	if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
@@ -104,6 +104,11 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		r.l.Info("cr deleted")
 		return ctrl.Result{}, nil
 	}
+
+	if len(cr.Annotations) == 0 || cr.Annotations[invv1alpha1.NephioWiringKey] == "true" {
+		return ctrl.Result{}, nil
+	}
+	r.l.Info("reconcile")
 
 	// update pod
 	r.podManager.UpsertPod(req.NamespacedName, cr)

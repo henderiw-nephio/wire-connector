@@ -31,10 +31,6 @@ spec:
         command:
         - /manager
         env:
-        - name: NODE_IP
-          valueFrom:
-            fieldRef:
-              fieldPath: status.hostIP
         - name: POD_IP
           valueFrom:
             fieldRef:

@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -78,8 +79,9 @@ func main() {
 		setupLog.Error(err, "unable to initialize cri")
 		os.Exit(1)
 	}
+	podManager := pod.NewManager()
 	ctrlCfg := &ctrlconfig.ControllerConfig{
-		PodManager: pod.NewManager(),
+		PodManager: podManager,
 		CRI:        cri,
 	}
 
@@ -112,6 +114,15 @@ func main() {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}
+
+	go func() {
+		for {
+			for podNsn, containersCtx := range podManager.ListPods() {
+				setupLog.Info("pod", "Name", podNsn, "Containers", containersCtx)
+			}
+			time.Sleep(5 * time.Second)
+		}
+	}()
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctx); err != nil {
