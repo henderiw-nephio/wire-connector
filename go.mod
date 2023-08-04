@@ -19,7 +19,7 @@ require (
 	k8s.io/apimachinery v0.28.0-alpha.3
 	k8s.io/client-go v0.28.0-alpha.3
 	k8s.io/cri-api v0.27.3
-	k8s.io/kubernetes v1.15.0-alpha.0
+	k8s.io/kubernetes v1.27.4
 	sigs.k8s.io/controller-runtime v0.15.0
 )
 

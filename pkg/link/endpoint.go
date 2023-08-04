@@ -19,7 +19,7 @@ package link
 import (
 	"net"
 
-	"github.com/containernetworking/plugigons/pkg/ns"
+	"github.com/containernetworking/plugins/pkg/ns"
 	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
 	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
