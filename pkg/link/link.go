@@ -141,10 +141,10 @@ func (r *Link) Deploy() error {
 		// delete the links to ensure we dont keep these resources hanging
 		log.Info("cannot link ns epA", "err", err)
 		if err := netlink.LinkDel(linkA); err != nil {
-			log.Error(err)
+			log.Errorf("delete failed, err: %s", err.Error())
 		}
 		if err := netlink.LinkDel(linkB); err != nil {
-			log.Error(err)
+			log.Errorf("delete failed, err: %s", err.Error())
 		}
 		return err
 	}
@@ -155,10 +155,10 @@ func (r *Link) Deploy() error {
 		// delete the links to ensure we dont keep these resources hanging
 		log.Info("cannot link ns epB", "err", err)
 		if err := netlink.LinkDel(linkA); err != nil {
-			log.Error(err)
+			log.Errorf("delete failed, err: %s", err.Error())
 		}
 		if err := netlink.LinkDel(linkB); err != nil {
-			log.Error(err)
+			log.Errorf("delete failed, err: %s", err.Error())
 		}
 		return err
 	}
