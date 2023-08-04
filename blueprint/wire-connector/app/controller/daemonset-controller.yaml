@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: DaemonSet
 metadata: 
-  name: wire-connectore-controller
+  name: wire-connector-controller
   namespace: network-system
   annotations:
     internal.kpt.dev/upstream-identifier: 'apps|DaemonSet|network-system|wire-connectore-controller'
