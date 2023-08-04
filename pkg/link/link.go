@@ -109,6 +109,14 @@ func (r *Link) IsHostLocal() bool {
 	return false
 }
 
+func (r *Link) HasLocal() bool {
+	if r.endpointA.hostConnectivity == invv1alpha1.HostConnectivityLocal ||
+		r.endpointB.hostConnectivity == invv1alpha1.HostConnectivityLocal {
+		return true
+	}
+	return false
+}
+
 func (r *Link) GetConn() string {
 	return fmt.Sprintf("epA: cluster: %s, host: %s, epB: cluster: %s, host: %s",
 		r.endpointA.clusterConnectivity, r.endpointA.hostConnectivity,

@@ -130,8 +130,8 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		log.Info("cannot wire, crosscluster wiring not supported", "connectivity", link.GetConn())
 		return ctrl.Result{}, nil
 	}
-	if !link.IsHostLocal() {
-		log.Info("cannot wire, remote host wiring not supported", "connectivity", link.GetConn())
+	if !link.HasLocal() {
+		log.Info("nothing todo, no local endpoints", "connectivity", link.GetConn())
 		return ctrl.Result{}, nil
 	}
 
