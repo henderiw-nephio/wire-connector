@@ -12,6 +12,11 @@ import (
 	"github.com/golang/protobuf/proto"
 )
 
+const (
+	formatJSON       = "json"
+	formatGoTemplate = "go-template"
+)
+
 func protobufObjectToJSON(obj proto.Message) (string, error) {
 	jsonpbMarshaler := jsonpb.Marshaler{EmitDefaults: true, Indent: "  "}
 	marshaledJSON, err := jsonpbMarshaler.MarshalToString(obj)
@@ -21,7 +26,7 @@ func protobufObjectToJSON(obj proto.Message) (string, error) {
 	return marshaledJSON, nil
 }
 
-func outputStatusInfo(status string, info map[string]string, tmplStr string) (string, error) {
+func outputStatusInfo(status string, info map[string]string, format, tmplStr string) (string, error) {
 	// Sort all keys
 	keys := []string{}
 	for k := range info {
@@ -42,7 +47,19 @@ func outputStatusInfo(status string, info map[string]string, tmplStr string) (st
 	jsonInfo = jsonInfo[:len(jsonInfo)-1]
 	jsonInfo += "}"
 
-	return tmplExecuteRawJSON(tmplStr, jsonInfo)
+	switch format {
+	case formatJSON:
+		var output bytes.Buffer
+		if err := json.Indent(&output, []byte(jsonInfo), "", "  "); err != nil {
+			return "", err
+		}
+		return output.String(), nil
+	case formatGoTemplate:
+		return tmplExecuteRawJSON(tmplStr, jsonInfo)
+	default:
+		return "", fmt.Errorf("unsupported %q format\n", format)
+	}
+
 }
 
 // marshalMapInOrder marshalls a map into json in the order of the original

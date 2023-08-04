@@ -143,7 +143,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			r.podManager.UpsertContainer(req.NamespacedName, containerName, &pod.ContainerCtx{
 				ID:     c.GetId(),
 				Pid:    info.PiD,
-				NSPath: fmt.Sprintf("/proc/%s/ns/net", info.PiD),
+				NSPath: info.NsPath,
 				State:  c.GetState(),
 			})
 		}

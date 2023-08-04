@@ -9,6 +9,7 @@ import (
 
 type ContainerInfo struct {
 	PiD       string
+	NsPath    string
 	PodName   string
 	Namespace string
 }

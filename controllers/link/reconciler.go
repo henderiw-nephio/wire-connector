@@ -138,7 +138,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	// we should only add a finalizer when we act
 	if err := r.finalizer.AddFinalizer(ctx, cr); err != nil {
 		log.Error(err, "cannot add finalizer")
-		cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
+		cr.SetConditions(resourcev1alpha1.Failed("cannot add finalizer"))
 		return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 	}
 

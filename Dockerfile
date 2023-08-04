@@ -29,7 +29,9 @@ COPY cmd/ cmd/
 # by leaving it empty we can ensure that the container and binary shipped on it will have the same platform.
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o manager main.go
 
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o iptool cmd/main.go
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o iptool cmd/iptool/main.go
+
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o getnspath cmd/getnspath/main.go
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
@@ -52,4 +54,5 @@ RUN curl -sL https://get-gnmic.kmrd.dev | sh
 WORKDIR /
 COPY --from=builder /workspace/manager .
 COPY --from=builder /workspace/iptool .
+COPY --from=builder /workspace/getnspath .
 ENTRYPOINT ["/manager"]
