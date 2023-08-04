@@ -104,7 +104,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	})
 
 	if meta.WasDeleted(cr) {
-		if !link.Exists() {
+		if link.Exists() {
 			if err := link.Destroy(); err != nil {
 				log.Error(err, "cannot remove link")
 				cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
