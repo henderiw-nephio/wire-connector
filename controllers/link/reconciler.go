@@ -145,7 +145,8 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	if !link.Exists() {
 		if err := link.Deploy(); err != nil {
 			log.Error(err, "cannot deploy link")
-			cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
+			// the issue is that error always changes and this causes continuous reconciliation
+			cr.SetConditions(resourcev1alpha1.Failed("cannot deploy link"))
 			return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 		}
 		log.Info("link deployed...")
