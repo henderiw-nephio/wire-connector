@@ -30,6 +30,7 @@ func linkToNS(link netlink.Link, linkName string, netNsPath string) error {
 	log.Info("linkToNS", "linkName", linkName, "netNsPath", netNsPath)
 	vethNS, err := ns.GetNS(netNsPath)
 	if err != nil {
+		log.Info("linkToNS get ns", "netNsPath", netNsPath, "err", err)
 		return err
 	}
 	// move veth endpoint to namespace
