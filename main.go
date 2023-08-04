@@ -28,6 +28,7 @@ import (
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/node"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/pod"
+	_ "github.com/henderiw-nephio/wire-connector/controllers/link"
 	"github.com/henderiw-nephio/wire-connector/pkg/cri"
 	"github.com/henderiw-nephio/wire-connector/pkg/node"
 	"github.com/henderiw-nephio/wire-connector/pkg/pod"
