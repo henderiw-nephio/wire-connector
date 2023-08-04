@@ -22,6 +22,7 @@ import (
 
 	"github.com/henderiw-nephio/wire-connector/pkg/pod"
 	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
+	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -53,10 +54,12 @@ func NewLink(cr *invv1alpha1.Link, lctx *LinkCtx) *Link {
 }
 
 func (r *Link) getEndpoint(epSpec invv1alpha1.EndpointSpec) *Endpoint {
+	log.Info("getEndpoint", "epSpec", epSpec)
 	epCtx := &EndpointCtx{
 		IfName:              epSpec.InterfaceName,
 		ClusterConnectivity: invv1alpha1.GetClusterConnectivity(epSpec.Topology, r.topologies),
 	}
+	log.Info("getEndpoint", "clusterConn", invv1alpha1.GetClusterConnectivity(epSpec.Topology, r.topologies))
 	if epCtx.ClusterConnectivity != invv1alpha1.ClusterConnectivityLocal {
 		// this ep is on a remote cluster
 		epCtx.HostConnectivity = invv1alpha1.HostConnectivityRemote
@@ -66,15 +69,13 @@ func (r *Link) getEndpoint(epSpec invv1alpha1.EndpointSpec) *Endpoint {
 	// for now namespace is default
 	podCtx, err := r.podManager.GetPod(types.NamespacedName{Namespace: "default", Name: epSpec.NodeName})
 	if err != nil {
+		log.Info("getEndpoint pod does not exist")
 		// pod does not exist
 		epCtx.HostConnectivity = invv1alpha1.HostConnectivityUnknown
 	} else {
-		if _, ok := podCtx.Containers[epSpec.NodeName]; !ok {
-			// container not found
-			epCtx.HostConnectivity = invv1alpha1.HostConnectivityUnknown
-		} else {
-			epCtx.HostConnectivity = podCtx.HostConnectivity
-			epCtx.HostIP = podCtx.HostIP
+		epCtx.HostConnectivity = podCtx.HostConnectivity
+		epCtx.HostIP = podCtx.HostIP
+		if podCtx.HostConnectivity == invv1alpha1.HostConnectivityLocal {
 			epCtx.NsPath = podCtx.Containers[epSpec.NodeName].NSPath
 		}
 	}

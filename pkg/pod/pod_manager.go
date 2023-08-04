@@ -81,7 +81,7 @@ func (r *manager) GetPod(nsn types.NamespacedName) (*PodCtx, error) {
 	if !ok {
 		return nil, fmt.Errorf("not found")
 	}
-	return &podCtx, nil
+	return getNewPodCtx(&podCtx), nil
 }
 
 func (r *manager) ListPods() map[string]PodCtx {
@@ -89,17 +89,23 @@ func (r *manager) ListPods() map[string]PodCtx {
 	defer r.m.RUnlock()
 
 	pods := map[string]PodCtx{}
-	for podNSN, pod := range r.pods {
-		pods[podNSN.String()] = PodCtx{
-			HostIP:           pod.HostIP,
-			HostConnectivity: pod.HostConnectivity,
-			Containers:       map[string]ContainerCtx{},
-		}
-		for cName, cCtx := range pod.Containers {
-			pods[podNSN.String()].Containers[cName] = cCtx
-		}
+	for podNSN, podCtx := range r.pods {
+		newPodCtx := getNewPodCtx(&podCtx)
+		pods[podNSN.String()] = *newPodCtx
 	}
 	return pods
+}
+
+func getNewPodCtx(podCtx *PodCtx) *PodCtx {
+	newPodCtx := &PodCtx{
+		HostIP:           podCtx.HostIP,
+		HostConnectivity: podCtx.HostConnectivity,
+		Containers:       map[string]ContainerCtx{},
+	}
+	for cName, cCtx := range podCtx.Containers {
+		newPodCtx.Containers[cName] = cCtx
+	} 
+	return newPodCtx
 }
 
 func (r *manager) UpsertContainer(nsn types.NamespacedName, containerName string, c *ContainerCtx) {
