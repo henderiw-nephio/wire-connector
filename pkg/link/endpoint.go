@@ -65,9 +65,10 @@ func (r *Endpoint) Destroy() error {
 func (r *Endpoint) Exists() bool {
 	var NNS ns.NetNS
 	var err error
+	log.Info("ep exists", "nsPath", r.nsPath)
 
 	if NNS, err = ns.GetNS(r.nsPath); err != nil {
-		log.Debug(err)
+		log.Info("ep exists get ns:", "err", err)
 		return false
 	}
 
@@ -77,7 +78,7 @@ func (r *Endpoint) Exists() bool {
 		return err
 	})
 	if err != nil {
-		log.Debug(err)
+		log.Info("ep exists get link by Name", "err", err)
 		return false
 	}
 
