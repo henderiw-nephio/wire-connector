@@ -12,6 +12,7 @@ require (
 	github.com/nokia/k8s-ipam v0.0.4-0.20230803154501-8e4d0cb98b49
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.9.0
+	github.com/spf13/cobra v1.6.1
 	github.com/vishvananda/netlink v1.2.1-beta.2
 	go.uber.org/zap v1.25.0
 	golang.org/x/exp v0.0.0-20230801115018-d63ba01acd4b
@@ -45,6 +46,7 @@ require (
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.7.0 // indirect
 	github.com/imdario/mergo v0.3.16 // indirect
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
