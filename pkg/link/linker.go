@@ -21,25 +21,30 @@ import (
 
 	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/google/uuid"
+	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 )
 
 // toNS puts a veth endpoint to a given netns and renames its random name to a desired name.
 func linkToNS(link netlink.Link, linkName string, netNsPath string) error {
+	log.Info("linkToNS", "linkName", linkName, "netNsPath", netNsPath)
 	vethNS, err := ns.GetNS(netNsPath)
 	if err != nil {
 		return err
 	}
 	// move veth endpoint to namespace
 	if err = netlink.LinkSetNsFd(link, int(vethNS.Fd())); err != nil {
+		log.Info("linkToNS move ep to namespace faialed", "err", err)
 		return err
 	}
 	err = vethNS.Do(func(_ ns.NetNS) error {
 		if err = netlink.LinkSetName(link, linkName); err != nil {
+			log.Info("linkToNS failed to rename link", "err", err)
 			return fmt.Errorf("failed to rename link: %v", err)
 		}
 
 		if err = netlink.LinkSetUp(link); err != nil {
+			log.Info("linkToNS failed to set up", "linkName", linkName, "err", err)
 			return fmt.Errorf("failed to set %q up: %v", linkName, err)
 		}
 		return nil

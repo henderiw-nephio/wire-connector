@@ -79,6 +79,7 @@ func (r *Link) getEndpoint(epSpec invv1alpha1.EndpointSpec) *Endpoint {
 			epCtx.NsPath = podCtx.Containers[epSpec.NodeName].NSPath
 		}
 	}
+	log.Info("getEndpoint", "epCtx", epCtx)
 	return NewEndpoint(epCtx)
 }
 
@@ -160,6 +161,8 @@ func (r *Link) createVethIfacePair() (netlink.Link, netlink.Link, error) {
 	interfaceARandName := fmt.Sprintf("wire-%s", genIfName())
 	interfaceBRandName := fmt.Sprintf("wire-%s", genIfName())
 
+	log.Info("createVethIfacePair", "ifa", interfaceARandName, "ifb", interfaceBRandName)
+
 	linkA = &netlink.Veth{
 		LinkAttrs: netlink.LinkAttrs{
 			Name:  interfaceARandName,
@@ -184,12 +187,14 @@ func (r *Link) createVethIfacePair() (netlink.Link, netlink.Link, error) {
 
 	// add the link
 	if err := netlink.LinkAdd(linkA); err != nil {
+		log.Info("createVethIfacePair", "err", err)
 		return nil, nil, err
 	}
 
 	// retrieve netlink.Link for the peer interface
 	if linkB, err = netlink.LinkByName(interfaceBRandName); err != nil {
 		err = fmt.Errorf("failed to lookup %q: %v", interfaceBRandName, err)
+		log.Info("createVethIfacePair", "err", err)
 		return nil, nil, err
 	}
 
