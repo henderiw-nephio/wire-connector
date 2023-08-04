@@ -16,8 +16,28 @@ rules:
   - '*'
   resources:
   - events
+  verbs:
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  - create
+  - delete
+- apiGroups:
+  - '*'
+  resources:
   - pods
   - nodes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - inv.nephio.org
+  resources:
+  - links
+  - links/status
   verbs:
   - get
   - list

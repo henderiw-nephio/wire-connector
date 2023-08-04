@@ -14,24 +14,25 @@
  limitations under the License.
 */
 
-package pod
+package link
 
 import (
 	"context"
 	"fmt"
-	"os"
 	"reflect"
+	"time"
 
-	"github.com/go-logr/logr"
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
-	"github.com/henderiw-nephio/wire-connector/pkg/cri"
+	"github.com/henderiw-nephio/wire-connector/pkg/link"
+	"github.com/henderiw-nephio/wire-connector/pkg/node"
 	"github.com/henderiw-nephio/wire-connector/pkg/pod"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
 	"github.com/nephio-project/nephio/controllers/pkg/resource"
 	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
+	resourcev1alpha1 "github.com/nokia/k8s-ipam/apis/resource/common/v1alpha1"
 	"github.com/nokia/k8s-ipam/pkg/meta"
 	"github.com/pkg/errors"
-	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -41,7 +42,7 @@ import (
 )
 
 func init() {
-	reconcilerinterface.Register("pods", &reconciler{})
+	reconcilerinterface.Register("links", &reconciler{})
 }
 
 const (
@@ -62,13 +63,13 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 	// initialize reconciler
 	r.Client = mgr.GetClient()
 	r.finalizer = resource.NewAPIFinalizer(mgr.GetClient(), finalizer)
+	r.nodeManager = cfg.NodeManager
 	r.podManager = cfg.PodManager
-	r.cri = cfg.CRI
 
 	return nil,
 		ctrl.NewControllerManagedBy(mgr).
-			Named("PodController").
-			For(&corev1.Pod{}).
+			Named("LinkController").
+			For(&invv1alpha1.Link{}).
 			Complete(r)
 }
 
@@ -77,77 +78,68 @@ type reconciler struct {
 	client.Client
 	finalizer *resource.APIFinalizer
 
-	podManager pod.Manager
-	cri        cri.CRI
-
-	l logr.Logger
+	nodeManager node.Manager
+	podManager  pod.Manager
 }
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	r.l = log.FromContext(ctx)
+	log := log.FromContext(ctx)
+	log.Info("reconcile")
 
-	cr := &corev1.Pod{}
+	cr := &invv1alpha1.Link{}
 	if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
-		// There's no need to requeue if we no longer exist. Otherwise we'll be
-		// requeued implicitly because we return an error.
-		if resource.IgnoreNotFound(err) != nil {
-			r.l.Error(err, errGetCr)
+		if !apierrors.IsNotFound(err) {
+			log.Error(err, errGetCr)
 			return ctrl.Result{}, errors.Wrap(resource.IgnoreNotFound(err), errGetCr)
 		}
 		return reconcile.Result{}, nil
 	}
 
+	link := link.NewLink(cr, &link.LinkCtx{
+		PodManager: r.podManager,
+		Topologies: map[string]struct{}{},
+	})
+
 	if meta.WasDeleted(cr) {
-		// check if this pod was used for a link wire
-		// if so clean up the link wire
-		// delete the pod from the manager
-		r.podManager.DeletePod(req.NamespacedName)
-		r.l.Info("cr deleted")
+
+		// todo delete the veth pair
+		if err := link.Destroy(); err != nil {
+			log.Error(err, "cannot remove link")
+			cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
+			return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+		}
+
+		if err := r.finalizer.RemoveFinalizer(ctx, cr); err != nil {
+			log.Error(err, "cannot remove finalizer")
+			cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
+			return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+		}
 		return ctrl.Result{}, nil
 	}
 
-	// annotations indicate if this pod is relevant for wiring
-	if len(cr.Annotations) == 0 || cr.Annotations[invv1alpha1.NephioWiringKey] != "true" {
-		// we are only interested pods that we have to wire to
+	if err := r.finalizer.AddFinalizer(ctx, cr); err != nil {
+		log.Error(err, "cannot add finalizer")
+		cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
+		return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+	}
+
+	if !link.IsReady() {
+		log.Info("cannot wire, endpoints not ready", "connectivity", link.GetConn())
+		return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
+	}
+	if link.IsCrossCluster() {
+		log.Info("cannot wire, crosscluster wiring not supported", "connectivity", link.GetConn())
+		return ctrl.Result{}, nil
+	}
+	if !link.IsHostLocal() {
+		log.Info("cannot wire, remote host wiring not supported", "connectivity", link.GetConn())
 		return ctrl.Result{}, nil
 	}
 
-	r.l.Info("reconcile")
-	// update (add/update) pod to inventory
-	r.podManager.UpsertPod(req.NamespacedName, cr)
-
-	// if the host IP does not match the host we do not need to track the pod
-	if cr.Status.HostIP == "" || cr.Status.HostIP != os.Getenv("NODE_IP") {
-		// assumption is that we get a new event when the status changes
-		// we dont need to lookup containers if we know this is not a pod locally on the node
-		return ctrl.Result{}, nil
-	}
-
-	containers, err := r.cri.ListContainers(ctx, nil)
-	if err != nil {
-		r.l.Error(err, "cannot get containers from cri")
-		return ctrl.Result{}, err
-	}
-
-	for _, c := range containers {
-		containerName := ""
-		if c.GetMetadata() != nil {
-			containerName = c.GetMetadata().GetName()
-		}
-		info, err := r.cri.GetContainerInfo(ctx, c.GetId())
-		if err != nil {
-			r.l.Error(err, "cannot get container info name: %s, id: %s", containerName, c.GetId())
-			return ctrl.Result{}, err
-		}
-		r.l.Info("container", "name", containerName, "name", fmt.Sprintf("%s=%s", cr.GetName(), info.PodName), "namespace", fmt.Sprintf("%s=%s", cr.GetNamespace(), info.Namespace))
-		if info.PodName == cr.GetName() && info.Namespace == cr.GetNamespace() {
-			r.podManager.UpsertContainer(req.NamespacedName, containerName, &pod.ContainerCtx{
-				ID:     c.GetId(),
-				Pid:    info.PiD,
-				NSPath: fmt.Sprintf("/proc/%s/ns/net", info.PiD),
-				State:  c.GetState(),
-			})
-		}
+	if err := link.Deploy(); err != nil {
+		log.Error(err, "cannot deploy link")
+		cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
+		return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 	}
 
 	return ctrl.Result{}, nil

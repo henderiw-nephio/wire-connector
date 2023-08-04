@@ -49,6 +49,8 @@ spec:
           value: "true"
         - name: RECONCILER_NODES
           value: "true"
+        - name: RECONCILER_LINKS
+          value: "true"
         resources:
           requests:
             cpu: "100m"

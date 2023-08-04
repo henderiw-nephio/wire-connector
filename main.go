@@ -122,8 +122,8 @@ func main() {
 	go func() {
 		for {
 			setupLog.Info("containers...")
-			for podNsn, containersCtx := range podManager.ListPods() {
-				setupLog.Info("pod", "Name", podNsn, "Containers", containersCtx)
+			for podNsn, podCtx := range podManager.ListPods() {
+				setupLog.Info("pod", "Name", podNsn, "HostConn", podCtx.HostConnectivity, "Containers", podCtx.Containers)
 			}
 			setupLog.Info("nodes...")
 			for nodeName, n := range nodeManager.ListNodes() {

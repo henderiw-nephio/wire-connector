@@ -68,6 +68,7 @@ func (r *cri) GetContainerInfo(ctx context.Context, containerID string) (*Contai
 	if err != nil {
 		return nil, err
 	}
+
 	containerInfo.PodName, err = outputStatusInfo(status, resp.Info, `{{ index .info.config.labels "io.kubernetes.pod.name"}}`)
 	if err != nil {
 		return nil, err
