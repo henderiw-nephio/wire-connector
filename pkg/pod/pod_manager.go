@@ -45,23 +45,33 @@ func NewManager() Manager {
 	}
 }
 
+func getHostConnectivity(pod *corev1.Pod) (invv1alpha1.HostConnectivity) {
+	if len(pod.Status.ContainerStatuses) == 0 {
+		return invv1alpha1.HostConnectivityUnknown
+	}
+	if !pod.Status.ContainerStatuses[0].Ready {
+		return invv1alpha1.HostConnectivityUnknown
+	}
+	if len(pod.Status.PodIPs) == 0 {
+		return invv1alpha1.HostConnectivityUnknown
+	}
+	switch {
+	case pod.Status.HostIP != "" && pod.Status.HostIP != os.Getenv("NODE_IP"):
+		return invv1alpha1.HostConnectivityRemote
+	case pod.Status.HostIP != "" && pod.Status.HostIP == os.Getenv("NODE_IP"):
+		return invv1alpha1.HostConnectivityLocal
+	default:
+		return invv1alpha1.HostConnectivityUnknown
+	}
+}
+
 func (r *manager) UpsertPod(nsn types.NamespacedName, pod *corev1.Pod) {
 	r.m.Lock()
 	defer r.m.Unlock()
 
-	var hostConn invv1alpha1.HostConnectivity
-	switch {
-	case pod.Status.HostIP != "" && pod.Status.HostIP != os.Getenv("NODE_IP"):
-		hostConn = invv1alpha1.HostConnectivityRemote
-	case pod.Status.HostIP != "" && pod.Status.HostIP == os.Getenv("NODE_IP"):
-		hostConn = invv1alpha1.HostConnectivityLocal
-	default:
-		hostConn = invv1alpha1.HostConnectivityUnknown
-	}
-
 	r.pods[nsn] = PodCtx{
 		HostIP:           pod.Status.HostIP,
-		HostConnectivity: hostConn,
+		HostConnectivity: getHostConnectivity(pod),
 		Containers:       map[string]ContainerCtx{},
 	}
 }
