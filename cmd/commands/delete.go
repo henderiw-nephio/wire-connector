@@ -31,7 +31,7 @@ func deleteRun(_ *cobra.Command, args []string) error {
 		if prefix != "" && strings.HasPrefix(l.Attrs().Name, prefix) {
 			fmt.Printf("delete link: %s\n", l.Attrs().Name)
 			if err := netlink.LinkDel(l); err != nil {
-				fmt.Printf("cannot delete link: %s\n", l.Attrs().Name)
+				fmt.Printf("cannot delete link: %s, err: %s\n", l.Attrs().Name, err.Error())
 			}
 		}
 	}
