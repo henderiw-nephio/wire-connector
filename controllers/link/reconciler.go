@@ -103,10 +103,26 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		Topologies: map[string]struct{}{},
 	})
 
-	if !link.IsReady() {
-		if meta.WasDeleted(cr) {
-			return ctrl.Result{}, nil
+	if meta.WasDeleted(cr) {
+		if !link.Exists() {
+			if err := link.Destroy(); err != nil {
+				log.Error(err, "cannot remove link")
+				cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
+				return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+			}
 		}
+		
+		if err := r.finalizer.RemoveFinalizer(ctx, cr); err != nil {
+			log.Error(err, "cannot remove finalizer")
+			cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
+			return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+		}
+
+		log.Info("link destroyed...")
+		return ctrl.Result{}, nil
+	}
+
+	if !link.IsReady() {
 		log.Info("cannot wire, endpoints not ready", "connectivity", link.GetConn())
 		return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
 	}
@@ -119,24 +135,6 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, nil
 	}
 
-	if meta.WasDeleted(cr) {
-		// todo delete the veth pair
-		if err := link.Destroy(); err != nil {
-			log.Error(err, "cannot remove link")
-			cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
-			return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
-		}
-
-		if err := r.finalizer.RemoveFinalizer(ctx, cr); err != nil {
-			log.Error(err, "cannot remove finalizer")
-			cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
-			return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
-		}
-
-		log.Info("link destroyed...")
-		return ctrl.Result{}, nil
-	}
-	
 	// we should only add a finalizer when we act
 	if err := r.finalizer.AddFinalizer(ctx, cr); err != nil {
 		log.Error(err, "cannot add finalizer")
@@ -155,6 +153,5 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		log.Info("link exists...")
 	}
 
-	
 	return ctrl.Result{}, nil
 }

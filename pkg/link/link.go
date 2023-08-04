@@ -161,7 +161,7 @@ func (r *Link) createVethIfacePair() (netlink.Link, netlink.Link, error) {
 	interfaceARandName := fmt.Sprintf("wire-%s", genIfName())
 	interfaceBRandName := fmt.Sprintf("wire-%s", genIfName())
 
-	log.Info("createVethIfacePair", "ifa", interfaceARandName, "ifb", interfaceBRandName)
+	log.Infof("createVethIfacePair", "ifa", interfaceARandName, "ifb", interfaceBRandName)
 
 	linkA = &netlink.Veth{
 		LinkAttrs: netlink.LinkAttrs{
