@@ -138,12 +138,24 @@ func (r *Link) Deploy() error {
 	// attach linkA to Namespace and rename to requested name
 	err = linkToNS(linkA, r.endpointA.ifName, r.endpointA.nsPath)
 	if err != nil {
+		if err := netlink.LinkDel(linkA); err != nil {
+			log.Error(err)
+		}
+		if err := netlink.LinkDel(linkB); err != nil {
+			log.Error(err)
+		}
 		return err
 	}
 
 	// attach linkB to Namespace and rename to requested name
 	err = linkToNS(linkB, r.endpointB.ifName, r.endpointB.nsPath)
 	if err != nil {
+		if err := netlink.LinkDel(linkA); err != nil {
+			log.Error(err)
+		}
+		if err := netlink.LinkDel(linkB); err != nil {
+			log.Error(err)
+		}
 		return err
 	}
 
