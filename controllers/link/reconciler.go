@@ -104,7 +104,6 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	})
 
 	if meta.WasDeleted(cr) {
-
 		// todo delete the veth pair
 		if err := link.Destroy(); err != nil {
 			log.Error(err, "cannot remove link")
@@ -117,6 +116,8 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
 			return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 		}
+
+		log.Info("link destroyed...")
 		return ctrl.Result{}, nil
 	}
 
@@ -139,12 +140,17 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, nil
 	}
 
-	if err := link.Deploy(); err != nil {
-		log.Error(err, "cannot deploy link")
-		cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
-		return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+	if !link.Exists() {
+		if err := link.Deploy(); err != nil {
+			log.Error(err, "cannot deploy link")
+			cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
+			return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+		}
+		log.Info("link deployed...")
+	} else {
+		log.Info("link exists...")
 	}
 
-	log.Info("link deployed")
+	
 	return ctrl.Result{}, nil
 }
