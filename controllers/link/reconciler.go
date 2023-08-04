@@ -107,7 +107,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		if link.Exists() {
 			if err := link.Destroy(); err != nil {
 				log.Error(err, "cannot remove link")
-				cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
+				cr.SetConditions(resourcev1alpha1.Failed("cannot remove link"))
 				return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 			}
 		}

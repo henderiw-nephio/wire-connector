@@ -79,7 +79,7 @@ func (r *Endpoint) Exists() bool {
 	})
 	if err != nil {
 		log.Info("ep exists get link by Name", "err", err)
-		return false
+		return true
 	}
 
 	return true
