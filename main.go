@@ -124,12 +124,14 @@ func main() {
 		for {
 			setupLog.Info("containers...")
 			for podNsn, podCtx := range podManager.ListPods() {
-				setupLog.Info("pod", "Name", podNsn, "HostConn", podCtx.HostConnectivity, "Containers", podCtx.Containers)
+				setupLog.Info("pod", "Name", podNsn, "HostConn", podCtx.HostConnectivity, "HostIP", podCtx.HostIP, "Containers", podCtx.Containers)
 			}
+			/*
 			setupLog.Info("nodes...")
 			for nodeName, n := range nodeManager.ListNodes() {
 				setupLog.Info("node", "Name", nodeName, "NodeSpec", n.Status.Addresses)
 			}
+			*/
 			time.Sleep(5 * time.Second)
 		}
 	}()
