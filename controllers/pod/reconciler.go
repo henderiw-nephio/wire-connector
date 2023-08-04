@@ -118,7 +118,6 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	// if the host IP does not match the host we do not need to track the pod
 	if cr.Status.HostIP == "" || cr.Status.HostIP != os.Getenv("NODE_IP") {
-		// assumption is that we get a new event when the status changes
 		// we dont need to lookup containers if we know this is not a pod locally on the node
 		return ctrl.Result{}, nil
 	}
