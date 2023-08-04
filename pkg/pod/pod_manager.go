@@ -91,8 +91,9 @@ func (r *manager) ListPods() map[string]PodCtx {
 	pods := map[string]PodCtx{}
 	for podNSN, pod := range r.pods {
 		pods[podNSN.String()] = PodCtx{
-			HostIP:     pod.HostIP,
-			Containers: map[string]ContainerCtx{},
+			HostIP:           pod.HostIP,
+			HostConnectivity: pod.HostConnectivity,
+			Containers:       map[string]ContainerCtx{},
 		}
 		for cName, cCtx := range pod.Containers {
 			pods[podNSN.String()].Containers[cName] = cCtx
