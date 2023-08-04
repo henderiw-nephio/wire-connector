@@ -54,10 +54,13 @@ const (
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c interface{}) (map[schema.GroupVersionKind]chan event.GenericEvent, error) {
-	// register scheme
 	cfg, ok := c.(*ctrlconfig.ControllerConfig)
 	if !ok {
 		return nil, fmt.Errorf("cannot initialize, expecting controllerConfig, got: %s", reflect.TypeOf(c).Name())
+	}
+	// register scheme
+	if err := invv1alpha1.AddToScheme(mgr.GetScheme()); err != nil {
+		return nil, err
 	}
 
 	// initialize reconciler
