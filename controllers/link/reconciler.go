@@ -111,7 +111,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 				return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 			}
 		}
-		
+
 		if err := r.finalizer.RemoveFinalizer(ctx, cr); err != nil {
 			log.Error(err, "cannot remove finalizer")
 			cr.SetConditions(resourcev1alpha1.Failed(err.Error()))

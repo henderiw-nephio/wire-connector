@@ -84,37 +84,25 @@ func (r *Link) getEndpoint(epSpec invv1alpha1.EndpointSpec) *Endpoint {
 }
 
 func (r *Link) IsReady() bool {
-	if r.endpointA.clusterConnectivity == invv1alpha1.ClusterConnectivityUnknown ||
+	return !(r.endpointA.clusterConnectivity == invv1alpha1.ClusterConnectivityUnknown ||
 		r.endpointB.clusterConnectivity == invv1alpha1.ClusterConnectivityUnknown ||
 		r.endpointA.hostConnectivity == invv1alpha1.HostConnectivityUnknown ||
-		r.endpointB.hostConnectivity == invv1alpha1.HostConnectivityUnknown {
-		return false
-	}
-	return true
+		r.endpointB.hostConnectivity == invv1alpha1.HostConnectivityUnknown)
 }
 
 func (r *Link) IsCrossCluster() bool {
-	if r.endpointA.clusterConnectivity == invv1alpha1.ClusterConnectivityRemote ||
-		r.endpointB.clusterConnectivity == invv1alpha1.ClusterConnectivityRemote {
-		return true
-	}
-	return false
+	return r.endpointA.clusterConnectivity == invv1alpha1.ClusterConnectivityRemote ||
+		r.endpointB.clusterConnectivity == invv1alpha1.ClusterConnectivityRemote
 }
 
 func (r *Link) IsHostLocal() bool {
-	if r.endpointA.hostConnectivity == invv1alpha1.HostConnectivityLocal &&
-		r.endpointB.hostConnectivity == invv1alpha1.HostConnectivityLocal {
-		return true
-	}
-	return false
+	return r.endpointA.hostConnectivity == invv1alpha1.HostConnectivityLocal &&
+		r.endpointB.hostConnectivity == invv1alpha1.HostConnectivityLocal
 }
 
 func (r *Link) HasLocal() bool {
-	if r.endpointA.hostConnectivity == invv1alpha1.HostConnectivityLocal ||
-		r.endpointB.hostConnectivity == invv1alpha1.HostConnectivityLocal {
-		return true
-	}
-	return false
+	return r.endpointA.hostConnectivity == invv1alpha1.HostConnectivityLocal ||
+		r.endpointB.hostConnectivity == invv1alpha1.HostConnectivityLocal
 }
 
 func (r *Link) GetConn() string {
@@ -129,6 +117,13 @@ func (r *Link) SetMtu(mtu int) {
 }
 
 func (r *Link) Deploy() error {
+	if r.endpointA.hostConnectivity == invv1alpha1.HostConnectivityLocal &&
+		r.endpointB.hostConnectivity == invv1alpha1.HostConnectivityLocal {
+		// we can do everything in the container namespace
+		log.Infof("createLinkInContainer: nsPathA %s, nsPathB: %s", r.endpointA.nsPath, r.endpointB.nsPath)
+		return createLinkInContainer(r.endpointA.nsPath, r.endpointA.ifName, r.endpointB.ifName)
+	}
+
 	// get random names for veth sides as they will be created in root netns first
 	linkA, linkB, err := r.createVethIfacePair()
 	if err != nil {
@@ -139,12 +134,12 @@ func (r *Link) Deploy() error {
 	err = linkToNS(linkA, r.endpointA.ifName, r.endpointA.nsPath)
 	if err != nil {
 		// delete the links to ensure we dont keep these resources hanging
-		log.Info("cannot link ns epA", "err", err)
+		log.Infof("cannot link itfce A %s to container ns, err: %v", r.endpointA.ifName, err)
 		if err := netlink.LinkDel(linkA); err != nil {
-			log.Errorf("delete failed, err: %s", err.Error())
+			log.Errorf("delete linkA %s failed, err: %v", linkA, err)
 		}
 		if err := netlink.LinkDel(linkB); err != nil {
-			log.Errorf("delete failed, err: %s", err.Error())
+			log.Errorf("delete linkB %s failed, err: %s", linkB, err)
 		}
 		return err
 	}
@@ -153,12 +148,12 @@ func (r *Link) Deploy() error {
 	err = linkToNS(linkB, r.endpointB.ifName, r.endpointB.nsPath)
 	if err != nil {
 		// delete the links to ensure we dont keep these resources hanging
-		log.Info("cannot link ns epB", "err", err)
+		log.Infof("cannot link itfce B %s to container ns, err: %v", r.endpointB.ifName, err)
 		if err := netlink.LinkDel(linkA); err != nil {
-			log.Errorf("delete failed, err: %s", err.Error())
+			log.Errorf("delete linkA %s failed, err: %v", linkA, err)
 		}
 		if err := netlink.LinkDel(linkB); err != nil {
-			log.Errorf("delete failed, err: %s", err.Error())
+			log.Errorf("delete linkB %s failed, err: %v", linkB, err)
 		}
 		return err
 	}
@@ -185,7 +180,7 @@ func (r *Link) createVethIfacePair() (netlink.Link, netlink.Link, error) {
 	interfaceARandName := fmt.Sprintf("wire-%s", genIfName())
 	interfaceBRandName := fmt.Sprintf("wire-%s", genIfName())
 
-	log.Info("createVethIfacePair", "ifa", interfaceARandName, "ifb", interfaceBRandName)
+	log.Infof("createVethIfacePair, itfce A: %s, B: %s", interfaceARandName, interfaceBRandName)
 
 	linkA = &netlink.Veth{
 		LinkAttrs: netlink.LinkAttrs{
@@ -211,14 +206,14 @@ func (r *Link) createVethIfacePair() (netlink.Link, netlink.Link, error) {
 
 	// add the link
 	if err := netlink.LinkAdd(linkA); err != nil {
-		log.Info("createVethIfacePair", "err", err)
+		log.Infof("createVethIfacePair, err: %v", err)
 		return nil, nil, err
 	}
 
 	// retrieve netlink.Link for the peer interface
 	if linkB, err = netlink.LinkByName(interfaceBRandName); err != nil {
 		err = fmt.Errorf("failed to lookup %q: %v", interfaceBRandName, err)
-		log.Info("createVethIfacePair", "err", err)
+		log.Infof("createVethIfacePair, err: %v", err)
 		return nil, nil, err
 	}
 

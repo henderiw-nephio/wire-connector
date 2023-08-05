@@ -60,6 +60,7 @@ spec:
             memory: "50Mi"
         securityContext:
           privileged: true
+          #allowPrivilegeEscalation: true
           capabilities:
             add: ["NET_RAW", "NET_ADMIN"]
         volumeMounts: 

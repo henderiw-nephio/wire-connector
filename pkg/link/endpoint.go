@@ -63,24 +63,30 @@ func (r *Endpoint) Destroy() error {
 }
 
 func (r *Endpoint) Exists() bool {
-	var NNS ns.NetNS
-	var err error
-	log.Info("ep exists", "nsPath", r.nsPath)
+	log.Infof("validate existance of container itfce %s in ns %s", r.ifName, r.nsPath)
 
-	if NNS, err = ns.GetNS(r.nsPath); err != nil {
-		log.Info("ep exists get ns:", "err", err)
-		return false
-	}
-
-	err = NNS.Do(func(_ ns.NetNS) error {
-		// try to get Link by Name
-		_, err = netlink.LinkByName(r.ifName)
-		return err
-	})
+	netns, err := ns.GetNS(r.nsPath); 
 	if err != nil {
-		log.Info("ep exists get link by Name", "err", err)
+		log.Infof("validate existance of container itfce %s in ns %s failed err: %v", r.ifName, r.nsPath, err)
 		return false
 	}
+	//defer netns.Close()
+	return validateContainerItfce(netns, r.ifName)
+}
 
+func validateContainerItfce(netns ns.NetNS, ifName string) bool {
+	if err := netns.Do(func(_ ns.NetNS) error {
+		// try to get Link by Name
+		_, err := netlink.LinkByName(ifName)
+		if err != nil {
+			log.Infof("validateContainerItfce existance: container itfce %s lookup failed err: %v", ifName, err)
+			return err
+		}
+		log.Infof("validateContainerItfce existance: container itfce %s lookup succeeded err: %v", ifName, err)
+		return nil
+	}); err != nil {
+		log.Infof("validateContainerItfce ns do failed err: %v", err)
+		return false
+	}
 	return true
 }
