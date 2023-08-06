@@ -18,9 +18,11 @@ package link
 
 import (
 	"net"
+	"strings"
 
-	"github.com/containernetworking/plugins/pkg/ns"
+	//"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/google/uuid"
+	"github.com/henderiw-nephio/wire-connector/pkg/ns"
 	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 )
@@ -183,6 +185,11 @@ func deleteContainerItfce(netns ns.NetNS, ifName string) error {
 	if err := netns.Do(func(_ ns.NetNS) error {
 		itfce, err := netlink.LinkByName(ifName)
 		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				// if the link is not found it is already deleted. This can happen in a veth pair.
+				// typically when 1 end of the vethpair is deleted the other end also get deleted
+				return nil
+			}
 			log.Infof("deleteContainerItfce: container itfce %s lookup failed err: %v", ifName, err)
 			return err
 		}

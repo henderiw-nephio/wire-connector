@@ -18,9 +18,9 @@ package link
 
 import (
 	"net"
-	"os"
 
-	"github.com/containernetworking/plugins/pkg/ns"
+	//"github.com/containernetworking/plugins/pkg/ns"
+	"github.com/henderiw-nephio/wire-connector/pkg/ns"
 	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
 	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
@@ -66,10 +66,7 @@ func (r *Endpoint) Destroy() error {
 func (r *Endpoint) Exists() bool {
 	log.Infof("validate existance of container itfce %s in ns %s", r.ifName, r.nsPath)
 
-	str, err := os.Readlink(r.nsPath)
-	log.Infof("validate existance of container string: %s, err: %v", str, err)
-
-	netns, err := ns.GetNS(r.nsPath); 
+	netns, err := ns.GetNS(r.nsPath)
 	if err != nil {
 		log.Infof("validate existance of container itfce %s in ns %s failed err: %v", r.ifName, r.nsPath, err)
 		return false
