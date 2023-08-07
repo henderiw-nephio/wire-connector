@@ -24,7 +24,7 @@ func listRun(_ *cobra.Command, args []string) error {
 	}
 
 	for _, l := range ll {
-		fmt.Printf("link: %s\n", l.Attrs().Name)
+		fmt.Printf("link: %s index/parentIndex: %d/%d type: %s\n", l.Attrs().Name, l.Attrs().Index, l.Attrs().ParentIndex, l.Type())
 	}
 	return nil
 }

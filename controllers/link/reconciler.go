@@ -33,6 +33,7 @@ import (
 	"github.com/nokia/k8s-ipam/pkg/meta"
 	"github.com/pkg/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -111,11 +112,13 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 				return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 			}
 		}
-
-		if err := r.finalizer.RemoveFinalizer(ctx, cr); err != nil {
-			log.Error(err, "cannot remove finalizer")
-			cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
-			return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+		if link.HasLocal() {
+			// links are immutable so we dont have to remove the finalizer
+			if err := r.finalizer.RemoveFinalizer(ctx, cr); err != nil {
+				log.Error(err, "cannot remove finalizer")
+				cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
+				return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+			}
 		}
 
 		log.Info("link destroyed...")
@@ -143,16 +146,32 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	if !link.Exists() {
-		if err := link.Deploy(); err != nil {
-			log.Error(err, "cannot deploy link")
-			// the issue is that error always changes and this causes continuous reconciliation
-			cr.SetConditions(resourcev1alpha1.Failed("cannot deploy link"))
-			return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+		if cr.GetCondition(resourcev1alpha1.ConditionTypeReady).Status == metav1.ConditionTrue {
+			log.Info("deploy ... link does not exist and link is ready")
+			// if the link is ready and the link does not exist we deploy
+			if err := link.Deploy(); err != nil {
+				log.Error(err, "cannot deploy link")
+				// the issue is that error always changes and this causes continuous reconciliation
+				cr.SetConditions(resourcev1alpha1.Failed("cannot deploy link"))
+				return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+			}
+			
+			log.Info("link deployed...")
 		}
-		log.Info("link deployed...")
 	} else {
 		log.Info("link exists...")
+		if cr.GetCondition(resourcev1alpha1.ConditionTypeReady).Status != metav1.ConditionTrue {
+			log.Info("destroy ... link exist but link is not ready")
+			// if the link exists but the cr is not ready we should destroy
+			if err := link.Destroy(); err != nil {
+				log.Error(err, "cannot destroy link")
+				// the issue is that error always changes and this causes continuous reconciliation
+				cr.SetConditions(resourcev1alpha1.Failed("cannot destroy link, when link became not ready"))
+				return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+			}
+			log.Info("link destroyed...")
+		}
 	}
-
+	// we assume when the link becomes ready we get a new reconcile trigger
 	return ctrl.Result{}, nil
 }

@@ -42,7 +42,6 @@ func init() {
 }
 
 const (
-	finalizer = "wire.nephio.org/finalizer"
 	// error
 	errGetCr        = "cannot get resource"
 	errUpdateStatus = "cannot update status"
@@ -58,7 +57,6 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 
 	// initialize reconciler
 	r.Client = mgr.GetClient()
-	r.finalizer = resource.NewAPIFinalizer(mgr.GetClient(), finalizer)
 	r.nodeManager = cfg.NodeManager
 
 	return nil,
@@ -71,7 +69,6 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 // reconciler reconciles a IPPrefix object
 type reconciler struct {
 	client.Client
-	finalizer *resource.APIFinalizer
 
 	nodeManager node.Manager
 

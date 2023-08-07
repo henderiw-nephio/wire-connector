@@ -9,7 +9,7 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/itchyny/gojq v0.12.13
 	github.com/nephio-project/nephio/controllers/pkg v0.0.0-20230724195903-feb6c2f91cc3
-	github.com/nokia/k8s-ipam v0.0.4-0.20230803154501-8e4d0cb98b49
+	github.com/nokia/k8s-ipam v0.0.4-0.20230806153903-34cde66c6efe
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.9.0
 	github.com/spf13/cobra v1.6.1

@@ -18,12 +18,10 @@ package link
 
 import (
 	"fmt"
-	"net"
 
 	"github.com/henderiw-nephio/wire-connector/pkg/pod"
 	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
 	log "github.com/sirupsen/logrus"
-	"github.com/vishvananda/netlink"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -53,7 +51,10 @@ func NewLink(cr *invv1alpha1.Link, lctx *LinkCtx) *Link {
 	}
 }
 
-func (r *Link) getEndpoint(epSpec invv1alpha1.EndpointSpec) *Endpoint {
+// getEndpoint returns an endpoint which provides context wrt
+// cluster connectiivty: local or remote or unknown
+// host conneciticity: local or remote or unknown; if local also the nspath of the container is initialized
+func (r *Link) getEndpoint(epSpec invv1alpha1.LinkEndpointSpec) *Endpoint {
 	log.Info("getEndpoint", "epSpec", epSpec)
 	epCtx := &EndpointCtx{
 		IfName:              epSpec.InterfaceName,
@@ -83,6 +84,7 @@ func (r *Link) getEndpoint(epSpec invv1alpha1.EndpointSpec) *Endpoint {
 	return NewEndpoint(epCtx)
 }
 
+// IsReady returns true if cluster and host information of both endpoints are known
 func (r *Link) IsReady() bool {
 	return !(r.endpointA.clusterConnectivity == invv1alpha1.ClusterConnectivityUnknown ||
 		r.endpointB.clusterConnectivity == invv1alpha1.ClusterConnectivityUnknown ||
@@ -90,21 +92,27 @@ func (r *Link) IsReady() bool {
 		r.endpointB.hostConnectivity == invv1alpha1.HostConnectivityUnknown)
 }
 
+// IsCrossCluster returns true if the link is connected accross clusters
 func (r *Link) IsCrossCluster() bool {
 	return r.endpointA.clusterConnectivity == invv1alpha1.ClusterConnectivityRemote ||
 		r.endpointB.clusterConnectivity == invv1alpha1.ClusterConnectivityRemote
 }
 
+// IsHostLocal returns true if both endpoints are on the same host
+// the wiring in this case is all local to the host
 func (r *Link) IsHostLocal() bool {
 	return r.endpointA.hostConnectivity == invv1alpha1.HostConnectivityLocal &&
 		r.endpointB.hostConnectivity == invv1alpha1.HostConnectivityLocal
 }
 
+// HasLocal returns true is one endpoint of the link is local to the host
+// this indicated that a wiring activity is needed
 func (r *Link) HasLocal() bool {
 	return r.endpointA.hostConnectivity == invv1alpha1.HostConnectivityLocal ||
 		r.endpointB.hostConnectivity == invv1alpha1.HostConnectivityLocal
 }
 
+// GetConn is a debugging facility
 func (r *Link) GetConn() string {
 	return fmt.Sprintf("epA: cluster: %s, host: %s, epB: cluster: %s, host: %s",
 		r.endpointA.clusterConnectivity, r.endpointA.hostConnectivity,
@@ -112,110 +120,61 @@ func (r *Link) GetConn() string {
 	)
 }
 
+// SetMtu sets the mtu on the link
 func (r *Link) SetMtu(mtu int) {
 	r.mtu = mtu
 }
 
+// Deploy deploys the link on the host
+// Creates a veth pair
+// Per endpoint deploys either a veth itfce in the container namespace
+// or a remote tunnel for which a veth pair gets cross connected with BPF XDP
 func (r *Link) Deploy() error {
-	if r.endpointA.hostConnectivity == invv1alpha1.HostConnectivityLocal &&
-		r.endpointB.hostConnectivity == invv1alpha1.HostConnectivityLocal {
-		// we can do everything in the container namespace
-		log.Infof("createLinkInContainer: nsPathA %s, nsPathB: %s", r.endpointA.nsPath, r.endpointB.nsPath)
-		return createLinkInContainer(r.endpointA.nsPath, r.endpointA.ifName, r.endpointB.ifName)
-	}
-
 	// get random names for veth sides as they will be created in root netns first
-	linkA, linkB, err := r.createVethIfacePair()
+	vethA, vethB, err := createVethPair()
 	if err != nil {
 		return err
 	}
+	r.endpointA.veth = vethA
+	r.endpointB.veth = vethB
 
-	// attach linkA to Namespace and rename to requested name
-	err = linkToNS(linkA, r.endpointA.ifName, r.endpointA.nsPath)
-	if err != nil {
-		// delete the links to ensure we dont keep these resources hanging
-		log.Infof("cannot link itfce A %s to container ns, err: %v", r.endpointA.ifName, err)
-		if err := netlink.LinkDel(linkA); err != nil {
-			log.Errorf("delete linkA %s failed, err: %v", linkA, err)
-		}
-		if err := netlink.LinkDel(linkB); err != nil {
-			log.Errorf("delete linkB %s failed, err: %s", linkB, err)
-		}
+	if err := r.endpointA.Deploy(r.endpointB); err != nil {
 		return err
 	}
-
-	// attach linkB to Namespace and rename to requested name
-	err = linkToNS(linkB, r.endpointB.ifName, r.endpointB.nsPath)
-	if err != nil {
-		// delete the links to ensure we dont keep these resources hanging
-		log.Infof("cannot link itfce B %s to container ns, err: %v", r.endpointB.ifName, err)
-		if err := netlink.LinkDel(linkA); err != nil {
-			log.Errorf("delete linkA %s failed, err: %v", linkA, err)
-		}
-		if err := netlink.LinkDel(linkB); err != nil {
-			log.Errorf("delete linkB %s failed, err: %v", linkB, err)
-		}
+	if err := r.endpointB.Deploy(r.endpointA); err != nil {
 		return err
 	}
-
 	return nil
 }
 
 func (r *Link) Destroy() error {
-	for _, ep := range []*Endpoint{r.endpointA, r.endpointB} {
-		ep.Destroy()
+	if err := r.endpointA.Destroy(); err != nil {
+		return err
+	}
+	if err := r.endpointB.Destroy(); err != nil {
+		return err
 	}
 	return nil
 }
 
+// Exists returns true if the link exists. Since we have 2 endpoints
+// it might be some part does not exist. if only a part exists 
+// we return true
 func (r *Link) Exists() bool {
-	return r.endpointA.Exists() && r.endpointB.Exists()
-}
+	// we need to recover the id of the veth pair
+	// we know the veth interface in the container ns.
+	// if it exists we return the index of the peer veth pair on the host
+	// otherwise the veth pair does not exist
+	// the peerIndex is used later to retrieve the peerID random name
+	// that is used for both the veth/vxlan interface
+	r.endpointA.InitPeerVethIndex(r.endpointB)
+	r.endpointB.InitPeerVethIndex(r.endpointA)
 
-func (r *Link) createVethIfacePair() (netlink.Link, netlink.Link, error) {
-	var err error
-	var linkA *netlink.Veth
-	var linkB netlink.Link
+	log.Infof("endpointA: %v, endpointB: %v", r.endpointA, r.endpointB)
 
-	interfaceARandName := fmt.Sprintf("wire-%s", genIfName())
-	interfaceBRandName := fmt.Sprintf("wire-%s", genIfName())
+	epAexists := r.endpointA.Exists()
+	epBExists := r.endpointB.Exists()
 
-	log.Infof("createVethIfacePair, itfce A: %s, B: %s", interfaceARandName, interfaceBRandName)
-
-	linkA = &netlink.Veth{
-		LinkAttrs: netlink.LinkAttrs{
-			Name:  interfaceARandName,
-			Flags: net.FlagUp,
-		},
-		PeerName: interfaceBRandName,
-	}
-
-	// set mtu if present
-	if r.mtu > 0 {
-		linkA.MTU = r.mtu
-	}
-
-	// set Mac if present
-	if len(r.endpointA.mac) > 0 {
-		linkA.LinkAttrs.HardwareAddr = r.endpointA.mac
-	}
-	// set peer Mac if present
-	if len(r.endpointB.mac) > 0 {
-		linkA.PeerHardwareAddr = r.endpointB.mac
-	}
-
-	// add the link
-	if err := netlink.LinkAdd(linkA); err != nil {
-		log.Infof("createVethIfacePair, err: %v", err)
-		return nil, nil, err
-	}
-
-	// retrieve netlink.Link for the peer interface
-	if linkB, err = netlink.LinkByName(interfaceBRandName); err != nil {
-		err = fmt.Errorf("failed to lookup %q: %v", interfaceBRandName, err)
-		log.Infof("createVethIfacePair, err: %v", err)
-		return nil, nil, err
-	}
-
-	return linkA, linkB, nil
+	log.Infof("exists epAexists %t, epBexists %t", epAexists, epBExists)
+	return epAexists || epBExists
 }
