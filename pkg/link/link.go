@@ -20,6 +20,7 @@ import (
 	"fmt"
 
 	"github.com/henderiw-nephio/wire-connector/pkg/pod"
+	"github.com/henderiw-nephio/wire-connector/pkg/xdp"
 	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
 	log "github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/types"
@@ -33,16 +34,20 @@ type Link struct {
 	endpointB *Endpoint
 
 	mtu int
+
+	xdp xdp.XDP
 }
 
 type LinkCtx struct {
 	PodManager pod.Manager
 	Topologies map[string]struct{}
+	XDP        xdp.XDP
 }
 
 func NewLink(cr *invv1alpha1.Link, lctx *LinkCtx) *Link {
 	r := &Link{
 		podManager: lctx.PodManager,
+		xdp:        lctx.XDP,
 	}
 
 	return &Link{
@@ -59,6 +64,7 @@ func (r *Link) getEndpoint(epSpec invv1alpha1.LinkEndpointSpec) *Endpoint {
 	epCtx := &EndpointCtx{
 		IfName:              epSpec.InterfaceName,
 		ClusterConnectivity: invv1alpha1.GetClusterConnectivity(epSpec.Topology, r.topologies),
+		XDP:                 r.xdp,
 	}
 	log.Info("getEndpoint", "clusterConn", invv1alpha1.GetClusterConnectivity(epSpec.Topology, r.topologies))
 	if epCtx.ClusterConnectivity != invv1alpha1.ClusterConnectivityLocal {
@@ -158,7 +164,7 @@ func (r *Link) Destroy() error {
 }
 
 // Exists returns true if the link exists. Since we have 2 endpoints
-// it might be some part does not exist. if only a part exists 
+// it might be some part does not exist. if only a part exists
 // we return true
 func (r *Link) Exists() bool {
 	// we need to recover the id of the veth pair
@@ -166,7 +172,7 @@ func (r *Link) Exists() bool {
 	// if it exists we return the index of the peer veth pair on the host
 	// otherwise the veth pair does not exist
 	// the peerIndex is used later to retrieve the peerID random name
-	// that is used for both the veth/vxlan interface
+	// that is used for both the veth/tunn interface
 	r.endpointA.InitPeerVethIndex(r.endpointB)
 	r.endpointB.InitPeerVethIndex(r.endpointA)
 

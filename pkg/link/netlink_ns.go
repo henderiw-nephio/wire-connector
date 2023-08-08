@@ -28,8 +28,8 @@ import (
 )
 
 const (
-	vethPrefix  = "wire-"
-	vxlanPrefix = "vxlan-"
+	vethPrefix   = "wire-"
+	tunnelPrefix = "wtun-"
 )
 
 func genIfName() string {
@@ -41,8 +41,8 @@ func getVethName(name string) string {
 	return fmt.Sprintf("%s%s", vethPrefix, name)
 }
 
-func getVxlanName(name string) string {
-	return fmt.Sprintf("%s%s", vxlanPrefix, name)
+func getTunnelName(name string) string {
+	return fmt.Sprintf("%s%s", tunnelPrefix, name)
 }
 
 func createVethPair() (netlink.Link, netlink.Link, error) {
@@ -72,10 +72,11 @@ func createVethPair() (netlink.Link, netlink.Link, error) {
 	return vethA, vethB, nil
 }
 
-func createVxlan(vxlanName, localIP, remoteIP string, vni int) error {
-	vxlan := &netlink.Vxlan{
+func createTunnel(tunName, localIP, remoteIP string, vni int) (*netlink.Link, error) {
+
+	tun := &netlink.Vxlan{
 		LinkAttrs: netlink.LinkAttrs{
-			Name:  vxlanName,
+			Name:  tunName,
 			Flags: net.FlagUp,
 		},
 		VxlanId:  200,
@@ -83,27 +84,51 @@ func createVxlan(vxlanName, localIP, remoteIP string, vni int) error {
 		Group:    net.IP(remoteIP),
 		Learning: false,
 		Port:     4789,
+		//Remote:   net.IP(remoteIP),
+		//DstAddr: net.IP(remoteIP),
 	}
+	/*
+		tun := &netlink.Gretun{
+			LinkAttrs: netlink.LinkAttrs{
+				Name:  tunName,
+				Flags: net.FlagUp,
+			},
+			Local:  net.IP(localIP),
+			Remote: net.IP(remoteIP),
+		}
+	*/
 	// add the link
-	if err := netlink.LinkAdd(vxlan); err != nil {
-		return err
+	if err := netlink.LinkAdd(tun); err != nil {
+		return nil, err
 	}
-	return nil
+	tunLink := netlink.Link(tun)
+	return &tunLink, nil
 }
 
-func deleteVxlan(vxlanName string) error {
-	vxlan, err := netlink.LinkByName(vxlanName)
+func getLinkByName(name string) (*netlink.Link, error) {
+	itfce, err := netlink.LinkByName(name)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &itfce, nil
+}
+
+func deleteItfce(name string) error {
+	itfce, err := netlink.LinkByName(name)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			return nil
 		}
 		return err
 	}
-	return netlink.LinkDel(vxlan)
+	return netlink.LinkDel(itfce)
 }
 
-func validateIfItfceExists(vxlanName string) bool {
-	_, err := netlink.LinkByName(vxlanName)
+func validateIfItfceExists(ifName string) bool {
+	_, err := netlink.LinkByName(ifName)
 	if err != nil {
 		// we assume the interface does not exist
 		return false
@@ -189,6 +214,10 @@ func addIfInNS(nsPath, ifName string, veth netlink.Link) error {
 		return err
 	}
 	return nil
+}
+
+func setIfUp(itfce netlink.Link) error {
+	return netlink.LinkSetUp(itfce)
 }
 
 func deleteIfInNS(nsPath, ifName string) error {

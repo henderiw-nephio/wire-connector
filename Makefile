@@ -5,6 +5,10 @@ PROJECT ?= wire-connector
 KPT_BLUEPRINT_CFG_DIR ?= blueprint/fn-config
 KPT_BLUEPRINT_PKG_DIR ?= blueprint/${PROJECT}
 
+CLANG ?= clang-14
+STRIP ?= llvm-strip-14
+OBJCOPY ?= llvm-objcopy-14
+CFLAGS := -O2 -g -Wall -Werror $(CFLAGS)
 
 # Image URL to use all building/pushing image targets
 IMG ?= $(REGISTRY)/${PROJECT}:$(VERSION)
@@ -23,7 +27,7 @@ SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
 .PHONY: all
-all: build
+all: build generate
 
 ##@ General
 
@@ -50,6 +54,12 @@ fmt: ## Run go fmt against code.
 vet: ## Run go vet against code.
 	go vet ./...
 
+.PHONY: generate
+generate: export BPF_CLANG := $(CLANG)
+generate: export BPF_CFLAGS := $(CFLAGS)
+generate: ## Run go generate against code.
+	go generate ./...
+
 .PHONY: test
 test: fmt vet envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
@@ -68,11 +78,11 @@ run: fmt vet ## Run a controller from your host.
 # (i.e. docker build --platform linux/arm64 ). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
-docker-build:  ## Build docker image with the manager.
+docker-build: generate ## Build docker image with the manager.
 	docker build -t ${IMG} .
 
 .PHONY: docker-push
-docker-push: ## Push docker image with the manager.
+docker-push:  ## Push docker image with the manager.
 	docker push ${IMG}
 
 # PLATFORMS defines the target platforms for  the manager image be build to provide support to multiple

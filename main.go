@@ -26,12 +26,13 @@ import (
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
+	_ "github.com/henderiw-nephio/wire-connector/controllers/link"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/node"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/pod"
-	_ "github.com/henderiw-nephio/wire-connector/controllers/link"
 	"github.com/henderiw-nephio/wire-connector/pkg/cri"
 	"github.com/henderiw-nephio/wire-connector/pkg/node"
 	"github.com/henderiw-nephio/wire-connector/pkg/pod"
+	"github.com/henderiw-nephio/wire-connector/pkg/xdp"
 	reconciler "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
 	"go.uber.org/zap/zapcore"
 	"golang.org/x/exp/slices"
@@ -60,6 +61,7 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
+	// setup controllers
 	runScheme := runtime.NewScheme()
 	if err := scheme.AddToScheme(runScheme); err != nil {
 		setupLog.Error(err, "cannot initializer schema")
@@ -82,12 +84,24 @@ func main() {
 		setupLog.Error(err, "unable to initialize cri")
 		os.Exit(1)
 	}
+
+	xdpapp, err := xdp.NewXdpApp()
+	if err != nil {
+		setupLog.Error(err, "cannot to set xdp app")
+		os.Exit(1)
+	}
+	if err := xdpapp.Init(ctx); err != nil {
+		setupLog.Error(err, "cannot init xdp app")
+		os.Exit(1)
+	}
+
 	podManager := pod.NewManager()
 	nodeManager := node.NewManager()
 	ctrlCfg := &ctrlconfig.ControllerConfig{
 		PodManager:  podManager,
 		NodeManager: nodeManager,
 		CRI:         cri,
+		XDP:         xdpapp,
 	}
 
 	enabledReconcilers := parseReconcilers(enabledReconcilersString)
@@ -112,11 +126,11 @@ func main() {
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up health check")
+		setupLog.Error(err, "cannot set up health check")
 		os.Exit(1)
 	}
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up ready check")
+		setupLog.Error(err, "cannot set up ready check")
 		os.Exit(1)
 	}
 
@@ -127,10 +141,10 @@ func main() {
 				setupLog.Info("pod", "Name", podNsn, "HostConn", podCtx.HostConnectivity, "HostIP", podCtx.HostIP, "Containers", podCtx.Containers)
 			}
 			/*
-			setupLog.Info("nodes...")
-			for nodeName, n := range nodeManager.ListNodes() {
-				setupLog.Info("node", "Name", nodeName, "NodeSpec", n.Status.Addresses)
-			}
+				setupLog.Info("nodes...")
+				for nodeName, n := range nodeManager.ListNodes() {
+					setupLog.Info("node", "Name", nodeName, "NodeSpec", n.Status.Addresses)
+				}
 			*/
 			time.Sleep(5 * time.Second)
 		}

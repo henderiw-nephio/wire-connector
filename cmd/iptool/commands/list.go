@@ -24,7 +24,16 @@ func listRun(_ *cobra.Command, args []string) error {
 	}
 
 	for _, l := range ll {
-		fmt.Printf("link: %s index/parentIndex: %d/%d type: %s\n", l.Attrs().Name, l.Attrs().Index, l.Attrs().ParentIndex, l.Type())
+
+		fmt.Printf("link: %s index/parentIndex: %d/%d type: %s mtu: %d flags: %s\n", l.Attrs().Name, l.Attrs().Index, l.Attrs().ParentIndex, l.Type(), l.Attrs().MTU, l.Attrs().Flags.String())
+		fmt.Printf("  oper-state: %s\n", l.Attrs().OperState.String())
+		if l.Type() == "vxlan" {
+			fmt.Printf("  group %d\n", l.Attrs().Group)
+		}
+		if l.Attrs().Xdp.Attached == true {
+			fmt.Printf("  xdp attached %t, xdp mode: %d\n", l.Attrs().Xdp.Attached, l.Attrs().Xdp.AttachMode)
+		}
+
 	}
 	return nil
 }

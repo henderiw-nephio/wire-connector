@@ -23,6 +23,7 @@ import (
 
 	//"github.com/containernetworking/plugins/pkg/ns"
 
+	"github.com/henderiw-nephio/wire-connector/pkg/xdp"
 	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
 	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
@@ -39,7 +40,10 @@ type Endpoint struct {
 	peerIndex           int    // peerIndex of the container veth pair on the host ns
 
 	veth netlink.Link // temporary stored when veth pair gets created
+	tun  netlink.Link
 	mac  net.HardwareAddr
+
+	xdp xdp.XDP
 }
 
 type EndpointCtx struct {
@@ -48,6 +52,7 @@ type EndpointCtx struct {
 	ClusterConnectivity invv1alpha1.ClusterConnectivity
 	NsPath              string
 	HostIP              string
+	XDP                 xdp.XDP
 }
 
 func NewEndpoint(epctx *EndpointCtx) *Endpoint {
@@ -57,6 +62,7 @@ func NewEndpoint(epctx *EndpointCtx) *Endpoint {
 		hostConnectivity:    epctx.HostConnectivity,
 		nsPath:              epctx.NsPath,
 		hostIP:              epctx.HostIP,
+		xdp:                 epctx.XDP,
 	}
 }
 
@@ -75,8 +81,21 @@ func (r *Endpoint) Destroy() error {
 		// delete itfce in container namespace
 		return deleteIfInNS(r.nsPath, r.ifName)
 	case invv1alpha1.HostConnectivityRemote:
-		// delete vxlan link
-		return deleteVxlan(getVxlanName(r.peerID))
+		l, err := getLinkByName(getVethName(r.peerID))
+		if err != nil {
+			return err
+		}
+		if l != nil {
+			log.Infof("destroy xdp: from %s", (*l).Attrs().Name)
+			if err := r.xdp.DeleteXConnectBPFMap(l); err != nil {
+				return err
+			}
+		}
+		if err := deleteItfce(getVethName(r.peerID)); err != nil {
+			return err
+		}
+		// delete tunnel
+		return deleteItfce(getTunnelName(r.peerID))
 		// TODO add the XDP binding
 	default:
 		return fmt.Errorf("deploying a link on an endpoint for which the host connectivity is not local or remote is not allowed")
@@ -105,7 +124,7 @@ func (r *Endpoint) Exists() bool {
 		if !exists {
 			return false
 		}
-		return validateIfItfceExists(getVxlanName(r.peerID))
+		return validateIfItfceExists(getTunnelName(r.peerID))
 
 	}
 	log.Debug("endpoint exists should only allow for local or remote host connectivity, readiness check should be performed before")
@@ -132,7 +151,7 @@ func (r *Endpoint) Deploy(peerEp *Endpoint) error {
 			if err := netlink.LinkDel(r.veth); err != nil {
 				log.Debugf("delete vethA %s failed, err: %v", r.veth.Attrs().Name, err)
 			}
-			if err := netlink.LinkDel(r.veth); err != nil {
+			if err := netlink.LinkDel(peerEp.veth); err != nil {
 				log.Debugf("delete vethB %s failed, err: %s", r.veth.Attrs().Name, err)
 			}
 			return err
@@ -140,12 +159,43 @@ func (r *Endpoint) Deploy(peerEp *Endpoint) error {
 	case invv1alpha1.HostConnectivityRemote:
 		r.peerIndex = peerEp.veth.Attrs().ParentIndex
 		r.peerID = strings.TrimPrefix(r.veth.Attrs().Name, vethPrefix)
-		log.Infof("deploy peer veth and vxlan index %d, id %s, peerVeth: %s, localVeth: %s", r.peerIndex, r.peerID, r.veth.Attrs().Name, peerEp.veth.Attrs().Name)
-		// create vxlan link
-		if err := createVxlan(getVxlanName(r.peerID), r.hostIP, peerEp.hostIP, 200); err != nil {
+		log.Infof("deploy peer veth and tunnel index %d, id %s, peerVeth: %s, localVeth: %s", r.peerIndex, r.peerID, r.veth.Attrs().Name, peerEp.veth.Attrs().Name)
+		if err := setIfUp(r.veth); err != nil {
+			// delete the links to ensure we dont keep these resources hanging
+			if err := netlink.LinkDel(r.veth); err != nil {
+				log.Debugf("delete vethA %s failed, err: %v", r.veth.Attrs().Name, err)
+			}
+			if err := netlink.LinkDel(peerEp.veth); err != nil {
+				log.Debugf("delete vethB %s failed, err: %s", r.veth.Attrs().Name, err)
+			}
 			return err
 		}
-		// TODO add the XDP binding
+		// create tunnel
+		tun, err := createTunnel(getTunnelName(r.peerID), r.hostIP, peerEp.hostIP, 200)
+		if err != nil {
+			// delete the links to ensure we dont keep these resources hanging
+			if err := netlink.LinkDel(r.veth); err != nil {
+				log.Debugf("delete vethA %s failed, err: %v", r.veth.Attrs().Name, err)
+			}
+			if err := netlink.LinkDel(peerEp.veth); err != nil {
+				log.Debugf("delete vethB %s failed, err: %s", r.veth.Attrs().Name, err)
+			}
+			return err
+		}
+		log.Infof("deploy xdp: from/to %s/%s", r.veth.Attrs().Name, (*tun).Attrs().Name)
+		if err := r.xdp.UpsertXConnextBPFMap(&r.veth, tun); err != nil {
+			// delete the links to ensure we dont keep these resources hanging
+			if err := netlink.LinkDel(r.veth); err != nil {
+				log.Debugf("delete vethA %s failed, err: %v", r.veth.Attrs().Name, err)
+			}
+			if err := netlink.LinkDel(peerEp.veth); err != nil {
+				log.Debugf("delete vethB %s failed, err: %s", r.veth.Attrs().Name, err)
+			}
+			if err := deleteItfce(getTunnelName(r.peerID)); err != nil {
+				log.Debugf("delete tunn %s failed, err: %s", getTunnelName(r.peerID), err)
+			}
+			return err
+		}
 
 	default:
 		return fmt.Errorf("deploying a link on an endpoint for which the host connectivity is not local or remote is not allowed")

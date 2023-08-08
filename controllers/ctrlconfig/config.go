@@ -22,6 +22,7 @@ import (
 	"github.com/henderiw-nephio/wire-connector/pkg/cri"
 	"github.com/henderiw-nephio/wire-connector/pkg/node"
 	"github.com/henderiw-nephio/wire-connector/pkg/pod"
+	"github.com/henderiw-nephio/wire-connector/pkg/xdp"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 )
 
@@ -32,4 +33,5 @@ type ControllerConfig struct {
 	PodManager  pod.Manager
 	NodeManager node.Manager
 	CRI         cri.CRI
+	XDP         xdp.XDP
 }

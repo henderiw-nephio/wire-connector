@@ -3,6 +3,7 @@ module github.com/henderiw-nephio/wire-connector
 go 1.20
 
 require (
+	github.com/cilium/ebpf v0.7.0
 	github.com/go-logr/logr v1.2.4
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/protobuf v1.5.3
@@ -12,7 +13,7 @@ require (
 	github.com/nokia/k8s-ipam v0.0.4-0.20230806153903-34cde66c6efe
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.9.0
-	github.com/spf13/cobra v1.6.1
+	github.com/spf13/cobra v1.7.0
 	github.com/vishvananda/netlink v1.2.1-beta.2
 	go.uber.org/zap v1.25.0
 	golang.org/x/exp v0.0.0-20230801115018-d63ba01acd4b

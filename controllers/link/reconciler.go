@@ -26,6 +26,7 @@ import (
 	"github.com/henderiw-nephio/wire-connector/pkg/link"
 	"github.com/henderiw-nephio/wire-connector/pkg/node"
 	"github.com/henderiw-nephio/wire-connector/pkg/pod"
+	"github.com/henderiw-nephio/wire-connector/pkg/xdp"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
 	"github.com/nephio-project/nephio/controllers/pkg/resource"
 	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
@@ -69,6 +70,7 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 	r.finalizer = resource.NewAPIFinalizer(mgr.GetClient(), finalizer)
 	r.nodeManager = cfg.NodeManager
 	r.podManager = cfg.PodManager
+	r.xdp = cfg.XDP
 
 	return nil,
 		ctrl.NewControllerManagedBy(mgr).
@@ -84,6 +86,8 @@ type reconciler struct {
 
 	nodeManager node.Manager
 	podManager  pod.Manager
+
+	xdp xdp.XDP
 }
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -102,6 +106,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	link := link.NewLink(cr, &link.LinkCtx{
 		PodManager: r.podManager,
 		Topologies: map[string]struct{}{},
+		XDP:        r.xdp,
 	})
 
 	if meta.WasDeleted(cr) {
@@ -152,10 +157,10 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			if err := link.Deploy(); err != nil {
 				log.Error(err, "cannot deploy link")
 				// the issue is that error always changes and this causes continuous reconciliation
-				cr.SetConditions(resourcev1alpha1.Failed("cannot deploy link"))
+				cr.SetConditions(resourcev1alpha1.WiringFailed(fmt.Errorf("cannot wire link")))
 				return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 			}
-			
+
 			log.Info("link deployed...")
 		}
 	} else {
@@ -166,7 +171,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			if err := link.Destroy(); err != nil {
 				log.Error(err, "cannot destroy link")
 				// the issue is that error always changes and this causes continuous reconciliation
-				cr.SetConditions(resourcev1alpha1.Failed("cannot destroy link, when link became not ready"))
+				cr.SetConditions(resourcev1alpha1.WiringFailed(fmt.Errorf("cannot destroy link, when link became not ready")))
 				return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 			}
 			log.Info("link destroyed...")
