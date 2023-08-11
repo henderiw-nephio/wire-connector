@@ -36,10 +36,10 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	Wire_Get_FullMethodName       = "/resource.Wire/Get"
-	Wire_Create_FullMethodName    = "/resource.Wire/Create"
-	Wire_Delete_FullMethodName    = "/resource.Wire/Delete"
-	Wire_WireWatch_FullMethodName = "/resource.Wire/WireWatch"
+	Wire_Get_FullMethodName       = "/wire.Wire/Get"
+	Wire_Create_FullMethodName    = "/wire.Wire/Create"
+	Wire_Delete_FullMethodName    = "/wire.Wire/Delete"
+	Wire_WireWatch_FullMethodName = "/wire.Wire/WireWatch"
 )
 
 // WireClient is the client API for Wire service.
@@ -238,7 +238,7 @@ func (x *wireWireWatchServer) Send(m *WatchResponse) error {
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var Wire_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "resource.Wire",
+	ServiceName: "wire.Wire",
 	HandlerType: (*WireServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{

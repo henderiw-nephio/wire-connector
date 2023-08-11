@@ -44,11 +44,9 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: status.hostIP
-        - name: RECONCILER_PODS
+        - name: RECONCILER_PODCONTROLLER
           value: "true"
-        - name: RECONCILER_NODES
-          value: "true"
-        - name: RECONCILER_LINKS
+        - name: RECONCILER_NODECONTROLLER
           value: "true"
         resources:
           requests:

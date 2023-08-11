@@ -144,10 +144,13 @@ func main() {
 		grpcserver.WithCheckHandler(wh.Check),
 	)
 
-	if err := s.Start(ctx); err != nil {
-		setupLog.Error(err, "cannot start grpcserver")
-		os.Exit(1)
-	}
+	go func() {
+		if err := s.Start(ctx); err != nil {
+			setupLog.Error(err, "cannot start grpcserver")
+			os.Exit(1)
+		}
+	}()
+	
 
 	go func() {
 		for {
