@@ -33,6 +33,7 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -116,7 +117,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 		hostNodeName, d := r.getLeaseInfo(cr)
 		if hostNodeName != "" {
-			r.daemonCache.Upsert(ctx, req.NamespacedName, d)
+			r.daemonCache.Upsert(ctx, types.NamespacedName{Namespace: "default", Name: hostNodeName}, d)
 			return ctrl.Result{}, nil
 		}
 	}
