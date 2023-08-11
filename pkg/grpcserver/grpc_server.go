@@ -101,10 +101,10 @@ func (s *GrpcServer) Start(ctx context.Context) error {
 	grpcServer := grpc.NewServer(opts...)
 
 	wirepb.RegisterWireServer(grpcServer, s)
-	s.l.Info("grpc server with resource...")
+	s.l.Info("grpc server with wire service...")
 
 	healthpb.RegisterHealthServer(grpcServer, s)
-	s.l.Info("grpc server with health...")
+	s.l.Info("grpc server with health service...")
 
 	s.l.Info("starting grpc server...")
 	err = grpcServer.Serve(l)

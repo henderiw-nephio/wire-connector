@@ -28,6 +28,9 @@ type Pod struct {
 }
 
 func IsPodReady(p *corev1.Pod) bool {
+	if p.Spec.NodeName == "" {
+		return false
+	}
 	if len(p.Status.ContainerStatuses) == 0 {
 		return false
 	}

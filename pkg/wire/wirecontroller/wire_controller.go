@@ -20,13 +20,16 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"reflect"
 	"sync"
 
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
-	"github.com/henderiw-nephio/wire-connector/pkg/wire/cache/daemon"
-	"github.com/henderiw-nephio/wire-connector/pkg/wire/cache/node"
-	"github.com/henderiw-nephio/wire-connector/pkg/wire/cache/pod"
+	wiredaemon "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/daemon"
+	wirenode "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/node"
+	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/pod"
+	"github.com/henderiw-nephio/wire-connector/pkg/wire/client"
+	"google.golang.org/appengine/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"k8s.io/apimachinery/pkg/types"
@@ -34,17 +37,18 @@ import (
 )
 
 type Config struct {
-	DaemonCache wire.Cache[daemon.Daemon]
-	PodCache    wire.Cache[pod.Pod]
-	NodeCache   wire.Cache[node.Node]
+	DaemonCache wire.Cache[wiredaemon.Daemon]
+	PodCache    wire.Cache[wirepod.Pod]
+	NodeCache   wire.Cache[wirenode.Node]
 }
 
 func New(cfg *Config) wire.Wire {
 	r := &wc{
-		daemonCache: cfg.DaemonCache,
-		podCache:    cfg.PodCache,
-		nodeCache:   cfg.NodeCache,
-		wireCache:   NewWireCache(),
+		daemonCache:  cfg.DaemonCache,
+		podCache:     cfg.PodCache,
+		nodeCache:    cfg.NodeCache,
+		wireCache:    NewWireCache(),
+		wclientCache: wire.NewCache[client.Client](),
 	}
 	r.daemonCache.AddWatch(r.daemonCallback)
 	r.podCache.AddWatch(r.podCallback)
@@ -53,9 +57,10 @@ func New(cfg *Config) wire.Wire {
 }
 
 type wc struct {
-	daemonCache wire.Cache[daemon.Daemon]
-	podCache    wire.Cache[pod.Pod]
-	nodeCache   wire.Cache[node.Node]
+	daemonCache  wire.Cache[wiredaemon.Daemon]
+	podCache     wire.Cache[wirepod.Pod]
+	nodeCache    wire.Cache[wirenode.Node]
+	wclientCache wire.Cache[client.Client]
 
 	wireCache WireCache
 
@@ -78,7 +83,7 @@ func (r *wc) validate(req *wirepb.WireRequest) error {
 }
 
 func (r *wc) AddWatch(fn wire.CallbackFn) {}
-func (r *wc) DeleteWatch()
+func (r *wc) DeleteWatch()                {}
 
 func (r *wc) Get(ctx context.Context, req *wirepb.WireRequest) (*wirepb.WireResponse, error) {
 	if err := r.validate(req); err != nil {
@@ -259,6 +264,36 @@ type CallbackCtx struct {
 // daemonCallback notifies the wire controller about the fact
 // that the daemon status changed and should reconcile the object
 func (r *wc) daemonCallback(ctx context.Context, nsn types.NamespacedName, d any) {
+	daemon, ok := d.(wiredaemon.Daemon)
+	if !ok {
+		log.Errorf(ctx, "expect Daemon got: %s", reflect.TypeOf(d).Name())
+		return
+	}
+	if d != nil {
+		address := fmt.Sprintf("%s:%s", daemon.GRPCAddress, daemon.GRPCPort)
+		c, err := client.New(ctx, &client.Config{
+			Address:  address,
+			Insecure: true,
+		})
+		if err != nil {
+			log.Errorf(ctx, "err: %s", err.Error())
+			return
+		}
+		if err := c.Start(ctx); err != nil {
+			log.Errorf(ctx, "err: %s", err.Error())
+			return
+		}
+		r.wclientCache.Upsert(ctx, nsn, c)
+	} else {
+		c, err := r.wclientCache.Get(nsn)
+		if err != nil {
+
+		} else {
+			c.Stop()
+			r.wclientCache.Delete(ctx, nsn)
+		}
+	}
+
 	r.commonCallback(ctx, nsn, d, &CallbackCtx{
 		Message:          "daemon failed",
 		Hold:             true,

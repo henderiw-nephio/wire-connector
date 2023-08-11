@@ -83,10 +83,12 @@ run: fmt vet ## Run a controller from your host.
 .PHONY: docker-build
 docker-build: generate ## Build docker image with the manager.
 	docker build -f Dockerfile_Daemon -t ${IMG_DAEMON} .
+	docker build -f Dockerfile_Controller -t ${IMG_CONTROLLER} .
 
 .PHONY: docker-push
 docker-push:  ## Push docker image with the manager.
 	docker push ${IMG_DAEMON}
+	docker push ${IMG_CONTROLLER}
 
 # PLATFORMS defines the target platforms for  the manager image be build to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:

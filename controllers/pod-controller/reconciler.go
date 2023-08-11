@@ -107,8 +107,18 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	if len(cr.Annotations) != 0 &&
 		cr.Annotations[invv1alpha1.NephioWiringKey] == "true" { // this is a wiring node
 		// update (add/update) pod to inventory
+
 		r.podCache.Upsert(ctx, req.NamespacedName, r.getPod(cr))
 		return ctrl.Result{}, nil
+	}
+	if len(cr.Labels) != 0 &&
+		cr.Labels["fn.kptgen.dev/controller"] == "wire-connector-daemon" {
+
+		hostNodeName, d := r.getLeaseInfo(cr)
+		if hostNodeName != "" {
+			r.daemonCache.Upsert(ctx, req.NamespacedName, d)
+			return ctrl.Result{}, nil
+		}
 	}
 	return ctrl.Result{}, nil
 }
@@ -118,16 +128,21 @@ func (r *reconciler) getPod(p *corev1.Pod) wirepod.Pod {
 	if !wirepod.IsPodReady(p) {
 		return pod
 	}
-
-	for nsn, node := range r.nodeCache.List() {
-		if node.IsReady {
-			if p.Status.HostIP == node.HostIP {
-				pod.IsReady = true
-				pod.HostIP = p.Status.HostIP
-				pod.HostNodeName = nsn.Name
-				return pod
-			}
-		}
-	}
+	pod.IsReady = true
+	pod.HostIP = p.Status.HostIP
+	pod.HostNodeName = p.Spec.NodeName
 	return pod
+
+}
+
+func (r *reconciler) getLeaseInfo(p *corev1.Pod) (string, wiredaemon.Daemon) {
+	d := wiredaemon.Daemon{}
+	if !wirepod.IsPodReady((p)) {
+		return p.Spec.NodeName, d
+	}
+	d.IsReady = true
+	d.HostIP = p.Status.HostIP
+	d.GRPCAddress = p.Status.PodIP
+	d.GRPCPort = "9999"
+	return p.Spec.NodeName, d
 }
