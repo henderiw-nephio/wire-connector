@@ -16,7 +16,7 @@ spec:
         app.kubernetes.io/name: wire-connector
         app.kubernetes.io/part-of: wire-connector
         app.kubernetes.io/version: tbd
-        fn.kptgen.dev/controller: wire-connector-controller
+        fn.kptgen.dev/controller: wire-connector-daemon
     spec:
       hostNetwork: true
       tolerations:
