@@ -1,0 +1,74 @@
+/*
+Copyright 2022 Nokia.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+syntax = "proto3";
+
+//import "google/protobuf/any.proto";
+
+package resource;
+option go_package = "github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb";
+
+service Wire {
+  rpc Get (WireRequest) returns (WireResponse) {}
+  rpc Create (WireRequest) returns (EmptyResponse) {}
+  rpc Delete (WireRequest) returns (EmptyResponse) {}
+  rpc WireWatch (WatchRequest) returns (stream WatchResponse) {}
+}
+
+message WireRequest {
+  string namespace = 1;
+  string name = 2;
+  repeated Endpoint endpoints = 3;
+  uint32 mtu = 5;
+  uint32 vpnID = 6;
+}
+
+message Endpoint {
+  string topology = 1; // topology is reflected as a namespace
+  string nodeName = 2;
+  string ifName = 3; 
+  bool local = 4;
+  string hostName = 5;
+  string hostIP = 6;
+  string serviceEndpoint = 7;
+}
+
+message WireResponse {
+  StatusCode statusCode = 1;
+  string reason = 2;
+}
+
+message EmptyResponse{
+  StatusCode statusCode = 1;
+  string reason = 2;
+}
+
+message WatchRequest {
+  string namespace = 1;
+  string name = 2;
+}
+
+message WatchResponse {
+  string namespace = 1;
+  string name = 2;
+  StatusCode statusCode = 3;
+  string reason = 4;
+}
+
+enum StatusCode {
+  OK = 0; // the status is OK
+  NOK = 1; // the status is NOK
+}

@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata: 
+  name: wire-connector-daemon
+  namespace: network-system
+spec:
+  selector:
+    matchLabels:
+      fn.kptgen.dev/controller: wire-connector-daemon
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: tbd
+        app.kubernetes.io/instance: tbd
+        app.kubernetes.io/managed-by: kpt
+        app.kubernetes.io/name: wire-connector
+        app.kubernetes.io/part-of: wire-connector
+        app.kubernetes.io/version: tbd
+        fn.kptgen.dev/controller: wire-connector-controller
+    spec:
+      hostNetwork: true
+      tolerations:
+      - operator: Exists
+        effect: NoSchedule
+      serviceAccountName: wire-connector-daemon
+      containers:
+      - name: wire-connector
+        image: europe-docker.pkg.dev/srlinux/eu.gcr.io/wire-connector-daemon:latest
+        command:
+        - /manager
+        env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: "NODE_NAME"
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: "NODE_IP"
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.hostIP
+        - name: RECONCILER_PODS
+          value: "true"
+        - name: RECONCILER_NODES
+          value: "true"
+        - name: RECONCILER_LINKS
+          value: "true"
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "50Mi"
+          limits:
+            cpu: "100m"
+            memory: "50Mi"
+        securityContext:
+          privileged: true
+          #allowPrivilegeEscalation: true
+          capabilities:
+            add: ["NET_RAW", "NET_ADMIN"]
+        volumeMounts: 
+        - mountPath: /var/run/containerd
+          name: containerd-sock 
+        - mountPath: /proc
+          name: proc
+      volumes:
+      - name: containerd-sock 
+        hostPath: 
+          path: /var/run/containerd
+      - name: proc 
+        hostPath: 
+          path: /proc

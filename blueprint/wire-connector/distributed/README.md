@@ -1,5 +1,5 @@
 # wire-connector
 
 ## Description
-wire-connector
+wire-connector-distributed
 

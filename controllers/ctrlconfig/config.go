@@ -22,6 +22,10 @@ import (
 	"github.com/henderiw-nephio/wire-connector/pkg/cri"
 	"github.com/henderiw-nephio/wire-connector/pkg/node"
 	"github.com/henderiw-nephio/wire-connector/pkg/pod"
+	"github.com/henderiw-nephio/wire-connector/pkg/wire"
+	wiredaemon "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/daemon"
+	wirenode "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/node"
+	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/pod"
 	"github.com/henderiw-nephio/wire-connector/pkg/xdp"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 )
@@ -34,4 +38,7 @@ type ControllerConfig struct {
 	NodeManager node.Manager
 	CRI         cri.CRI
 	XDP         xdp.XDP
+	PodCache    wire.Cache[wirepod.Pod]
+	DaemonCache wire.Cache[wiredaemon.Daemon]
+	NodeCache   wire.Cache[wirenode.Node]
 }

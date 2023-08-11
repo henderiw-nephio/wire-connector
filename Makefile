@@ -11,7 +11,9 @@ OBJCOPY ?= llvm-objcopy-14
 CFLAGS := -O2 -g -Wall -Werror $(CFLAGS)
 
 # Image URL to use all building/pushing image targets
-IMG ?= $(REGISTRY)/${PROJECT}:$(VERSION)
+IMG_DDAEMON ?= $(REGISTRY)/${PROJECT}-ddaemon:$(VERSION)
+IMG_DAEMON ?= $(REGISTRY)/${PROJECT}-daemon:$(VERSION)
+IMG_CONTROLLER ?= $(REGISTRY)/${PROJECT}-controller:$(VERSION)
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -54,11 +56,12 @@ fmt: ## Run go fmt against code.
 vet: ## Run go vet against code.
 	go vet ./...
 
-.PHONY: generate
+.PHONY: generate protoc-gen-gofast protoc-gen-go-grpc
 generate: export BPF_CLANG := $(CLANG)
 generate: export BPF_CFLAGS := $(CFLAGS)
 generate: ## Run go generate against code.
 	go generate ./...
+	protoc -I . $(shell find ./pkg/ -name '*.proto') --gofast_out=. --gofast_opt=paths=source_relative  --go-grpc_out=. --go-grpc_opt=paths=source_relative
 
 .PHONY: test
 test: fmt vet envtest ## Run tests.
@@ -79,11 +82,11 @@ run: fmt vet ## Run a controller from your host.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
 docker-build: generate ## Build docker image with the manager.
-	docker build -t ${IMG} .
+	docker build -f Dockerfile_Daemon -t ${IMG_DAEMON} .
 
 .PHONY: docker-push
 docker-push:  ## Push docker image with the manager.
-	docker push ${IMG}
+	docker push ${IMG_DAEMON}
 
 # PLATFORMS defines the target platforms for  the manager image be build to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
@@ -135,6 +138,8 @@ $(LOCALBIN):
 ## Tool Binaries
 KPT ?= $(LOCALBIN)/kpt
 KPTGEN ?= $(LOCALBIN)/kptgen
+PROTOC_GO_FAST ?= $(LOCALBIN)/protoc-gen-gofast
+PROTOC_GO_GRPC ?= $(LOCALBIN)/protoc-gen-go-grpc
 
 ## Tool Versions
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
@@ -143,6 +148,8 @@ KUSTOMIZE_VERSION ?= v3.8.7
 CONTROLLER_TOOLS_VERSION ?= v0.9.2
 KPT_VERSION ?= main
 KPTGEN_VERSION ?= v0.0.9
+PROTOC_GO_FAST_VERSION ?= latest
+PROTOC_GO_GRPC_VERSION ?= latest
 
 KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 .PHONY: kustomize
@@ -164,3 +171,13 @@ $(KPT): $(LOCALBIN)
 kptgen: $(KPTGEN) ## Download kptgen locally if necessary.
 $(KPTGEN): $(LOCALBIN)
 	test -s $(LOCALBIN)/kptgen || GOBIN=$(LOCALBIN) go install -v github.com/henderiw-kpt/kptgen@$(KPTGEN_VERSION)
+
+.PHONY: protoc-gen-gofast
+protoc-gen-gofast: $(PROTOC_GO_FAST) ## Download protoc-gen-gofast locally if necessary.
+$(PROTOC_GO_FAST): $(LOCALBIN)
+	test -s $(LOCALBIN)/protoc-gen-gofast || GOBIN=$(LOCALBIN) go install -v github.com/gogo/protobuf/protoc-gen-gofast@$(PROTOC_GO_FAST_VERSION)
+
+.PHONY: protoc-gen-go-grpc
+protoc-gen-gogrpc: $(PROTOC_GO_GRPC) ## Download protoc-gen-golang-grpc locally if necessary.
+$(PROTOC_GO_GRPC): $(LOCALBIN)
+	test -s $(LOCALBIN)/protoc-gen-go-grpc || GOBIN=$(LOCALBIN) go install -v google.golang.org/grpc/cmd/protoc-gen-go-grpc@$(PROTOC_GO_GRPC_VERSION)

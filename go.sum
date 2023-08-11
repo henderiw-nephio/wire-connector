@@ -226,8 +226,8 @@ github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
 github.com/nephio-project/nephio/controllers/pkg v0.0.0-20230724195903-feb6c2f91cc3 h1:KyEiqXNeT/3Rbg4DxjsLXNsMB4oyOM1Z1z9nkEP3KNw=
 github.com/nephio-project/nephio/controllers/pkg v0.0.0-20230724195903-feb6c2f91cc3/go.mod h1:3ytQ+ZwtqSKKNV9ndpb4ShL/xDLwn8JuTBeldjdAN7I=
-github.com/nokia/k8s-ipam v0.0.4-0.20230806153903-34cde66c6efe h1:Udp9u5MOs5FR2jIe1OWtoiooZrITzK2LJ+QAvvlB7Ck=
-github.com/nokia/k8s-ipam v0.0.4-0.20230806153903-34cde66c6efe/go.mod h1:25EuJVW6OSxckHVaErTowmrsqnSI1XiA1izq8osB//w=
+github.com/nokia/k8s-ipam v0.0.4-0.20230808135427-e70973ae40ae h1:jfD3m1AeX1NTwh6p34RDeeQBvkxiVGHHq+VHHCvuwI0=
+github.com/nokia/k8s-ipam v0.0.4-0.20230808135427-e70973ae40ae/go.mod h1:25EuJVW6OSxckHVaErTowmrsqnSI1XiA1izq8osB//w=
 github.com/onsi/ginkgo/v2 v2.9.5 h1:+6Hr4uxzP4XIUyAkg61dWBw8lb/gc4/X5luuxN/EC+Q=
 github.com/onsi/gomega v1.27.7 h1:fVih9JD6ogIiHUN6ePK7HJidyEDpWGVB5mzM7cWNXoU=
 github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
@@ -400,6 +400,7 @@ golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208/go.mod h1:RxMgew5VJxzue5/jJ
 golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
 golang.org/x/sync v0.0.0-20210220032951-036812b2e83c/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
 golang.org/x/sync v0.3.0 h1:ftCYgMx6zT/asHUrPw8BLLscYtGznsLAnjq5RH9P66E=
+golang.org/x/sync v0.3.0/go.mod h1:FU7BRWz2tNW+3quACPkgCx/L+uEAv1htQ0V83Z9Rj+Y=
 golang.org/x/sys v0.0.0-20180830151530-49385e6e1522/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
 golang.org/x/sys v0.0.0-20190215142949-d0b11bdaac8a/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
 golang.org/x/sys v0.0.0-20190312061237-fead79001313/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=

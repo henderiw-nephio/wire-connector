@@ -14,24 +14,25 @@
  limitations under the License.
 */
 
-package pod
+package leasecontroller
 
 import (
 	"context"
 	"fmt"
 	"os"
 	"reflect"
+	"time"
 
-	"github.com/go-logr/logr"
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
-	"github.com/henderiw-nephio/wire-connector/pkg/cri"
-	"github.com/henderiw-nephio/wire-connector/pkg/pod"
+	"github.com/henderiw-nephio/wire-connector/pkg/wire"
+	wiredaemon "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/daemon"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
-	"github.com/nephio-project/nephio/controllers/pkg/resource"
 	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
 	"github.com/nokia/k8s-ipam/pkg/meta"
+	"github.com/nokia/k8s-ipam/pkg/resource"
 	"github.com/pkg/errors"
-	corev1 "k8s.io/api/core/v1"
+	coordinationv1 "k8s.io/api/coordination/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -41,7 +42,7 @@ import (
 )
 
 func init() {
-	reconcilerinterface.Register("pods", &reconciler{})
+	reconcilerinterface.Register("leasecontroller", &reconciler{})
 }
 
 const (
@@ -60,13 +61,12 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 
 	// initialize reconciler
 	r.Client = mgr.GetClient()
-	r.podManager = cfg.PodManager
-	r.cri = cfg.CRI
+	r.daemonCache = cfg.DaemonCache
 
 	return nil,
 		ctrl.NewControllerManagedBy(mgr).
-			Named("PodController").
-			For(&corev1.Pod{}).
+			Named("LeaseController").
+			For(&coordinationv1.Lease{}).
 			Complete(r)
 }
 
@@ -74,23 +74,21 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 type reconciler struct {
 	client.Client
 
-	podManager pod.Manager
-	cri        cri.CRI
-
-	l logr.Logger
+	daemonCache wire.Cache[wiredaemon.Daemon]
 }
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	r.l = log.FromContext(ctx)
+	log := log.FromContext(ctx)
 
-	cr := &corev1.Pod{}
+	cr := &coordinationv1.Lease{}
 	if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
 		// There's no need to requeue if we no longer exist. Otherwise we'll be
 		// requeued implicitly because we return an error.
 		if resource.IgnoreNotFound(err) != nil {
-			r.l.Error(err, errGetCr)
+			log.Error(err, errGetCr)
 			return ctrl.Result{}, errors.Wrap(resource.IgnoreNotFound(err), errGetCr)
 		}
+		r.daemonCache.Delete(ctx, req.NamespacedName)
 		return reconcile.Result{}, nil
 	}
 
@@ -98,53 +96,47 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		// check if this pod was used for a link wire
 		// if so clean up the link wire
 		// delete the pod from the manager
-		r.podManager.DeletePod(req.NamespacedName)
-		r.l.Info("cr deleted")
+		r.daemonCache.Delete(ctx, req.NamespacedName)
 		return ctrl.Result{}, nil
 	}
 
-	// annotations indicate if this pod is relevant for wiring
-	if len(cr.Annotations) == 0 || cr.Annotations[invv1alpha1.NephioWiringKey] != "true" {
-		// we are only interested pods that we have to wire to
-		return ctrl.Result{}, nil
-	}
-
-	r.l.Info("reconcile")
 	// update (add/update) pod to inventory
-	r.podManager.UpsertPod(req.NamespacedName, cr)
-
-	// if the host IP does not match the host we do not need to track the pod
-	if cr.Status.HostIP == "" || cr.Status.HostIP != os.Getenv("NODE_IP") {
-		// we dont need to lookup containers if we know this is not a pod locally on the node
-		return ctrl.Result{}, nil
-	}
-
-	containers, err := r.cri.ListContainers(ctx, nil)
-	if err != nil {
-		r.l.Error(err, "cannot get containers from cri")
-		return ctrl.Result{}, err
-	}
-
-	for _, c := range containers {
-		containerName := ""
-		if c.GetMetadata() != nil {
-			containerName = c.GetMetadata().GetName()
-		}
-		info, err := r.cri.GetContainerInfo(ctx, c.GetId())
-		if err != nil {
-			r.l.Error(err, "cannot get container info name: %s, id: %s", containerName, c.GetId())
-			return ctrl.Result{}, err
-		}
-		r.l.Info("container", "name", containerName, "name", fmt.Sprintf("%s=%s", cr.GetName(), info.PodName), "namespace", fmt.Sprintf("%s=%s", cr.GetNamespace(), info.Namespace))
-		if info.PodName == cr.GetName() && info.Namespace == cr.GetNamespace() {
-			r.podManager.UpsertContainer(req.NamespacedName, containerName, &pod.ContainerCtx{
-				ID:     c.GetId(),
-				Pid:    info.PiD,
-				NSPath: info.NsPath,
-				State:  c.GetState(),
-			})
-		}
+	if cr.Namespace == os.Getenv("POD_NAMESPACE") {
+		r.daemonCache.Upsert(ctx, req.NamespacedName, r.getDaemon(cr))
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *reconciler) getDaemon(l *coordinationv1.Lease) wiredaemon.Daemon {
+	d := wiredaemon.Daemon{}
+
+	now := metav1.NowMicro()
+
+	if l.Spec.RenewTime != nil {
+		expectedRenewTime := l.Spec.RenewTime.Add(time.Duration(*l.Spec.LeaseDurationSeconds) * time.Second)
+		if !expectedRenewTime.Before(now.Time) {
+			if len(l.Labels) != 0 {
+				nodeAddress, ok := l.Labels[invv1alpha1.NephioWireNodeAddress]
+				if !ok {
+					return d
+				}
+				grpcAddress, ok := l.Labels[invv1alpha1.NephioWireGRPCAddress]
+				if !ok {
+					return d
+				}
+				grpcPort, ok := l.Labels[invv1alpha1.NephioWireGRPCPort]
+				if !ok {
+					return d
+				}
+				d.IsReady = true
+				d.GRPCAddress = grpcAddress
+				d.HostIP = nodeAddress
+				d.GRPCPort = grpcPort
+				return d
+			}
+
+		}
+	}
+	return d
 }
