@@ -29,7 +29,7 @@ import (
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/node-controller"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/pod-controller"
-	_ "github.com/henderiw-nephio/wire-connector/controllers/wire-controller"
+	//_ "github.com/henderiw-nephio/wire-connector/controllers/wire-controller"
 	"github.com/henderiw-nephio/wire-connector/pkg/grpcserver"
 	"github.com/henderiw-nephio/wire-connector/pkg/grpcserver/healthhandler"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
@@ -145,6 +145,7 @@ func main() {
 		grpcserver.WithCheckHandler(wh.Check),
 	)
 
+	// run the grpc server
 	go func() {
 		if err := s.Start(ctx); err != nil {
 			setupLog.Error(err, "cannot start grpcserver")

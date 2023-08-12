@@ -63,42 +63,6 @@ func (r *cache[T1]) Get(nsn types.NamespacedName) (T1, error) {
 	return x, nil
 }
 
-// Upsert creates or updates the entry in the cache
-func (r *cache[T1]) Upsert(ctx context.Context, nsn types.NamespacedName, newd T1) {
-	r.m.Lock()
-	defer r.m.Unlock()
-
-	// only if an object exists and data gets changed we
-	// call the registered callbacks
-	if d, ok := r.db[nsn]; ok {
-		if !reflect.DeepEqual(d, newd) {
-			for _, cb := range r.callbackFn {
-				cb(ctx, nsn, newd)
-			}
-		}
-	} else {
-		for _, cb := range r.callbackFn {
-			cb(ctx, nsn, newd)
-		}
-	}
-	r.db[nsn] = newd
-}
-
-// Delete deletes the entry in the cache
-func (r *cache[T1]) Delete(ctx context.Context, nsn types.NamespacedName) {
-	r.m.Lock()
-	defer r.m.Unlock()
-
-	// only if an exisitng object gets deleted we
-	// call the registered callbacks
-	if _, ok := r.db[nsn]; ok {
-		for _, cb := range r.callbackFn {
-			cb(ctx, nsn, nil)
-		}
-	}
-	delete(r.db, nsn)
-}
-
 func (r *cache[T1]) List() map[types.NamespacedName]T1 {
 	r.m.RLock()
 	defer r.m.RUnlock()
@@ -110,7 +74,52 @@ func (r *cache[T1]) List() map[types.NamespacedName]T1 {
 	return l
 }
 
+// Upsert creates or updates the entry in the cache
+func (r *cache[T1]) Upsert(ctx context.Context, nsn types.NamespacedName, newd T1) {
+	// only if an object exists and data gets changed we
+	// call the registered callbacks
+	d, err := r.Get(nsn) 
+	if err != nil {
+		if !reflect.DeepEqual(d, newd) {
+			for _, cb := range r.callbackFn {
+				cb(ctx, nsn, newd)
+			}
+		}
+	} else {
+		for _, cb := range r.callbackFn {
+			cb(ctx, nsn, newd)
+		}
+	}
+	r.update(nsn, newd)
+}
+
+func (r *cache[T1]) update(nsn types.NamespacedName, newd T1) {
+	r.m.Lock()
+	defer r.m.Unlock()
+	r.db[nsn] = newd
+}
+
+func (r *cache[T1]) delete(nsn types.NamespacedName) {
+	r.m.Lock()
+	defer r.m.Unlock()
+	delete(r.db, nsn)
+}
+
+// Delete deletes the entry in the cache
+func (r *cache[T1]) Delete(ctx context.Context, nsn types.NamespacedName) {
+	// only if an exisitng object gets deleted we
+	// call the registered callbacks
+	if _, err := r.Get(nsn);  err == nil {
+		for _, cb := range r.callbackFn {
+			cb(ctx, nsn, nil)
+		}
+	}
+	r.delete(nsn)
+}
+
 func (r *cache[T1]) AddWatch(fn ResourceCallbackFn) {
+	r.m.Lock()
+	defer r.m.Unlock()
 	found := false
 	for _, cb := range r.callbackFn {
 		if reflect.ValueOf(cb).Pointer() == reflect.ValueOf(fn).Pointer() {

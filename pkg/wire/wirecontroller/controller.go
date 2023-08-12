@@ -30,7 +30,6 @@ import (
 	wirenode "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/node"
 	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/pod"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire/client"
-	"google.golang.org/appengine/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"k8s.io/apimachinery/pkg/types"
@@ -195,6 +194,7 @@ func (r *wc) resolve(wreq *WireReq) []*ResolvedData {
 }
 
 func (r *wc) wireCreate(wreq *WireReq) {
+	r.l.Info("wireCreate ...start...", "nsn", wreq.GetNSN())
 	// we want to resolve first to see if both endpoints resolve
 	// if not we dont create the endpoint event
 	resolvedData := r.resolve(wreq)
@@ -217,9 +217,11 @@ func (r *wc) wireCreate(wreq *WireReq) {
 			})
 		}
 	}
+	r.l.Info("wireCreate ...end...", "nsn", wreq.GetNSN())
 }
 
 func (r *wc) wireDelete(wreq *WireReq) {
+	r.l.Info("wireDelete ...start...", "nsn", wreq.GetNSN())
 	// we want to resolve first to see if the endpoints resolve
 	// depending on this we generate delete events if the resolution was ok
 	resolvedData := r.resolve(wreq)
@@ -244,6 +246,7 @@ func (r *wc) wireDelete(wreq *WireReq) {
 			EpIdx: 0,
 		})
 	}
+	r.l.Info("wireDelete ...end...", "nsn", wreq.GetNSN())
 }
 
 type CallbackCtx struct {
@@ -255,6 +258,7 @@ type CallbackCtx struct {
 // daemonCallback notifies the wire controller about the fact
 // that the daemon status changed and should reconcile the object
 func (r *wc) daemonCallback(ctx context.Context, nsn types.NamespacedName, d any) {
+	r.l.Info("daemonCallback ...start...", "nsn", nsn, "data", d)
 	daemon, ok := d.(wiredaemon.Daemon)
 	if !ok {
 		r.l.Info("expect Daemon", "got", reflect.TypeOf(d).Name())
@@ -268,31 +272,28 @@ func (r *wc) daemonCallback(ctx context.Context, nsn types.NamespacedName, d any
 
 		// this is a safety
 		oldw, err := r.workerCache.Get(nsn)
-		if err != nil {
-			log.Errorf(ctx, "err: %s", err.Error())
-		} else {
+		if err == nil {
 			oldw.Stop()
 			r.workerCache.Delete(ctx, nsn)
-		}
+		} 
 		// create a new client
 		w, err := NewWorker(ctx, r.wireCache, &client.Config{
 			Address:  address,
 			Insecure: true,
 		})
 		if err != nil {
-			log.Errorf(ctx, "err: %s", err.Error())
+			r.l.Error(err, "cannot get workercache")
 			return
 		}
 		if err := w.Start(ctx); err != nil {
-			log.Errorf(ctx, "err: %s", err.Error())
+			r.l.Error(err, "cannot start worker")
 			return
 		}
 		r.workerCache.Upsert(ctx, nsn, w)
 	} else {
 		c, err := r.workerCache.Get(nsn)
-		if err != nil {
-			log.Errorf(ctx, "err: %s", err.Error())
-		} else {
+		if err == nil {
+			// worker found
 			c.Stop()
 			r.workerCache.Delete(ctx, nsn)
 		}
@@ -303,9 +304,11 @@ func (r *wc) daemonCallback(ctx context.Context, nsn types.NamespacedName, d any
 		Hold:             true,
 		EvalHostNodeName: true,
 	})
+	r.l.Info("daemonCallback ...end...", "nsn", nsn, "data", d)
 }
 
 func (r *wc) podCallback(ctx context.Context, nsn types.NamespacedName, d any) {
+	r.l.Info("podCallback ...start...", "nsn", nsn, "data", d)
 	p, ok := d.(wirepod.Pod)
 	if !ok {
 		r.l.Info("expect Pod", "got", reflect.TypeOf(d).Name())
@@ -321,9 +324,11 @@ func (r *wc) podCallback(ctx context.Context, nsn types.NamespacedName, d any) {
 		Hold:             false,
 		EvalHostNodeName: false,
 	})
+	r.l.Info("podCallback ...end...", "nsn", nsn, "data", d)
 }
 
 func (r *wc) nodeCallback(ctx context.Context, nsn types.NamespacedName, d any) {
+	r.l.Info("nodeCallback ...start...", "nsn", nsn, "data", d)
 	n, ok := d.(wirenode.Node)
 	if !ok {
 		r.l.Info("expect Node", "got", reflect.TypeOf(d).Name())
@@ -340,10 +345,12 @@ func (r *wc) nodeCallback(ctx context.Context, nsn types.NamespacedName, d any) 
 		Hold:             false,
 		EvalHostNodeName: true,
 	})
+	r.l.Info("nodeCallback ...end...", "nsn", nsn, "data", d)
 }
 
 func (r *wc) commonCallback(ctx context.Context, nsn types.NamespacedName, d any, cbctx *CallbackCtx) {
 	//log := log.FromContext(ctx)
+	r.l.Info("commonCallback ...start...", "nsn", nsn, "data", d)
 	var wg sync.WaitGroup
 	if d == nil {
 		// delete
@@ -357,9 +364,9 @@ func (r *wc) commonCallback(ctx context.Context, nsn types.NamespacedName, d any
 					go func() {
 						r.wireCache.UnResolve(wireNSN, epIdx)
 						r.wireCache.HandleEvent(wireNSN, ResolutionFailedEvent, &EventCtx{
-							EpIdx:        epIdx,
-							Message:      cbctx.Message,
-							Hold:         cbctx.Hold, // we do not want this event to eb replciated to the other endpoint
+							EpIdx:   epIdx,
+							Message: cbctx.Message,
+							Hold:    cbctx.Hold, // we do not want this event to eb replciated to the other endpoint
 						})
 					}()
 				}
@@ -380,6 +387,7 @@ func (r *wc) commonCallback(ctx context.Context, nsn types.NamespacedName, d any
 		}
 	}
 	wg.Wait()
+	r.l.Info("commonCallback ...end...", "nsn", nsn, "data", d)
 }
 
 /* generic event update

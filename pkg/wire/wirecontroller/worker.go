@@ -31,7 +31,7 @@ type Worker interface {
 
 func NewWorker(ctx context.Context, wireCache WireCache, cfg *client.Config) (Worker, error) {
 	l := ctrl.Log.WithName("worker").WithValues("address", cfg.Address)
-	
+
 	c, err := client.New(cfg)
 	if err != nil {
 		return nil, err
@@ -61,49 +61,52 @@ func (r *worker) Start(ctx context.Context) error {
 		return err
 	}
 	r.l.Info("started...")
-	for {
-		select {
-		case e, _ := <-r.ch:
-			switch e.Action {
-			case WorkerActionCreate:
-				var event Event
-				var eventCtx *EventCtx
-				resp, err := r.client.Create(ctx, e.WireReq.WireRequest)
-				if err != nil {
-					//failed
-					event = FailedEvent
-					eventCtx = e.EventCtx
-					eventCtx.Message = err.Error()
+	go func() {
+		for {
+			select {
+			case e, _ := <-r.ch:
+				switch e.Action {
+				case WorkerActionCreate:
+					var event Event
+					var eventCtx *EventCtx
+					resp, err := r.client.Create(ctx, e.WireReq.WireRequest)
+					if err != nil {
+						//failed
+						event = FailedEvent
+						eventCtx = e.EventCtx
+						eventCtx.Message = err.Error()
+					}
+					if resp.StatusCode == wirepb.StatusCode_NOK {
+						// event failed
+						event = FailedEvent
+						eventCtx = e.EventCtx
+						eventCtx.Message = resp.GetReason()
+					}
+					r.wireCache.HandleEvent(e.WireReq.GetNSN(), event, eventCtx)
+				case WorkerActionDelete:
+					var event Event
+					var eventCtx *EventCtx
+					resp, err := r.client.Delete(ctx, e.WireReq.WireRequest)
+					if err != nil {
+						//failed
+						event = FailedEvent
+						eventCtx = e.EventCtx
+						eventCtx.Message = err.Error()
+					}
+					if resp.StatusCode == wirepb.StatusCode_NOK {
+						// event failed
+						event = FailedEvent
+						eventCtx = e.EventCtx
+						eventCtx.Message = resp.GetReason()
+					}
+					r.wireCache.HandleEvent(e.WireReq.GetNSN(), event, eventCtx)
 				}
-				if resp.StatusCode == wirepb.StatusCode_NOK {
-					// event failed
-					event = FailedEvent
-					eventCtx = e.EventCtx
-					eventCtx.Message = resp.GetReason()
-				}
-				r.wireCache.HandleEvent(e.WireReq.GetNSN(), event, eventCtx)
-			case WorkerActionDelete:
-				var event Event
-				var eventCtx *EventCtx
-				resp, err := r.client.Delete(ctx, e.WireReq.WireRequest)
-				if err != nil {
-					//failed
-					event = FailedEvent
-					eventCtx = e.EventCtx
-					eventCtx.Message = err.Error()
-				}
-				if resp.StatusCode == wirepb.StatusCode_NOK {
-					// event failed
-					event = FailedEvent
-					eventCtx = e.EventCtx
-					eventCtx.Message = resp.GetReason()
-				}
-				r.wireCache.HandleEvent(e.WireReq.GetNSN(), event, eventCtx)
+			case <-ctx.Done():
+				// cancelled
 			}
-		case <-ctx.Done():
-			// cancelled
 		}
-	}
+	}()
+	return nil
 }
 
 func (r *worker) Stop() {
