@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/henderiw-nephio/wire-connector/pkg/wire"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -34,18 +35,22 @@ type WireCache interface {
 	Delete(types.NamespacedName)
 	List() map[types.NamespacedName]*Wire
 	SetDesiredAction(types.NamespacedName, DesiredAction)
-	HandleEvent(Event, *EventCtx) error
+	Resolve(nsn types.NamespacedName, resolvedData []*ResolvedData)
+	UnResolve(nsn types.NamespacedName, epIdx int)
+	HandleEvent(types.NamespacedName, Event, *EventCtx) error
 }
 
-func NewWireCache() WireCache {
+func NewWireCache(workerCache wire.Cache[Worker]) WireCache {
 	return &cache{
-		db: map[types.NamespacedName]*Wire{},
+		db:          map[types.NamespacedName]*Wire{},
+		workerCache: workerCache,
 	}
 }
 
 type cache struct {
-	m  sync.RWMutex
-	db map[types.NamespacedName]*Wire
+	m           sync.RWMutex
+	db          map[types.NamespacedName]*Wire
+	workerCache wire.Cache[Worker]
 }
 
 // Get return the type
@@ -92,29 +97,44 @@ func (r *cache) SetDesiredAction(nsn types.NamespacedName, desiredAction Desired
 	defer r.m.Unlock()
 	w, ok := r.db[nsn]
 	if ok {
-		w.DesiredAction = desiredAction
+		w.SetDesiredAction(desiredAction)
 	}
 	return
 }
 
-func (r *cache) HandleEvent(event Event, eventCtx *EventCtx) error {
+func (r *cache) Resolve(nsn types.NamespacedName, resolvedData []*ResolvedData) {
+	r.m.Lock()
+	defer r.m.Unlock()
+	w, ok := r.db[nsn]
+	if ok {
+		w.WireReq.Resolve(resolvedData)
+	}
+	return
+}
+
+func (r *cache) UnResolve(nsn types.NamespacedName, epIdx int) {
+	r.m.Lock()
+	defer r.m.Unlock()
+	w, ok := r.db[nsn]
+	if ok {
+		w.WireReq.Unresolve(epIdx)
+	}
+	return
+}
+
+func (r *cache) HandleEvent(nsn types.NamespacedName, event Event, eventCtx *EventCtx) error {
 	r.m.Lock()
 	defer r.m.Unlock()
 
-	return r.handleEvent(event, eventCtx)
-}
-
-func (r *cache) handleEvent(event Event, eventCtx *EventCtx) error {
 	if eventCtx.EpIdx < 0 || eventCtx.EpIdx > 1 {
 		return fmt.Errorf("cannot handleEvent, invalid endpoint index %d", eventCtx.EpIdx)
 	}
 
-	wireNSN := types.NamespacedName{Namespace: eventCtx.Wire.WireReq.Namespace, Name: eventCtx.Wire.WireReq.Name}
-	w, ok := r.db[wireNSN]
+	w, ok := r.db[nsn]
 	if !ok {
-		return fmt.Errorf("cannot handleEvent, nsn not found %s", wireNSN.String())
+		return fmt.Errorf("cannot handleEvent, nsn not found %s", nsn.String())
 	}
-	eventCtx.Wire = w
-	w.Endpoints[eventCtx.EpIdx].State.HandleEvent(event, eventCtx)
+
+	w.EndpointsState[eventCtx.EpIdx].HandleEvent(event, eventCtx, w)
 	return nil
 }

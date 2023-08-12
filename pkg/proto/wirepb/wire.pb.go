@@ -25,18 +25,21 @@ const _ = proto.ProtoPackageIsVersion3 // please upgrade the proto package
 type StatusCode int32
 
 const (
-	StatusCode_OK  StatusCode = 0
-	StatusCode_NOK StatusCode = 1
+	StatusCode_OK       StatusCode = 0
+	StatusCode_NOK      StatusCode = 1
+	StatusCode_NotFound StatusCode = 2
 )
 
 var StatusCode_name = map[int32]string{
 	0: "OK",
 	1: "NOK",
+	2: "NotFound",
 }
 
 var StatusCode_value = map[string]int32{
-	"OK":  0,
-	"NOK": 1,
+	"OK":       0,
+	"NOK":      1,
+	"NotFound": 2,
 }
 
 func (x StatusCode) String() string {
@@ -131,7 +134,7 @@ type Endpoint struct {
 	NodeName             string   `protobuf:"bytes,2,opt,name=nodeName,proto3" json:"nodeName,omitempty"`
 	IfName               string   `protobuf:"bytes,3,opt,name=ifName,proto3" json:"ifName,omitempty"`
 	Local                bool     `protobuf:"varint,4,opt,name=local,proto3" json:"local,omitempty"`
-	HostName             string   `protobuf:"bytes,5,opt,name=hostName,proto3" json:"hostName,omitempty"`
+	HostNodeName         string   `protobuf:"bytes,5,opt,name=hostNodeName,proto3" json:"hostNodeName,omitempty"`
 	HostIP               string   `protobuf:"bytes,6,opt,name=hostIP,proto3" json:"hostIP,omitempty"`
 	ServiceEndpoint      string   `protobuf:"bytes,7,opt,name=serviceEndpoint,proto3" json:"serviceEndpoint,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
@@ -200,9 +203,9 @@ func (m *Endpoint) GetLocal() bool {
 	return false
 }
 
-func (m *Endpoint) GetHostName() string {
+func (m *Endpoint) GetHostNodeName() string {
 	if m != nil {
-		return m.HostName
+		return m.HostNodeName
 	}
 	return ""
 }
@@ -222,11 +225,14 @@ func (m *Endpoint) GetServiceEndpoint() string {
 }
 
 type WireResponse struct {
-	StatusCode           StatusCode `protobuf:"varint,1,opt,name=statusCode,proto3,enum=wire.StatusCode" json:"statusCode,omitempty"`
-	Reason               string     `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}   `json:"-"`
-	XXX_unrecognized     []byte     `json:"-"`
-	XXX_sizecache        int32      `json:"-"`
+	Namespace            string            `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Name                 string            `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	EndpointsStatus      []*EndpointStatus `protobuf:"bytes,3,rep,name=endpointsStatus,proto3" json:"endpointsStatus,omitempty"`
+	StatusCode           StatusCode        `protobuf:"varint,4,opt,name=statusCode,proto3,enum=wire.StatusCode" json:"statusCode,omitempty"`
+	Reason               string            `protobuf:"bytes,5,opt,name=reason,proto3" json:"reason,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
+	XXX_unrecognized     []byte            `json:"-"`
+	XXX_sizecache        int32             `json:"-"`
 }
 
 func (m *WireResponse) Reset()         { *m = WireResponse{} }
@@ -262,6 +268,27 @@ func (m *WireResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_WireResponse proto.InternalMessageInfo
 
+func (m *WireResponse) GetNamespace() string {
+	if m != nil {
+		return m.Namespace
+	}
+	return ""
+}
+
+func (m *WireResponse) GetName() string {
+	if m != nil {
+		return m.Name
+	}
+	return ""
+}
+
+func (m *WireResponse) GetEndpointsStatus() []*EndpointStatus {
+	if m != nil {
+		return m.EndpointsStatus
+	}
+	return nil
+}
+
 func (m *WireResponse) GetStatusCode() StatusCode {
 	if m != nil {
 		return m.StatusCode
@@ -270,6 +297,61 @@ func (m *WireResponse) GetStatusCode() StatusCode {
 }
 
 func (m *WireResponse) GetReason() string {
+	if m != nil {
+		return m.Reason
+	}
+	return ""
+}
+
+type EndpointStatus struct {
+	StatusCode           StatusCode `protobuf:"varint,1,opt,name=statusCode,proto3,enum=wire.StatusCode" json:"statusCode,omitempty"`
+	Reason               string     `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}   `json:"-"`
+	XXX_unrecognized     []byte     `json:"-"`
+	XXX_sizecache        int32      `json:"-"`
+}
+
+func (m *EndpointStatus) Reset()         { *m = EndpointStatus{} }
+func (m *EndpointStatus) String() string { return proto.CompactTextString(m) }
+func (*EndpointStatus) ProtoMessage()    {}
+func (*EndpointStatus) Descriptor() ([]byte, []int) {
+	return fileDescriptor_abe326c1eb78d3e4, []int{3}
+}
+func (m *EndpointStatus) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *EndpointStatus) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_EndpointStatus.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *EndpointStatus) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_EndpointStatus.Merge(m, src)
+}
+func (m *EndpointStatus) XXX_Size() int {
+	return m.Size()
+}
+func (m *EndpointStatus) XXX_DiscardUnknown() {
+	xxx_messageInfo_EndpointStatus.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_EndpointStatus proto.InternalMessageInfo
+
+func (m *EndpointStatus) GetStatusCode() StatusCode {
+	if m != nil {
+		return m.StatusCode
+	}
+	return StatusCode_OK
+}
+
+func (m *EndpointStatus) GetReason() string {
 	if m != nil {
 		return m.Reason
 	}
@@ -288,7 +370,7 @@ func (m *EmptyResponse) Reset()         { *m = EmptyResponse{} }
 func (m *EmptyResponse) String() string { return proto.CompactTextString(m) }
 func (*EmptyResponse) ProtoMessage()    {}
 func (*EmptyResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_abe326c1eb78d3e4, []int{3}
+	return fileDescriptor_abe326c1eb78d3e4, []int{4}
 }
 func (m *EmptyResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -343,7 +425,7 @@ func (m *WatchRequest) Reset()         { *m = WatchRequest{} }
 func (m *WatchRequest) String() string { return proto.CompactTextString(m) }
 func (*WatchRequest) ProtoMessage()    {}
 func (*WatchRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_abe326c1eb78d3e4, []int{4}
+	return fileDescriptor_abe326c1eb78d3e4, []int{5}
 }
 func (m *WatchRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -400,7 +482,7 @@ func (m *WatchResponse) Reset()         { *m = WatchResponse{} }
 func (m *WatchResponse) String() string { return proto.CompactTextString(m) }
 func (*WatchResponse) ProtoMessage()    {}
 func (*WatchResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_abe326c1eb78d3e4, []int{5}
+	return fileDescriptor_abe326c1eb78d3e4, []int{6}
 }
 func (m *WatchResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -462,6 +544,7 @@ func init() {
 	proto.RegisterType((*WireRequest)(nil), "wire.WireRequest")
 	proto.RegisterType((*Endpoint)(nil), "wire.Endpoint")
 	proto.RegisterType((*WireResponse)(nil), "wire.WireResponse")
+	proto.RegisterType((*EndpointStatus)(nil), "wire.EndpointStatus")
 	proto.RegisterType((*EmptyResponse)(nil), "wire.EmptyResponse")
 	proto.RegisterType((*WatchRequest)(nil), "wire.WatchRequest")
 	proto.RegisterType((*WatchResponse)(nil), "wire.WatchResponse")
@@ -470,39 +553,42 @@ func init() {
 func init() { proto.RegisterFile("pkg/proto/wirepb/wire.proto", fileDescriptor_abe326c1eb78d3e4) }
 
 var fileDescriptor_abe326c1eb78d3e4 = []byte{
-	// 503 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x54, 0xcd, 0x6e, 0xd3, 0x40,
-	0x10, 0xce, 0xd6, 0x8e, 0x1b, 0x4f, 0x9b, 0x12, 0x16, 0x84, 0xac, 0x02, 0x51, 0xe4, 0x93, 0x85,
-	0x68, 0x52, 0x85, 0x0b, 0xe2, 0x84, 0x68, 0x2b, 0x54, 0x15, 0xb5, 0xc8, 0x1c, 0x0a, 0xdc, 0x1c,
-	0x67, 0x88, 0x2d, 0x92, 0xdd, 0xc5, 0xbb, 0x69, 0xd5, 0x67, 0xe0, 0x8c, 0xc4, 0x23, 0x71, 0x42,
-	0x1c, 0x39, 0xa2, 0xf0, 0x22, 0x68, 0x77, 0xed, 0xc4, 0xad, 0xb8, 0x04, 0x89, 0x93, 0xe7, 0xfb,
-	0xe6, 0x67, 0xbf, 0x99, 0xf1, 0x2e, 0xdc, 0x17, 0x1f, 0x27, 0x03, 0x51, 0x70, 0xc5, 0x07, 0x97,
-	0x79, 0x81, 0x62, 0x64, 0x3e, 0x7d, 0xc3, 0x50, 0x57, 0xdb, 0xe1, 0x17, 0x02, 0x5b, 0xe7, 0x79,
-	0x81, 0x31, 0x7e, 0x9a, 0xa3, 0x54, 0xf4, 0x01, 0xf8, 0x2c, 0x99, 0xa1, 0x14, 0x49, 0x8a, 0x01,
-	0xe9, 0x91, 0xc8, 0x8f, 0x57, 0x04, 0xa5, 0xe0, 0x6a, 0x10, 0x6c, 0x18, 0x87, 0xb1, 0xe9, 0x63,
-	0xf0, 0x91, 0x8d, 0x05, 0xcf, 0x99, 0x92, 0x81, 0xd3, 0x73, 0xa2, 0xad, 0xe1, 0x4e, 0xdf, 0x9c,
-	0x73, 0x54, 0xd2, 0xf1, 0x2a, 0x80, 0x76, 0xc0, 0x99, 0xa9, 0x79, 0xd0, 0xec, 0x91, 0xa8, 0x1d,
-	0x6b, 0x93, 0xde, 0x85, 0xe6, 0x85, 0x60, 0xc7, 0x87, 0x81, 0x67, 0x38, 0x0b, 0xc2, 0xef, 0x04,
-	0x5a, 0x55, 0x3e, 0xdd, 0x85, 0x96, 0xe2, 0x82, 0x4f, 0xf9, 0xe4, 0xaa, 0xd4, 0xb4, 0xc4, 0xda,
-	0xc7, 0xf8, 0x18, 0x4f, 0x57, 0xb2, 0x96, 0x98, 0xde, 0x03, 0x2f, 0xff, 0x60, 0x3c, 0x8e, 0xf1,
-	0x94, 0x48, 0x1f, 0x39, 0xe5, 0x69, 0x32, 0x0d, 0xdc, 0x1e, 0x89, 0x5a, 0xb1, 0x05, 0xba, 0x52,
-	0xc6, 0xa5, 0x32, 0xf1, 0x4d, 0x5b, 0xa9, 0xc2, 0xba, 0x92, 0xb6, 0x8f, 0x5f, 0x1b, 0x95, 0x7e,
-	0x5c, 0x22, 0x1a, 0xc1, 0x2d, 0x89, 0xc5, 0x45, 0x9e, 0x62, 0x25, 0x36, 0xd8, 0x34, 0x01, 0x37,
-	0xe9, 0xf0, 0x2d, 0x6c, 0xdb, 0x39, 0x4b, 0xc1, 0x99, 0x44, 0xba, 0x0f, 0x20, 0x55, 0xa2, 0xe6,
-	0xf2, 0x80, 0x8f, 0xed, 0xa4, 0x77, 0x86, 0x1d, 0x3b, 0xb7, 0x37, 0x4b, 0x3e, 0xae, 0xc5, 0x68,
-	0x0d, 0x05, 0x26, 0x92, 0xb3, 0xb2, 0xcf, 0x12, 0x85, 0xef, 0xa0, 0x7d, 0x34, 0x13, 0xea, 0xea,
-	0x3f, 0x94, 0x7e, 0x0e, 0xdb, 0xe7, 0x89, 0x4a, 0xb3, 0x7f, 0xfe, 0x3b, 0xc2, 0xcf, 0x04, 0xda,
-	0x65, 0x89, 0x52, 0xdd, 0xfa, 0x7f, 0xd8, 0xf5, 0x7e, 0x9c, 0xb5, 0xfa, 0x71, 0xeb, 0xfd, 0x3c,
-	0x7a, 0x08, 0xb0, 0xca, 0xa0, 0x1e, 0x6c, 0x9c, 0x9d, 0x74, 0x1a, 0x74, 0x13, 0x9c, 0xd3, 0xb3,
-	0x93, 0x0e, 0x19, 0xfe, 0x24, 0xe0, 0xea, 0x25, 0xd1, 0x3e, 0x38, 0x2f, 0x51, 0xd1, 0xdb, 0xf6,
-	0x90, 0xda, 0xfd, 0xd8, 0xa5, 0x75, 0xca, 0x76, 0x14, 0x36, 0xe8, 0x10, 0xbc, 0x83, 0x02, 0x13,
-	0x85, 0x7f, 0x4b, 0xb9, 0x53, 0xde, 0x86, 0xfa, 0x8e, 0x6c, 0xce, 0x21, 0x4e, 0x71, 0xad, 0x9c,
-	0xa7, 0xe0, 0xeb, 0x28, 0x33, 0x50, 0x5a, 0x49, 0xa9, 0x2d, 0xa8, 0xca, 0xbb, 0x36, 0xf1, 0xb0,
-	0xb1, 0x4f, 0x5e, 0xbc, 0xfa, 0xb6, 0xe8, 0x92, 0x1f, 0x8b, 0x2e, 0xf9, 0xb5, 0xe8, 0x92, 0xaf,
-	0xbf, 0xbb, 0x8d, 0xf7, 0xcf, 0x26, 0xb9, 0xca, 0xe6, 0xa3, 0x7e, 0xca, 0x67, 0x83, 0x0c, 0xd9,
-	0x18, 0x8b, 0xfc, 0x72, 0x8f, 0xa1, 0xc8, 0x72, 0xfb, 0x5a, 0xec, 0xa5, 0x9c, 0x31, 0x4c, 0x15,
-	0x2f, 0x06, 0x37, 0x9f, 0x91, 0x91, 0x67, 0xd0, 0x93, 0x3f, 0x01, 0x00, 0x00, 0xff, 0xff, 0xad,
-	0x06, 0x1d, 0xde, 0x61, 0x04, 0x00, 0x00,
+	// 551 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x54, 0xcd, 0x6e, 0xd3, 0x4c,
+	0x14, 0xcd, 0xc4, 0x49, 0x9a, 0xdc, 0x26, 0x69, 0xbe, 0xfb, 0x55, 0xc8, 0x2a, 0x28, 0x8a, 0xbc,
+	0x8a, 0x80, 0x26, 0x55, 0xd8, 0x20, 0x16, 0x08, 0xd1, 0x16, 0x54, 0x15, 0xa5, 0xc8, 0x5d, 0x54,
+	0x74, 0xe7, 0x38, 0x97, 0xc4, 0x22, 0x99, 0x31, 0xf6, 0xa4, 0x55, 0x9f, 0x81, 0x35, 0x12, 0x8f,
+	0x84, 0x58, 0xb1, 0x42, 0x2c, 0x51, 0x78, 0x11, 0x34, 0xe3, 0x9f, 0xd8, 0x11, 0x9b, 0x44, 0xac,
+	0x3c, 0xe7, 0xdc, 0x7b, 0xee, 0xcf, 0xf1, 0x68, 0xe0, 0xbe, 0xff, 0x61, 0xd2, 0xf7, 0x03, 0x21,
+	0x45, 0xff, 0xd6, 0x0b, 0xc8, 0x1f, 0xe9, 0x4f, 0x4f, 0x33, 0x58, 0x52, 0x67, 0xeb, 0x33, 0x83,
+	0xdd, 0x2b, 0x2f, 0x20, 0x9b, 0x3e, 0x2e, 0x28, 0x94, 0xf8, 0x00, 0x6a, 0xdc, 0x99, 0x53, 0xe8,
+	0x3b, 0x2e, 0x99, 0xac, 0xc3, 0xba, 0x35, 0x7b, 0x45, 0x20, 0x42, 0x49, 0x01, 0xb3, 0xa8, 0x03,
+	0xfa, 0x8c, 0x8f, 0xa1, 0x46, 0x7c, 0xec, 0x0b, 0x8f, 0xcb, 0xd0, 0x34, 0x3a, 0x46, 0x77, 0x77,
+	0xd0, 0xec, 0xe9, 0x3e, 0xa7, 0x31, 0x6d, 0xaf, 0x12, 0xb0, 0x05, 0xc6, 0x5c, 0x2e, 0xcc, 0x72,
+	0x87, 0x75, 0x1b, 0xb6, 0x3a, 0xe2, 0x3e, 0x94, 0x6f, 0x7c, 0x7e, 0x76, 0x62, 0x56, 0x34, 0x17,
+	0x01, 0xeb, 0x07, 0x83, 0x6a, 0xa2, 0xc7, 0x03, 0xa8, 0x4a, 0xe1, 0x8b, 0x99, 0x98, 0xdc, 0xc5,
+	0x33, 0xa5, 0x58, 0xc5, 0xb8, 0x18, 0xd3, 0x70, 0x35, 0x56, 0x8a, 0xf1, 0x1e, 0x54, 0xbc, 0xf7,
+	0x3a, 0x62, 0xe8, 0x48, 0x8c, 0x54, 0xcb, 0x99, 0x70, 0x9d, 0x99, 0x59, 0xea, 0xb0, 0x6e, 0xd5,
+	0x8e, 0x00, 0x5a, 0x50, 0x9f, 0x8a, 0x50, 0x0e, 0x93, 0x6a, 0x65, 0xad, 0xc9, 0x71, 0xaa, 0xa2,
+	0xc2, 0x67, 0x6f, 0xf5, 0xb4, 0x35, 0x3b, 0x46, 0xd8, 0x85, 0xbd, 0x90, 0x82, 0x1b, 0xcf, 0xa5,
+	0x64, 0x68, 0x73, 0x47, 0x27, 0xac, 0xd3, 0xd6, 0x37, 0x06, 0xf5, 0xc8, 0xf0, 0xd0, 0x17, 0x3c,
+	0xa4, 0x2d, 0x1c, 0x7f, 0x0e, 0x7b, 0xa9, 0xa1, 0x97, 0xd2, 0x91, 0x8b, 0xc4, 0xf7, 0xfd, 0xbc,
+	0xef, 0x51, 0xcc, 0x5e, 0x4f, 0xc6, 0x23, 0x80, 0x50, 0x9f, 0x8e, 0xc5, 0x98, 0xb4, 0x07, 0xcd,
+	0x41, 0x2b, 0x92, 0x5e, 0xa6, 0xbc, 0x9d, 0xc9, 0x51, 0x6b, 0x07, 0xe4, 0x84, 0x82, 0xc7, 0xa6,
+	0xc4, 0xc8, 0xba, 0x86, 0x66, 0xbe, 0xd9, 0x5a, 0x6d, 0xb6, 0x51, 0xed, 0x62, 0xae, 0xf6, 0x3b,
+	0x68, 0x9c, 0xce, 0x7d, 0x79, 0x97, 0x1a, 0xf5, 0xef, 0x4a, 0xbf, 0x80, 0xfa, 0x95, 0x23, 0xdd,
+	0xe9, 0xd6, 0x97, 0xde, 0xfa, 0xc4, 0xa0, 0x11, 0x97, 0xd8, 0xfa, 0x37, 0xe6, 0xf7, 0x31, 0x36,
+	0xda, 0xa7, 0x94, 0xdd, 0xe7, 0xe1, 0x23, 0x80, 0x95, 0x02, 0x2b, 0x50, 0xbc, 0x38, 0x6f, 0x15,
+	0x70, 0x07, 0x8c, 0xe1, 0xc5, 0x79, 0x8b, 0x61, 0x1d, 0xaa, 0x43, 0x21, 0x5f, 0x89, 0x05, 0x1f,
+	0xb7, 0x8a, 0x83, 0x9f, 0x0c, 0x4a, 0xea, 0x02, 0x62, 0x0f, 0x8c, 0xd7, 0x24, 0xf1, 0xbf, 0xa8,
+	0x65, 0xe6, 0x11, 0x38, 0xc0, 0x2c, 0x15, 0xed, 0x67, 0x15, 0x70, 0x00, 0x95, 0xe3, 0x80, 0x1c,
+	0x49, 0x7f, 0x93, 0xfc, 0x1f, 0x5f, 0xbd, 0xec, 0x1f, 0x8b, 0x34, 0x27, 0x34, 0xa3, 0x8d, 0x34,
+	0x4f, 0xa1, 0xa6, 0xb2, 0xb4, 0xbd, 0x98, 0x8c, 0x92, 0xf9, 0x5d, 0x89, 0x2e, 0xe7, 0xbf, 0x55,
+	0x38, 0x62, 0x2f, 0xdf, 0x7c, 0x5d, 0xb6, 0xd9, 0xf7, 0x65, 0x9b, 0xfd, 0x5a, 0xb6, 0xd9, 0x97,
+	0xdf, 0xed, 0xc2, 0xf5, 0xb3, 0x89, 0x27, 0xa7, 0x8b, 0x51, 0xcf, 0x15, 0xf3, 0xfe, 0x94, 0xf8,
+	0x98, 0x02, 0xef, 0xf6, 0x90, 0x93, 0x3f, 0xf5, 0xa2, 0x27, 0xf1, 0xd0, 0x15, 0x9c, 0x93, 0x2b,
+	0x45, 0xd0, 0x5f, 0x7f, 0x2b, 0x47, 0x15, 0x8d, 0x9e, 0xfc, 0x09, 0x00, 0x00, 0xff, 0xff, 0xbd,
+	0xfe, 0x1b, 0x1e, 0x46, 0x05, 0x00, 0x00,
 }
 
 func (m *WireRequest) Marshal() (dAtA []byte, err error) {
@@ -608,10 +694,10 @@ func (m *Endpoint) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i--
 		dAtA[i] = 0x32
 	}
-	if len(m.HostName) > 0 {
-		i -= len(m.HostName)
-		copy(dAtA[i:], m.HostName)
-		i = encodeVarintWire(dAtA, i, uint64(len(m.HostName)))
+	if len(m.HostNodeName) > 0 {
+		i -= len(m.HostNodeName)
+		copy(dAtA[i:], m.HostNodeName)
+		i = encodeVarintWire(dAtA, i, uint64(len(m.HostNodeName)))
 		i--
 		dAtA[i] = 0x2a
 	}
@@ -665,6 +751,73 @@ func (m *WireResponse) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *WireResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i -= len(m.XXX_unrecognized)
+		copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	if len(m.Reason) > 0 {
+		i -= len(m.Reason)
+		copy(dAtA[i:], m.Reason)
+		i = encodeVarintWire(dAtA, i, uint64(len(m.Reason)))
+		i--
+		dAtA[i] = 0x2a
+	}
+	if m.StatusCode != 0 {
+		i = encodeVarintWire(dAtA, i, uint64(m.StatusCode))
+		i--
+		dAtA[i] = 0x20
+	}
+	if len(m.EndpointsStatus) > 0 {
+		for iNdEx := len(m.EndpointsStatus) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.EndpointsStatus[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintWire(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x1a
+		}
+	}
+	if len(m.Name) > 0 {
+		i -= len(m.Name)
+		copy(dAtA[i:], m.Name)
+		i = encodeVarintWire(dAtA, i, uint64(len(m.Name)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.Namespace) > 0 {
+		i -= len(m.Namespace)
+		copy(dAtA[i:], m.Namespace)
+		i = encodeVarintWire(dAtA, i, uint64(len(m.Namespace)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *EndpointStatus) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *EndpointStatus) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *EndpointStatus) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -885,7 +1038,7 @@ func (m *Endpoint) Size() (n int) {
 	if m.Local {
 		n += 2
 	}
-	l = len(m.HostName)
+	l = len(m.HostNodeName)
 	if l > 0 {
 		n += 1 + l + sovWire(uint64(l))
 	}
@@ -904,6 +1057,39 @@ func (m *Endpoint) Size() (n int) {
 }
 
 func (m *WireResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Namespace)
+	if l > 0 {
+		n += 1 + l + sovWire(uint64(l))
+	}
+	l = len(m.Name)
+	if l > 0 {
+		n += 1 + l + sovWire(uint64(l))
+	}
+	if len(m.EndpointsStatus) > 0 {
+		for _, e := range m.EndpointsStatus {
+			l = e.Size()
+			n += 1 + l + sovWire(uint64(l))
+		}
+	}
+	if m.StatusCode != 0 {
+		n += 1 + sovWire(uint64(m.StatusCode))
+	}
+	l = len(m.Reason)
+	if l > 0 {
+		n += 1 + l + sovWire(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *EndpointStatus) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -1328,7 +1514,7 @@ func (m *Endpoint) Unmarshal(dAtA []byte) error {
 			m.Local = bool(v != 0)
 		case 5:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field HostName", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field HostNodeName", wireType)
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
@@ -1356,7 +1542,7 @@ func (m *Endpoint) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.HostName = string(dAtA[iNdEx:postIndex])
+			m.HostNodeName = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		case 6:
 			if wireType != 2 {
@@ -1471,6 +1657,206 @@ func (m *WireResponse) Unmarshal(dAtA []byte) error {
 		}
 		if fieldNum <= 0 {
 			return fmt.Errorf("proto: WireResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Namespace", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthWire
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthWire
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Namespace = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthWire
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthWire
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Name = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field EndpointsStatus", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthWire
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthWire
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.EndpointsStatus = append(m.EndpointsStatus, &EndpointStatus{})
+			if err := m.EndpointsStatus[len(m.EndpointsStatus)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field StatusCode", wireType)
+			}
+			m.StatusCode = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.StatusCode |= StatusCode(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Reason", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowWire
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthWire
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthWire
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Reason = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipWire(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthWire
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *EndpointStatus) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowWire
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: EndpointStatus: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: EndpointStatus: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:

@@ -38,15 +38,23 @@ message WireRequest {
 
 message Endpoint {
   string topology = 1; // topology is reflected as a namespace
-  string nodeName = 2;
+  string nodeName = 2; // this is the podName
   string ifName = 3; 
   bool local = 4;
-  string hostName = 5;
+  string hostNodeName = 5;
   string hostIP = 6;
   string serviceEndpoint = 7;
 }
 
 message WireResponse {
+  string namespace = 1;
+  string name = 2;
+  repeated EndpointStatus endpointsStatus = 3;
+  StatusCode statusCode = 4;
+  string reason = 5;
+}
+
+message EndpointStatus {
   StatusCode statusCode = 1;
   string reason = 2;
 }
@@ -71,4 +79,5 @@ message WatchResponse {
 enum StatusCode {
   OK = 0; // the status is OK
   NOK = 1; // the status is NOK
+  NotFound = 2; // the object does not exists
 }

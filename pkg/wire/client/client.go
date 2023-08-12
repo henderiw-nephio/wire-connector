@@ -58,8 +58,8 @@ type Config struct {
 	MaxMsgSize int
 }
 
-func New(ctx context.Context, cfg *Config) (Client, error) {
-	l := ctrl.Log.WithName("wire-client")
+func New(cfg *Config) (Client, error) {
+	l := ctrl.Log.WithName("wire-client").WithValues("address", cfg.Address)
 
 	if cfg == nil {
 		return nil, fmt.Errorf("cannot create client with empty configw")
@@ -81,6 +81,7 @@ type client struct {
 }
 
 func (r *client) Stop() {
+	r.l.Info("stopping...")
 	r.cancel()
 }
 
@@ -101,7 +102,7 @@ func (r *client) Start(ctx context.Context) error {
 	}
 	defer conn.Close()
 	r.client = wirepb.NewWireClient(r.conn)
-
+	r.l.Info("started...")
 	go func() {
 		for {
 			select {
