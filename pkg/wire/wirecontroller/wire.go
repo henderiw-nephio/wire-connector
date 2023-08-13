@@ -73,6 +73,7 @@ func (r *Wire) Transition(newState State, eventCtx *EventCtx, generatedEvents ..
 	// TODO update wirecache
 	
 	for _, ge := range generatedEvents {
+		r.l.Info("transition generated event", "from/to", fmt.Sprintf("%s/%s", r.EndpointsState[eventCtx.EpIdx], newState), "ge", ge)
 		if r.WireReq.IsResolved(eventCtx.EpIdx) {
 			// should always resolve
 			worker, err := r.WorkerCache.Get(types.NamespacedName{

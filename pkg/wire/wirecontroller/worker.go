@@ -126,6 +126,8 @@ func (r *worker) Stop() {
 }
 
 func (r *worker) Write(e WorkerEvent) {
+	r.ch <- e
+	/*
 	for {
 		select {
 		case r.ch <- e:
@@ -135,4 +137,5 @@ func (r *worker) Write(e WorkerEvent) {
 			// set state to exhausted
 		}
 	}
+	*/
 }
