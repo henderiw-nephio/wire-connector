@@ -2,7 +2,6 @@ package wirecontroller
 
 import (
 	"context"
-	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
@@ -90,7 +89,9 @@ func (r *worker) Start(ctx context.Context) error {
 						r.wireCache.HandleEvent(e.WireReq.GetNSN(), FailedEvent, eventCtx)
 						continue
 					}
-					r.wireCache.HandleEvent(e.WireReq.GetNSN(), CreatedEvent, eventCtx)
+					r.wireCache.HandleEvent(e.WireReq.GetNSN(), CreatedEvent, &EventCtx{
+						EpIdx: e.EventCtx.EpIdx,
+					})
 				case WorkerActionDelete:
 					r.l.Info("delete event", "event", e.WireReq)
 					var eventCtx *EventCtx
@@ -128,14 +129,14 @@ func (r *worker) Stop() {
 func (r *worker) Write(e WorkerEvent) {
 	r.ch <- e
 	/*
-	for {
-		select {
-		case r.ch <- e:
-			// all good
-		case <-time.After(5 * time.Second):
-			// not able to write for 5 sec worker 1 exhausted
-			// set state to exhausted
+		for {
+			select {
+			case r.ch <- e:
+				// all good
+			case <-time.After(5 * time.Second):
+				// not able to write for 5 sec worker 1 exhausted
+				// set state to exhausted
+			}
 		}
-	}
 	*/
 }

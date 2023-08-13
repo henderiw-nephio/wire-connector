@@ -34,7 +34,7 @@ import (
 	"google.golang.org/grpc/status"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/event"
+	//"sigs.k8s.io/controller-runtime/pkg/event"
 )
 
 type Config struct {
@@ -86,7 +86,7 @@ type wc struct {
 
 	wireCache WireCache
 
-	geventCh chan event.GenericEvent
+	//geventCh chan event.GenericEvent
 
 	l logr.Logger
 }
@@ -195,7 +195,7 @@ func (r *wc) resolveEndpoint(wreq *WireReq, epIdx int) *ResolvedData {
 }
 
 func (r *wc) resolve(wreq *WireReq) []*ResolvedData {
-	resolvedData := make([]*ResolvedData, 2, 2)
+	resolvedData := make([]*ResolvedData, 2)
 	for epIdx := range wreq.Endpoints {
 		resolvedData[epIdx] = r.resolveEndpoint(wreq, epIdx)
 	}
