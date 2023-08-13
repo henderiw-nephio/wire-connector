@@ -17,9 +17,13 @@ limitations under the License.
 package wirecontroller
 
 import (
+	"fmt"
+
+	"github.com/go-logr/logr"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
 	"k8s.io/apimachinery/pkg/types"
+	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 type DesiredAction string
@@ -35,10 +39,13 @@ type Wire struct {
 	WireReq        *WireReq
 	WireResp       *WireResp
 	EndpointsState []State
+	l              logr.Logger
 }
 
 // NewWire is like create link/wire, once the object exists, this is no longer required
 func NewWire(wc wire.Cache[Worker], wreq *WireReq, vpnID uint32) *Wire {
+	l := ctrl.Log.WithName("wire").WithValues("nsn", wreq.GetNSN())
+
 	wreq.AddVPN(vpnID)
 	return &Wire{
 		WorkerCache:    wc,
@@ -46,6 +53,7 @@ func NewWire(wc wire.Cache[Worker], wreq *WireReq, vpnID uint32) *Wire {
 		WireReq:        wreq,
 		WireResp:       newWireResp(wreq),
 		EndpointsState: []State{&Deleted{}, &Deleted{}},
+		l:              l,
 	}
 }
 
@@ -58,11 +66,12 @@ func (r *Wire) SetDesiredAction(a DesiredAction) {
 }
 
 func (r *Wire) Transition(newState State, eventCtx *EventCtx, generatedEvents ...WorkerAction) {
+	r.l.Info("transition", "from/to", fmt.Sprintf("%s/%s", r.EndpointsState[eventCtx.EpIdx], newState), "eventCtx", eventCtx, "wireResp", r.WireResp, "generated events", generatedEvents)
 	r.EndpointsState[eventCtx.EpIdx] = newState
 	r.WireResp.UpdateStatus(eventCtx.EpIdx, eventCtx.Message)
 
 	// TODO update wirecache
-
+	
 	for _, ge := range generatedEvents {
 		if r.WireReq.IsResolved(eventCtx.EpIdx) {
 			// should always resolve

@@ -17,20 +17,20 @@
 package wiredaemon
 
 import (
+	"fmt"
 	"net"
 	"strings"
 
 	"github.com/go-logr/logr"
 	"github.com/henderiw-nephio/wire-connector/pkg/xdp"
-	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 type EndpointConfig struct {
 	IfName  string
-	IsReady bool
-	IsLocal bool
+	IsReady bool // the container nsPath is available to communicate with
+	IsLocal bool // the endpoint is local to the host
 	NsPath  string
 	HostIP  string
 	XDP     xdp.XDP
@@ -153,6 +153,7 @@ func (r *Endpoint) Deploy(peerEp *Endpoint) error {
 		r.peerID = strings.TrimPrefix(r.veth.Attrs().Name, vethPrefix)
 		r.l.Info("deploy peer veth and tunnel", "index", r.peerIndex, "id", r.peerID, "peerVeth", r.veth.Attrs().Name, "localVeth", peerEp.veth.Attrs().Name)
 		if err := setIfUp(r.veth); err != nil {
+			r.l.Info("set veth up failed", "err", err)
 			// delete the links to ensure we dont keep these resources hanging
 			if err := netlink.LinkDel(r.veth); err != nil {
 				r.l.Info("delete vethA failed", "name", r.veth.Attrs().Name, "err", err)
@@ -163,8 +164,10 @@ func (r *Endpoint) Deploy(peerEp *Endpoint) error {
 			return err
 		}
 		// create tunnel
+		r.l.Info("create tunnel", "peerID", r.peerID, "tunnelName", getTunnelName(r.peerID))
 		tun, err := createTunnel(getTunnelName(r.peerID), r.hostIP, peerEp.hostIP, 200)
 		if err != nil {
+			r.l.Info("create tunnel failed", "err", err)
 			// delete the links to ensure we dont keep these resources hanging
 			if err := netlink.LinkDel(r.veth); err != nil {
 				r.l.Info("delete vethA failed", "name", r.veth.Attrs().Name, "err", err)
@@ -174,8 +177,9 @@ func (r *Endpoint) Deploy(peerEp *Endpoint) error {
 			}
 			return err
 		}
-		log.Infof("deploy xdp: from/to %s/%s", r.veth.Attrs().Name, (*tun).Attrs().Name)
+		r.l.Info("deploy xdp", "from/to", fmt.Sprintf("%s/%s", r.veth.Attrs().Name, (*tun).Attrs().Name))
 		if err := r.xdp.UpsertXConnextBPFMap(&r.veth, tun); err != nil {
+			r.l.Info("deploy xdp failed", "err", err)
 			// delete the links to ensure we dont keep these resources hanging
 			if err := netlink.LinkDel(r.veth); err != nil {
 				r.l.Info("delete vethA failed", "name", r.veth.Attrs().Name, "err", err)

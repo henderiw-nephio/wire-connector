@@ -59,6 +59,7 @@ func (r *daemon) Get(ctx context.Context, req *wirepb.WireRequest) (*wirepb.Wire
 }
 
 func (r *daemon) UpSert(ctx context.Context, req *wirepb.WireRequest) (*wirepb.EmptyResponse, error) {
+	r.l.Info("upsert...")
 	w := NewWire(ctx, req, &WireConfig{XDP: r.xdp, CRI: r.cri})
 	if !w.IsReady() {
 		return &wirepb.EmptyResponse{StatusCode: wirepb.StatusCode_NOK, Reason: "endpoint not ready"}, nil

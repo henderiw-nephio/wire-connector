@@ -55,6 +55,7 @@ func NewWire(ctx context.Context, req *wirepb.WireRequest, cfg *WireConfig) Wire
 	return &w{
 		endpointA: r.getEndpoint(ctx, req, 0),
 		endpointB: r.getEndpoint(ctx, req, 1),
+		l:         l,
 	}
 }
 
@@ -143,12 +144,12 @@ func (r *w) Exists() bool {
 	r.endpointA.InitPeerVethIndex(r.endpointB)
 	r.endpointB.InitPeerVethIndex(r.endpointA)
 
-	r.l.Info("link exists", "endpointA", r.endpointA, "endpointB", r.endpointB)
+	r.l.Info("check if link exists", "endpointA", r.endpointA, "endpointB", r.endpointB)
 
 	epAexists := r.endpointA.Exists()
 	epBExists := r.endpointB.Exists()
 
-	r.l.Info("exists", "epAexists", epAexists, "epAexists", epBExists)
+	r.l.Info("link exists", "epAexists", epAexists, "epAexists", epBExists)
 	return epAexists || epBExists
 }
 

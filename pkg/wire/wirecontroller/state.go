@@ -25,6 +25,8 @@ type Endpoint struct {
 */
 
 type ResolvedData struct {
+	Success         bool   // inidctaes if the resolution was successfull or not
+	Message         string // indicates why the resolution failed
 	PodNodeName     string // name of the pod
 	ServiceEndpoint string // ip address or dns name + port
 	HostIP          string // ip address
@@ -38,7 +40,7 @@ type EventCtx struct {
 	//ResolvedData *ResolvedData
 	Message  string // used to indicate failures
 	Hold     bool
-	SameHost bool   // inidcated this ep is on the same host as the peer ep
+	SameHost bool // inidcated this ep is on the same host as the peer ep
 	//Reason   string // used for failed events
 }
 
@@ -56,10 +58,13 @@ const (
 )
 
 type State interface {
+	String() string
 	HandleEvent(event Event, eventCtx *EventCtx, w *Wire)
 }
 
 type Deleting struct{}
+
+func (s *Deleting) String() string {return "Deleting"}
 
 func (s *Deleting) HandleEvent(event Event, eventCtx *EventCtx, w *Wire) {
 	switch event {
@@ -97,6 +102,8 @@ func (s *Deleting) HandleEvent(event Event, eventCtx *EventCtx, w *Wire) {
 
 type Deleted struct{}
 
+func (s *Deleted) String() string {return "Deleted"}
+
 func (s *Deleted) HandleEvent(event Event, eventCtx *EventCtx, w *Wire) {
 	switch event {
 	case CreateEvent:
@@ -117,6 +124,8 @@ func (s *Deleted) HandleEvent(event Event, eventCtx *EventCtx, w *Wire) {
 }
 
 type Failed struct{} // here we trigger an action on the other end
+
+func (s *Failed) String() string {return "Failed"}
 
 func (s *Failed) HandleEvent(event Event, eventCtx *EventCtx, w *Wire) {
 	switch event {
@@ -150,6 +159,8 @@ func (s *Failed) HandleEvent(event Event, eventCtx *EventCtx, w *Wire) {
 }
 
 type Creating struct{}
+
+func (s *Creating) String() string {return "Creating"}
 
 func (s *Creating) HandleEvent(event Event, eventCtx *EventCtx, w *Wire) {
 	switch event {
@@ -187,6 +198,8 @@ func (s *Creating) HandleEvent(event Event, eventCtx *EventCtx, w *Wire) {
 
 type Created struct{}
 
+func (s *Created) String() string {return "Created"}
+
 func (s *Created) HandleEvent(event Event, eventCtx *EventCtx, w *Wire) {
 	switch event {
 	case CreateEvent:
@@ -213,6 +226,8 @@ func (s *Created) HandleEvent(event Event, eventCtx *EventCtx, w *Wire) {
 }
 
 type ResolutionFailed struct{} // here we can either hold or trigger an action on the other end
+
+func (s *ResolutionFailed) String() string {return "ResolutionFailed"}
 
 func (s *ResolutionFailed) HandleEvent(event Event, eventCtx *EventCtx, w *Wire) {
 	switch event {

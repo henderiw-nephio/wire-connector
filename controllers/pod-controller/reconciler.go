@@ -114,6 +114,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 	if len(cr.Labels) != 0 &&
 		cr.Labels["fn.kptgen.dev/controller"] == "wire-connector-daemon" {
+			// TODO add namespace ???
 
 		hostNodeName, d := r.getLeaseInfo(cr)
 		if hostNodeName != "" {

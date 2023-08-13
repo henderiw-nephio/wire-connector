@@ -72,41 +72,44 @@ func (r *worker) Start(ctx context.Context) error {
 				r.l.Info("event", "ok", e)
 				switch e.Action {
 				case WorkerActionCreate:
-					r.l.Info("create event", "event", e.WireReq)
-					var event Event
+					r.l.Info("create event", "nsn", e.WireReq.GetNSN(), "data", e.WireReq.WireRequest)
 					var eventCtx *EventCtx
 					resp, err := r.client.Create(ctx, e.WireReq.WireRequest)
+					r.l.Info("create event", "nsn", e.WireReq.GetNSN(), "resp", resp, "err", err)
 					if err != nil {
 						//failed
-						event = FailedEvent
 						eventCtx = e.EventCtx
 						eventCtx.Message = err.Error()
+						r.wireCache.HandleEvent(e.WireReq.GetNSN(), FailedEvent, eventCtx)
+						continue
 					}
 					if resp.StatusCode == wirepb.StatusCode_NOK {
 						// event failed
-						event = FailedEvent
 						eventCtx = e.EventCtx
 						eventCtx.Message = resp.GetReason()
+						r.wireCache.HandleEvent(e.WireReq.GetNSN(), FailedEvent, eventCtx)
+						continue
 					}
-					r.wireCache.HandleEvent(e.WireReq.GetNSN(), event, eventCtx)
+					r.wireCache.HandleEvent(e.WireReq.GetNSN(), CreatedEvent, eventCtx)
 				case WorkerActionDelete:
 					r.l.Info("delete event", "event", e.WireReq)
-					var event Event
 					var eventCtx *EventCtx
 					resp, err := r.client.Delete(ctx, e.WireReq.WireRequest)
 					if err != nil {
 						//failed
-						event = FailedEvent
 						eventCtx = e.EventCtx
 						eventCtx.Message = err.Error()
+						r.wireCache.HandleEvent(e.WireReq.GetNSN(), FailedEvent, eventCtx)
+						continue
 					}
 					if resp.StatusCode == wirepb.StatusCode_NOK {
 						// event failed
-						event = FailedEvent
 						eventCtx = e.EventCtx
 						eventCtx.Message = resp.GetReason()
+						r.wireCache.HandleEvent(e.WireReq.GetNSN(), FailedEvent, eventCtx)
+						continue
 					}
-					r.wireCache.HandleEvent(e.WireReq.GetNSN(), event, eventCtx)
+					r.wireCache.HandleEvent(e.WireReq.GetNSN(), DeletedEvent, eventCtx)
 				}
 			case <-ctx.Done():
 				// cancelled
