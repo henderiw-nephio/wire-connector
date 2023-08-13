@@ -390,6 +390,7 @@ func (r *wc) commonCallback(ctx context.Context, nsn types.NamespacedName, d any
 				if w.WireReq.IsResolved(epIdx) && w.WireReq.CompareName(epIdx, cbctx.EvalHostNodeName, nsn.Name) {
 					wg.Add(1)
 					go func() {
+						defer wg.Done()
 						r.wireCache.UnResolve(wireNSN, epIdx)
 						r.wireCache.HandleEvent(wireNSN, ResolutionFailedEvent, &EventCtx{
 							EpIdx:   epIdx,
@@ -406,6 +407,7 @@ func (r *wc) commonCallback(ctx context.Context, nsn types.NamespacedName, d any
 			wire := wire
 			wg.Add(1)
 			go func() {
+				defer wg.Done()
 				if wire.DesiredAction == DesiredActionCreate {
 					r.wireCreate(wire.WireReq, "callback")
 				} else {
