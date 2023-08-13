@@ -38,11 +38,13 @@ type Wire struct {
 }
 
 // NewWire is like create link/wire, once the object exists, this is no longer required
-func NewWire(wreq *WireReq, vpnID uint32) *Wire {
+func NewWire(wc wire.Cache[Worker], wreq *WireReq, vpnID uint32) *Wire {
 	wreq.AddVPN(vpnID)
 	return &Wire{
+		WorkerCache:    wc,
 		DesiredAction:  DesiredActionCreate,
 		WireReq:        wreq,
+		WireResp:       newWireResp(wreq),
 		EndpointsState: []State{&Deleted{}, &Deleted{}},
 	}
 }
@@ -57,8 +59,9 @@ func (r *Wire) SetDesiredAction(a DesiredAction) {
 
 func (r *Wire) Transition(newState State, eventCtx *EventCtx, generatedEvents ...WorkerAction) {
 	r.EndpointsState[eventCtx.EpIdx] = newState
-
 	r.WireResp.UpdateStatus(eventCtx.EpIdx, eventCtx.Message)
+
+	// TODO update wirecache
 
 	for _, ge := range generatedEvents {
 		if r.WireReq.IsResolved(eventCtx.EpIdx) {
@@ -72,7 +75,7 @@ func (r *Wire) Transition(newState State, eventCtx *EventCtx, generatedEvents ..
 				r.HandleEvent(FailedEvent, eventCtx)
 				continue
 			}
-			worker.Write(WorkerEvent{Action: ge, EventCtx: eventCtx})
+			worker.Write(WorkerEvent{Action: ge, WireReq: r.WireReq, EventCtx: eventCtx})
 		}
 	}
 }
@@ -138,22 +141,40 @@ func (r *WireReq) CompareName(epIdx int, hostNodeName bool, name string) bool {
 	}
 }
 
+func newWireResp(req *WireReq) *WireResp {
+	return &WireResp{
+		WireResponse: &wirepb.WireResponse{
+			Namespace:       req.GetNamespace(),
+			Name:            req.GetName(),
+			EndpointsStatus: []*wirepb.EndpointStatus{{Reason: ""}, {Reason: ""}},
+		},
+	}
+}
+
 type WireResp struct {
 	*wirepb.WireResponse
 }
 
 func (r *WireResp) UpdateStatus(epIdx int, msg string) {
+	if r.EndpointsStatus == nil || len(r.EndpointsStatus) == 0 {
+		r.EndpointsStatus = []*wirepb.EndpointStatus{{Reason: ""}, {Reason: ""}}
+	}
 	if msg == "" {
-		r.EndpointsStatus[epIdx].Reason = ""
-		r.EndpointsStatus[epIdx].StatusCode = wirepb.StatusCode_OK
+		r.EndpointsStatus[epIdx] = &wirepb.EndpointStatus{
+			Reason:     "",
+			StatusCode: wirepb.StatusCode_OK,
+		}
 	} else {
-		r.EndpointsStatus[epIdx].Reason = msg
-		r.EndpointsStatus[epIdx].StatusCode = wirepb.StatusCode_NOK
+		r.EndpointsStatus[epIdx] = &wirepb.EndpointStatus{
+			Reason:     msg,
+			StatusCode: wirepb.StatusCode_NOK,
+		}
 	}
 
+	// update the overall status
 	ok := true
-	for epIdx := range r.EndpointsStatus {
-		if r.EndpointsStatus[epIdx].StatusCode == wirepb.StatusCode_NOK {
+	for _, eps := range r.EndpointsStatus {
+		if eps.StatusCode == wirepb.StatusCode_NOK {
 			ok = false
 		}
 	}

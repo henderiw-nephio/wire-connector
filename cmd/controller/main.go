@@ -29,7 +29,7 @@ import (
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/node-controller"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/pod-controller"
-	//_ "github.com/henderiw-nephio/wire-connector/controllers/wire-controller"
+	_ "github.com/henderiw-nephio/wire-connector/controllers/wire-controller"
 	"github.com/henderiw-nephio/wire-connector/pkg/grpcserver"
 	"github.com/henderiw-nephio/wire-connector/pkg/grpcserver/healthhandler"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
@@ -88,6 +88,36 @@ func main() {
 	d := wire.NewCache[wiredaemon.Daemon]()
 	n := wire.NewCache[wirenode.Node]()
 
+	p := proxy.New(&proxy.Config{
+		Backend: wirecontroller.New(ctx, &wirecontroller.Config{
+			DaemonCache: d,
+			PodCache:    pd,
+			NodeCache:   n,
+		}),
+	})
+	wh := healthhandler.New()
+
+	s := grpcserver.New(grpcserver.Config{
+		Address:  ":" + strconv.Itoa(9999),
+		Insecure: true,
+	},
+		grpcserver.WithWireGetHandler(p.Get),
+		grpcserver.WithWireCreateHandler(p.Create),
+		grpcserver.WithWireDeleteHandler(p.Delete),
+		grpcserver.WithWireWatchHandler(p.WireWatch),
+		grpcserver.WithWatchHandler(wh.Watch),
+		grpcserver.WithCheckHandler(wh.Check),
+	)
+
+	// run the grpc server first before setting up the controllers
+	// to ensure the client connection works
+	go func() {
+		if err := s.Start(ctx); err != nil {
+			setupLog.Error(err, "cannot start grpcserver")
+			os.Exit(1)
+		}
+	}()
+
 	ctrlCfg := &ctrlconfig.ControllerConfig{
 		PodCache:    pd,
 		DaemonCache: d,
@@ -124,47 +154,23 @@ func main() {
 		os.Exit(1)
 	}
 
-	p := proxy.New(&proxy.Config{
-		Backend: wirecontroller.New(&wirecontroller.Config{
-			DaemonCache: d,
-			PodCache:    pd,
-			NodeCache:   n,
-		}),
-	})
-	wh := healthhandler.New()
-
-	s := grpcserver.New(grpcserver.Config{
-		Address:  ":" + strconv.Itoa(9999),
-		Insecure: true,
-	},
-		grpcserver.WithWireGetHandler(p.Get),
-		grpcserver.WithWireCreateHandler(p.Create),
-		grpcserver.WithWireDeleteHandler(p.Delete),
-		grpcserver.WithWireWatchHandler(p.WireWatch),
-		grpcserver.WithWatchHandler(wh.Watch),
-		grpcserver.WithCheckHandler(wh.Check),
-	)
-
-	// run the grpc server
-	go func() {
-		if err := s.Start(ctx); err != nil {
-			setupLog.Error(err, "cannot start grpcserver")
-			os.Exit(1)
-		}
-	}()
-
 	go func() {
 		for {
-			setupLog.Info("pods...")
-			for nsn, pod := range pd.List() {
-				setupLog.Info("pod", "Name", nsn, "pod", pod)
-			}
-			setupLog.Info("daemons...")
-			for nsn, daemon := range d.List() {
-				setupLog.Info("daemon", "Name", nsn, "daemon", daemon)
-			}
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				setupLog.Info("pods...")
+				for nsn, pod := range pd.List() {
+					setupLog.Info("pod", "Name", nsn, "pod", pod)
+				}
+				setupLog.Info("daemons...")
+				for nsn, daemon := range d.List() {
+					setupLog.Info("daemon", "Name", nsn, "daemon", daemon)
+				}
 
-			time.Sleep(5 * time.Second)
+				time.Sleep(5 * time.Second)
+			}
 		}
 	}()
 

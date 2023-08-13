@@ -82,6 +82,7 @@ type client struct {
 
 func (r *client) Stop() {
 	r.l.Info("stopping...")
+	r.conn.Close()
 	r.cancel()
 }
 
@@ -92,21 +93,23 @@ func (r *client) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-
-	timeoutCtx, cancel := context.WithTimeout(ctx, defaultTimeout)
-	r.cancel = cancel
-
-	conn, err := grpc.DialContext(timeoutCtx, r.cfg.Address, opts...)
+	r.conn, err = r.getConn(opts)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+
+	clientCtx, cancel := context.WithCancel(ctx)
+	r.cancel = cancel
+
+	
+	//defer conn.Close()
 	r.client = wirepb.NewWireClient(r.conn)
 	r.l.Info("started...")
 	go func() {
 		for {
 			select {
-			case <-timeoutCtx.Done():
+			case <-clientCtx.Done():
+				r.l.Info("stopped...")
 				return
 			}
 		}
@@ -124,6 +127,12 @@ func (r *client) Delete(ctx context.Context, req *wirepb.WireRequest) (*wirepb.E
 
 func (r *client) Create(ctx context.Context, req *wirepb.WireRequest) (*wirepb.EmptyResponse, error) {
 	return r.client.Create(ctx, req)
+}
+
+func (r *client) getConn(opts []grpc.DialOption) (conn *grpc.ClientConn, err error) {
+	timeoutCtx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+	return grpc.DialContext(timeoutCtx, r.cfg.Address, opts...)
 }
 
 func (r *client) getGRPCOpts() ([]grpc.DialOption, error) {

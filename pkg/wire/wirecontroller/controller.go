@@ -22,6 +22,7 @@ import (
 	"os"
 	"reflect"
 	"sync"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
@@ -43,7 +44,7 @@ type Config struct {
 	NodeCache   wire.Cache[wirenode.Node]
 }
 
-func New(cfg *Config) wire.Wire {
+func New(ctx context.Context, cfg *Config) wire.Wire {
 	l := ctrl.Log.WithName("wire-controller")
 
 	workerCache := wire.NewCache[Worker]()
@@ -58,6 +59,21 @@ func New(cfg *Config) wire.Wire {
 	r.daemonCache.AddWatch(r.daemonCallback)
 	r.podCache.AddWatch(r.podCallback)
 	r.nodeCache.AddWatch((r.nodeCallback))
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				r.l.Info("wires...")
+				for nsn, w := range r.wireCache.List() {
+					r.l.Info("wire", "nsn", nsn, "wire resp", w.WireResp, "status0", w.EndpointsState[0], "status1", w.EndpointsState[1])
+				}
+				time.Sleep(5 * time.Second)
+			}
+		}
+	}()
 	return r
 }
 
@@ -93,27 +109,33 @@ func (r *wc) AddWatch(fn wire.CallbackFn) {}
 func (r *wc) DeleteWatch()                {}
 
 func (r *wc) Get(ctx context.Context, req *wirepb.WireRequest) (*wirepb.WireResponse, error) {
+	r.l.Info("get...")
 	if err := r.validate(req); err != nil {
 		return &wirepb.WireResponse{}, status.Error(codes.InvalidArgument, "Invalid argument provided nil object")
 	}
 	wreq := &WireReq{req}
+	r.l.Info("get", "nsn", wreq.GetNSN())
 	w, err := r.wireCache.Get(wreq.GetNSN())
 	if err != nil {
-		return &wirepb.WireResponse{StatusCode: wirepb.StatusCode_NOK, Reason: err.Error()}, nil
+		return &wirepb.WireResponse{StatusCode: wirepb.StatusCode_NotFound, Reason: err.Error()}, nil
 	}
 	return w.GetWireResponse(), nil
 }
 
 func (r *wc) UpSert(ctx context.Context, req *wirepb.WireRequest) (*wirepb.EmptyResponse, error) {
 	// TODO allocate VPN
+	r.l.Info("upsert...")
 	if err := r.validate(req); err != nil {
 		return &wirepb.EmptyResponse{}, status.Error(codes.InvalidArgument, "Invalid argument provided nil object")
 	}
 	wreq := &WireReq{req}
+	r.l.Info("upsert", "nsn", wreq.GetNSN())
 	if _, err := r.wireCache.Get(wreq.GetNSN()); err != nil {
 		// not found -> create a new link
-		r.wireCache.Upsert(wreq.GetNSN(), NewWire(wreq, 200))
+		r.l.Info("upsert cache", "nsn", wreq.GetNSN())
+		r.wireCache.Upsert(wreq.GetNSN(), NewWire(r.workerCache, wreq, 200))
 	} else {
+		r.l.Info("upsert cache", "nsn", wreq.GetNSN(), "desired action", DesiredActionCreate)
 		r.wireCache.SetDesiredAction(wreq.GetNSN(), DesiredActionCreate)
 	}
 	r.wireCreate(wreq)
@@ -148,6 +170,7 @@ func (r *wc) resolveEndpoint(wreq *WireReq, epIdx int) (*ResolvedData, error) {
 		}); err != nil {
 			return nil, err
 		}
+		return nil, nil
 	}
 	if !pod.IsReady {
 		if err := r.wireCache.HandleEvent(wreq.GetNSN(), ResolutionFailedEvent, &EventCtx{
@@ -156,6 +179,7 @@ func (r *wc) resolveEndpoint(wreq *WireReq, epIdx int) (*ResolvedData, error) {
 		}); err != nil {
 			return nil, err
 		}
+		return nil, nil
 	}
 	daemonHostNodeNSN := types.NamespacedName{
 		Namespace: os.Getenv("POD_NAMESPACE"),
@@ -168,6 +192,7 @@ func (r *wc) resolveEndpoint(wreq *WireReq, epIdx int) (*ResolvedData, error) {
 		}); err != nil {
 			return nil, err
 		}
+		return nil, nil
 	}
 	if !d.IsReady {
 		if err := r.wireCache.HandleEvent(wreq.GetNSN(), ResolutionFailedEvent, &EventCtx{
@@ -176,6 +201,16 @@ func (r *wc) resolveEndpoint(wreq *WireReq, epIdx int) (*ResolvedData, error) {
 		}); err != nil {
 			return nil, err
 		}
+		return nil, nil
+	}
+	if d.GRPCAddress == "" || d.GRPCPort == "" {
+		if err := r.wireCache.HandleEvent(wreq.GetNSN(), ResolutionFailedEvent, &EventCtx{
+			EpIdx:   epIdx,
+			Message: fmt.Sprintf("wireDaemon no grpc address/port: %s", daemonHostNodeNSN.String()),
+		}); err != nil {
+			return nil, err
+		}
+		return nil, nil
 	}
 	return &ResolvedData{
 		PodNodeName:     pod.HostNodeName,
@@ -194,12 +229,15 @@ func (r *wc) resolve(wreq *WireReq) []*ResolvedData {
 }
 
 func (r *wc) wireCreate(wreq *WireReq) {
-	r.l.Info("wireCreate ...start...", "nsn", wreq.GetNSN())
+	r.l.WithValues("nsn", wreq.GetNSN())
+	r.l.Info("wireCreate ...start...")
 	// we want to resolve first to see if both endpoints resolve
 	// if not we dont create the endpoint event
 	resolvedData := r.resolve(wreq)
+	r.l.Info("wireCreate", "resolvedData0", resolvedData[0], "resolvedData1", resolvedData[1])
 	r.wireCache.Resolve(wreq.GetNSN(), resolvedData)
 	if resolvedData[0] != nil && resolvedData[1] != nil {
+		r.l.Info("wireCreate", "resolution", "succeeded")
 		// resolution worked for both epA and epB
 		r.wireCache.HandleEvent(wreq.GetNSN(), CreateEvent, &EventCtx{
 			EpIdx: 0,
@@ -216,6 +254,8 @@ func (r *wc) wireCreate(wreq *WireReq) {
 				EpIdx: 1,
 			})
 		}
+	} else {
+		r.l.Info("wireCreate", "resolution", "failed")
 	}
 	r.l.Info("wireCreate ...end...", "nsn", wreq.GetNSN())
 }
@@ -275,7 +315,7 @@ func (r *wc) daemonCallback(ctx context.Context, nsn types.NamespacedName, d any
 		if err == nil {
 			oldw.Stop()
 			r.workerCache.Delete(ctx, nsn)
-		} 
+		}
 		// create a new client
 		w, err := NewWorker(ctx, r.wireCache, &client.Config{
 			Address:  address,

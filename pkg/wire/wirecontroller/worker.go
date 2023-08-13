@@ -64,9 +64,15 @@ func (r *worker) Start(ctx context.Context) error {
 	go func() {
 		for {
 			select {
-			case e, _ := <-r.ch:
+			case e, ok := <-r.ch:
+				if !ok {
+					r.l.Info("event", "nok", e)
+					continue
+				}
+				r.l.Info("event", "ok", e)
 				switch e.Action {
 				case WorkerActionCreate:
+					r.l.Info("create event", "event", e.WireReq)
 					var event Event
 					var eventCtx *EventCtx
 					resp, err := r.client.Create(ctx, e.WireReq.WireRequest)
@@ -84,6 +90,7 @@ func (r *worker) Start(ctx context.Context) error {
 					}
 					r.wireCache.HandleEvent(e.WireReq.GetNSN(), event, eventCtx)
 				case WorkerActionDelete:
+					r.l.Info("delete event", "event", e.WireReq)
 					var event Event
 					var eventCtx *EventCtx
 					resp, err := r.client.Delete(ctx, e.WireReq.WireRequest)
@@ -106,6 +113,7 @@ func (r *worker) Start(ctx context.Context) error {
 			}
 		}
 	}()
+	r.l.Info("started...")
 	return nil
 }
 

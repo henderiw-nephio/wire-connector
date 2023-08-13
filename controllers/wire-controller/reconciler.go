@@ -94,9 +94,12 @@ func getWireReq(l *invv1alpha1.Link) *wirepb.WireRequest {
 		Endpoints: make([]*wirepb.Endpoint, len(l.Spec.Endpoints), len(l.Spec.Endpoints)),
 	}
 	for epIdx, ep := range l.Spec.Endpoints {
-		req.Endpoints[epIdx].Topology = ep.Topology
-		req.Endpoints[epIdx].NodeName = ep.NodeName
-		req.Endpoints[epIdx].IfName = ep.InterfaceName
+		req.Endpoints[epIdx] = &wirepb.Endpoint{
+			Topology: ep.Topology,
+			NodeName: ep.NodeName,
+			IfName:   ep.InterfaceName,
+		}
+
 	}
 	return req
 }
@@ -121,10 +124,16 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		cr.SetConditions(resourcev1alpha1.Failed("cannot get wire"))
 		return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 	}
+	if len(wresp.EndpointsStatus) > 0 {
+		log.Info("wire get", "resp", wresp.Name, "status", wresp.StatusCode, "ep0", wresp.EndpointsStatus[0], "ep1", wresp.EndpointsStatus[1])
+	} else {
+		log.Info("wire get", "resp", wresp)
+	}
 	exists := true
 	if wresp.StatusCode == wirepb.StatusCode_NotFound {
 		exists = false
 	}
+	log.Info("wire get", "exists", exists)
 
 	if meta.WasDeleted(cr) {
 		if exists {
@@ -154,14 +163,15 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 	}
 
-	if wresp.StatusCode == wirepb.StatusCode_NOK {
+	// if everything is ok we dont have to deploy things
+	if wresp.StatusCode != wirepb.StatusCode_OK {
 		_, err := r.wireclient.Create(ctx, wreq)
 		if err != nil {
 			log.Error(err, "cannot create wire")
 			cr.SetConditions(resourcev1alpha1.Failed("cannot create wire"))
 			return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 		}
-		log.Error(err, "wire deploying...")
+		log.Info("wire deploying...")
 		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
 	}
 

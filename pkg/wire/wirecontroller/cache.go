@@ -136,5 +136,8 @@ func (r *cache) HandleEvent(nsn types.NamespacedName, event Event, eventCtx *Eve
 	}
 
 	w.EndpointsState[eventCtx.EpIdx].HandleEvent(event, eventCtx, w)
+	// update the wire status
+
+	r.db[nsn] = w
 	return nil
 }
