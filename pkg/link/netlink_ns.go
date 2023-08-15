@@ -76,16 +76,18 @@ func createTunnel(tunName, localIP, remoteIP string, vni int) (*netlink.Link, er
 
 	tun := &netlink.Vxlan{
 		LinkAttrs: netlink.LinkAttrs{
-			Name:  tunName,
-			Flags: net.FlagUp,
+			Name:   tunName,
+			Flags:  net.FlagUp,
+			TxQLen: 1000,
 		},
 		VxlanId:  200,
+		//VtepDevIndex: parentIf.Attrs().Index,
 		SrcAddr:  net.IP(localIP),
 		Group:    net.IP(remoteIP),
-		Learning: false,
 		Port:     4789,
-		//Remote:   net.IP(remoteIP),
-		//DstAddr: net.IP(remoteIP),
+		Learning: true,
+		L2miss:   true,
+		L3miss:   true,
 	}
 	/*
 		tun := &netlink.Gretun{
