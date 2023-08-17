@@ -75,11 +75,12 @@ func (r *Endpoint) SetMAC(mac net.HardwareAddr) {
 // for local endpoints it deletes the veth itfce from the container ns
 // for remote endpoints it deletes the tun interface and xdp
 func (r *Endpoint) Destroy() error {
-	r.l.Info("destroy endpoint", "ifName", r.ifName, "nsPath", r.nsPath)
+	r.l.Info("destroy endpoint", "ifName", r.ifName, "nsPath", r.nsPath, "peerID", r.peerID)
 	if r.isLocal {
 		// delete itfce in container namespace
 		return deleteIfInNS(r.nsPath, r.ifName)
 	} else {
+
 		l, err := getLinkByName(getVethName(r.peerID))
 		if err != nil {
 			return err
@@ -89,9 +90,9 @@ func (r *Endpoint) Destroy() error {
 			if err := r.xdp.DeleteXConnectBPFMap(l); err != nil {
 				return err
 			}
-		}
-		if err := deleteItfce(getVethName(r.peerID)); err != nil {
-			return err
+			if err := deleteItfce(getVethName(r.peerID)); err != nil {
+				return err
+			}
 		}
 		// delete tunnel
 		return deleteItfce(getTunnelName(r.peerID))
@@ -164,7 +165,7 @@ func (r *Endpoint) Deploy(peerEp *Endpoint) error {
 			return err
 		}
 		// create tunnel
-		r.l.Info("create tunnel", "peerID", r.peerID, "tunnelName", getTunnelName(r.peerID))
+		r.l.Info("create tunnel", "peerID", r.peerID, "tunnelName", getTunnelName(r.peerID), "localIP", r.hostIP, "remoteIP", peerEp.hostIP)
 		tun, err := createTunnel(getTunnelName(r.peerID), r.hostIP, peerEp.hostIP, 200)
 		if err != nil {
 			r.l.Info("create tunnel failed", "err", err)

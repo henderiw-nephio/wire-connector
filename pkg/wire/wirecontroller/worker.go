@@ -110,7 +110,9 @@ func (r *worker) Start(ctx context.Context) error {
 						r.wireCache.HandleEvent(e.WireReq.GetNSN(), FailedEvent, eventCtx)
 						continue
 					}
-					r.wireCache.HandleEvent(e.WireReq.GetNSN(), DeletedEvent, eventCtx)
+					r.wireCache.HandleEvent(e.WireReq.GetNSN(), DeletedEvent, &EventCtx{
+						EpIdx: e.EventCtx.EpIdx,
+					})
 				}
 			case <-ctx.Done():
 				// cancelled

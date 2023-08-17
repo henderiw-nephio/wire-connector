@@ -124,16 +124,23 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		cr.SetConditions(resourcev1alpha1.Failed("cannot get wire"))
 		return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 	}
-	if len(wresp.EndpointsStatus) > 0 {
-		log.Info("wire get", "resp", wresp.Name, "status", wresp.StatusCode, "ep0", wresp.EndpointsStatus[0], "ep1", wresp.EndpointsStatus[1])
-	} else {
-		log.Info("wire get", "resp", wresp)
-	}
 	exists := true
 	if wresp.StatusCode == wirepb.StatusCode_NotFound {
 		exists = false
 	}
-	log.Info("wire get", "exists", exists)
+	if len(wresp.EndpointsStatus) == 0 {
+		log.Info("wire get",
+			"exists", exists,
+			"status", wresp.StatusCode.String(),
+		)
+	} else {
+		log.Info("wire get",
+			"exists", exists,
+			"status", wresp.StatusCode.String(),
+			"ep0", fmt.Sprintf("%s/%s", wresp.EndpointsStatus[0].StatusCode, wresp.EndpointsStatus[0].Reason),
+			"ep1", fmt.Sprintf("%s/%s", wresp.EndpointsStatus[1].StatusCode, wresp.EndpointsStatus[1].Reason),
+		)
+	}
 
 	if meta.WasDeleted(cr) {
 		if exists {

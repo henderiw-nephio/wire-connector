@@ -67,9 +67,10 @@ func New(ctx context.Context, cfg *Config) wire.Wire {
 			default:
 				r.l.Info("wires...")
 				for nsn, w := range r.wireCache.List() {
-					r.l.Info("wire", "nsn", nsn, "wire resp", w.WireResp,
-						"status0", reflect.TypeOf(w.EndpointsState[0]).Name(),
-						"status1", reflect.TypeOf(w.EndpointsState[1]).Name())
+					r.l.Info("wire", "nsn", nsn, "wire resp", w.WireResp, "wire status", w.WireResp.StatusCode,
+						"ep0",  fmt.Sprintf("%s/%s", w.WireResp.EndpointsStatus[0].StatusCode.String(), w.WireResp.EndpointsStatus[0].Reason),
+						"ep1",  fmt.Sprintf("%s/%s", w.WireResp.EndpointsStatus[0].StatusCode.String(), w.WireResp.EndpointsStatus[0].Reason),
+					)
 				}
 				time.Sleep(5 * time.Second)
 			}
@@ -264,7 +265,7 @@ func (r *wc) wireDelete(wreq *WireReq, origin string) {
 			// both endpoints resolve to the same host -> through dependency we indicate
 			// this (the state machine handles the dependency)
 			r.wireCache.HandleEvent(wreq.GetNSN(), DeleteEvent, &EventCtx{
-				EpIdx:    0,
+				EpIdx:    1,
 				SameHost: true,
 			})
 			return

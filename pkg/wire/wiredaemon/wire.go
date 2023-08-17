@@ -81,6 +81,7 @@ func (r *w) getEndpoint(ctx context.Context, req *wirepb.WireRequest, epIdx int)
 	epCfg := &EndpointConfig{
 		IfName:  epReq.IfName,
 		IsLocal: epReq.HostIP == os.Getenv("NODE_IP"),
+		HostIP:  epReq.HostIP,
 		XDP:     r.xdp,
 	}
 

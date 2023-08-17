@@ -78,6 +78,9 @@ func (r *daemon) Delete(ctx context.Context, req *wirepb.WireRequest) (*wirepb.E
 	if !w.IsReady() {
 		return &wirepb.EmptyResponse{StatusCode: wirepb.StatusCode_NOK, Reason: "endpoint not ready"}, nil
 	}
+	if !w.Exists() {
+		return &wirepb.EmptyResponse{StatusCode: wirepb.StatusCode_OK}, nil
+	}
 	if err := w.Destroy(); err != nil {
 		return &wirepb.EmptyResponse{StatusCode: wirepb.StatusCode_NOK, Reason: err.Error()}, nil
 	}

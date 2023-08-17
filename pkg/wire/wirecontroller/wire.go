@@ -68,10 +68,14 @@ func (r *Wire) SetDesiredAction(a DesiredAction) {
 func (r *Wire) Transition(newState State, eventCtx *EventCtx, generatedEvents ...WorkerAction) {
 	r.l.Info("transition", "from/to", fmt.Sprintf("%s/%s", r.EndpointsState[eventCtx.EpIdx], newState), "eventCtx", eventCtx, "wireResp", r.WireResp, "generated events", generatedEvents)
 	r.EndpointsState[eventCtx.EpIdx] = newState
-	r.WireResp.UpdateStatus(eventCtx.EpIdx, eventCtx.Message)
+	r.WireResp.UpdateStatus(newState, eventCtx)
+	r.l.Info("transition", "link status", fmt.Sprintf("%s/%s", r.WireResp.StatusCode.String(), r.WireResp.Reason),
+		"ep0 status", fmt.Sprintf("%s/%s", r.WireResp.EndpointsStatus[0].StatusCode.String(), r.WireResp.EndpointsStatus[0].Reason),
+		"ep1 status", fmt.Sprintf("%s/%s", r.WireResp.EndpointsStatus[1].StatusCode.String(), r.WireResp.EndpointsStatus[1].Reason),
+	)
 
 	// TODO update wirecache
-	
+
 	for _, ge := range generatedEvents {
 		r.l.Info("transition generated event", "from/to", fmt.Sprintf("%s/%s", r.EndpointsState[eventCtx.EpIdx], newState), "ge", ge)
 		if r.WireReq.IsResolved(eventCtx.EpIdx) {
@@ -165,18 +169,28 @@ type WireResp struct {
 	*wirepb.WireResponse
 }
 
-func (r *WireResp) UpdateStatus(epIdx int, msg string) {
+func (r *WireResp) UpdateStatus(newState State, eventCtx *EventCtx) {
 	if r.EndpointsStatus == nil || len(r.EndpointsStatus) == 0 {
 		r.EndpointsStatus = []*wirepb.EndpointStatus{{Reason: ""}, {Reason: ""}}
 	}
-	if msg == "" {
-		r.EndpointsStatus[epIdx] = &wirepb.EndpointStatus{
-			Reason:     "",
-			StatusCode: wirepb.StatusCode_OK,
+	// if the eventCtx massage is empty it means the transition was successfull
+	// only when we transition to Created or Deleted we put the status to OK
+	// when message is empty but the newState is not 
+	if eventCtx.Message == "" {
+		if newState.String() == "Created" || newState.String() == "Deleted" {
+			r.EndpointsStatus[eventCtx.EpIdx] = &wirepb.EndpointStatus{
+				Reason:     "",
+				StatusCode: wirepb.StatusCode_OK,
+			}
+		} else {
+			r.EndpointsStatus[eventCtx.EpIdx] = &wirepb.EndpointStatus{
+				Reason:     newState.String(),
+				StatusCode: wirepb.StatusCode_NOK,
+			}
 		}
 	} else {
-		r.EndpointsStatus[epIdx] = &wirepb.EndpointStatus{
-			Reason:     msg,
+		r.EndpointsStatus[eventCtx.EpIdx] = &wirepb.EndpointStatus{
+			Reason:     eventCtx.Message,
 			StatusCode: wirepb.StatusCode_NOK,
 		}
 	}

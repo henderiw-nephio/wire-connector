@@ -21,6 +21,7 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
+	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -135,6 +136,10 @@ func (r *cache) HandleEvent(nsn types.NamespacedName, event Event, eventCtx *Eve
 	w.EndpointsState[eventCtx.EpIdx].HandleEvent(event, eventCtx, w)
 
 	// update the wire status
-	r.Upsert(nsn, w)
+	if w.DesiredAction == DesiredActionDelete && w.WireResp.StatusCode == wirepb.StatusCode_OK {
+		r.Delete(nsn)
+	} else {
+		r.Upsert(nsn, w)
+	}
 	return nil
 }
