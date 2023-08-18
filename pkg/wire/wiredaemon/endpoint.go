@@ -87,6 +87,7 @@ func (r *Endpoint) Destroy() error {
 		}
 		if l != nil {
 			r.l.Info("destroy xdp", "from", (*l).Attrs().Name)
+			r.l.Info("destroy xdp", "from", (*l).Attrs().Index)
 			if err := r.xdp.DeleteXConnectBPFMap(l); err != nil {
 				return err
 			}
@@ -179,7 +180,8 @@ func (r *Endpoint) Deploy(peerEp *Endpoint) error {
 			return err
 		}
 		r.l.Info("deploy xdp", "from/to", fmt.Sprintf("%s/%s", r.veth.Attrs().Name, (*tun).Attrs().Name))
-		if err := r.xdp.UpsertXConnextBPFMap(&r.veth, tun); err != nil {
+		r.l.Info("deploy xdp", "from/to", fmt.Sprintf("%d/%d", r.veth.Attrs().Index, (*tun).Attrs().Index))
+		if err := r.xdp.UpsertXConnectBPFMap(&r.veth, tun); err != nil {
 			r.l.Info("deploy xdp failed", "err", err)
 			// delete the links to ensure we dont keep these resources hanging
 			if err := netlink.LinkDel(r.veth); err != nil {

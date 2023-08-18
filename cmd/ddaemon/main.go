@@ -90,9 +90,13 @@ func main() {
 		setupLog.Error(err, "cannot to set xdp app")
 		os.Exit(1)
 	}
-	if err := xdpapp.Init(ctx); err != nil {
-		setupLog.Error(err, "cannot init xdp app")
-		os.Exit(1)
+
+	// THIS IS JUST A TEST -> AVOID RUNNING THE XDP INIT PER DAEMON
+	if os.Getenv("NODE_NAME") == "topo-control-plane" {
+		if err := xdpapp.Init(ctx); err != nil {
+			setupLog.Error(err, "cannot init xdp app")
+			os.Exit(1)
+		}
 	}
 
 	podManager := pod.NewManager()

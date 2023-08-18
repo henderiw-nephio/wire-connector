@@ -14,7 +14,7 @@ import (
 
 type XDP interface {
 	Init(ctx context.Context) error
-	UpsertXConnextBPFMap(from *netlink.Link, to *netlink.Link) error
+	UpsertXConnectBPFMap(from *netlink.Link, to *netlink.Link) error
 	DeleteXConnectBPFMap(from *netlink.Link) error
 }
 
@@ -56,7 +56,7 @@ func xdpFlags(linkType string) int {
 	return 0 // native xdp (xdpdrv) by default
 }
 
-func (r *xdpApp) UpsertXConnextBPFMap(from *netlink.Link, to *netlink.Link) error {
+func (r *xdpApp) UpsertXConnectBPFMap(from *netlink.Link, to *netlink.Link) error {
 	if err := r.objs.bpfMaps.XconnectMap.Put(uint32((*from).Attrs().Index), uint32((*to).Attrs().Index)); err != nil {
 		return err
 	}

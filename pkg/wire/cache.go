@@ -76,11 +76,17 @@ func (r *cache[T1]) List() map[types.NamespacedName]T1 {
 
 // Upsert creates or updates the entry in the cache
 func (r *cache[T1]) Upsert(ctx context.Context, nsn types.NamespacedName, newd T1) {
-	// only if an object exists and data gets changed we
-	// call the registered callbacks
-	d, err := r.Get(nsn) 
+	exists := true
+	oldd, err := r.Get(nsn) 
 	if err != nil {
-		if !reflect.DeepEqual(d, newd) {
+		exists = false
+	}
+	// update the cache before calling the callback since the cb fn will use this data
+	r.update(nsn, newd)
+
+	// call callback if data got changed or if no data exists
+	if exists {
+		if !reflect.DeepEqual(oldd, newd) {
 			for _, cb := range r.callbackFn {
 				cb(ctx, nsn, newd)
 			}
@@ -90,7 +96,7 @@ func (r *cache[T1]) Upsert(ctx context.Context, nsn types.NamespacedName, newd T
 			cb(ctx, nsn, newd)
 		}
 	}
-	r.update(nsn, newd)
+	
 }
 
 func (r *cache[T1]) update(nsn types.NamespacedName, newd T1) {
@@ -109,12 +115,20 @@ func (r *cache[T1]) delete(nsn types.NamespacedName) {
 func (r *cache[T1]) Delete(ctx context.Context, nsn types.NamespacedName) {
 	// only if an exisitng object gets deleted we
 	// call the registered callbacks
-	if _, err := r.Get(nsn);  err == nil {
+	exists := true
+	_, err := r.Get(nsn) 
+	if err != nil {
+		exists = false
+	}
+	// delete the entry to ensure the cb uses the proper data
+	r.delete(nsn)
+
+	// if exists call the callback
+	if exists {
 		for _, cb := range r.callbackFn {
 			cb(ctx, nsn, nil)
 		}
 	}
-	r.delete(nsn)
 }
 
 func (r *cache[T1]) AddWatch(fn ResourceCallbackFn) {

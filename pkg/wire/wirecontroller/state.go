@@ -191,8 +191,7 @@ func (s *Creating) HandleEvent(event Event, eventCtx *EventCtx, w *Wire) {
 		w.Transition(&Failed{}, eventCtx)
 		// done
 	default:
-		// these events should not happen
-		// DeletedEvent
+		// these events should not happen: DeletedEvent
 	}
 }
 
@@ -220,8 +219,7 @@ func (s *Created) HandleEvent(event Event, eventCtx *EventCtx, w *Wire) {
 			}, w)
 		}
 	default:
-		// these events should not happen
-		// CreatedEvent, DeletedEvent, FailedEvent
+		// these events should not happen: CreatedEvent, DeletedEvent, FailedEvent
 	}
 }
 
@@ -235,16 +233,13 @@ func (s *ResolutionFailed) HandleEvent(event Event, eventCtx *EventCtx, w *Wire)
 		if eventCtx.SameHost {
 			w.Transition(&Created{}, eventCtx)
 		} else {
-			w.Transition(&Creating{}, eventCtx, "delete")
+			w.Transition(&Creating{}, eventCtx, "create")
 		}
-		// action -> trigger delete to the daemon
 	case DeleteEvent:
 		w.Transition(&Deleting{}, eventCtx, "delete")
-		// action -> trigger delete to the daemon
 	case ResolutionFailedEvent:
 		// do nothing
 	default:
-		// these events should not happen
-		// CreatedEvent, DeletedEvent, FailedEvent
+		// these events should not happen: CreatedEvent, DeletedEvent, FailedEvent
 	}
 }

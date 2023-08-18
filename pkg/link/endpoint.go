@@ -183,7 +183,7 @@ func (r *Endpoint) Deploy(peerEp *Endpoint) error {
 			return err
 		}
 		log.Infof("deploy xdp: from/to %s/%s", r.veth.Attrs().Name, (*tun).Attrs().Name)
-		if err := r.xdp.UpsertXConnextBPFMap(&r.veth, tun); err != nil {
+		if err := r.xdp.UpsertXConnectBPFMap(&r.veth, tun); err != nil {
 			// delete the links to ensure we dont keep these resources hanging
 			if err := netlink.LinkDel(r.veth); err != nil {
 				log.Debugf("delete vethA %s failed, err: %v", r.veth.Attrs().Name, err)

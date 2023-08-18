@@ -69,7 +69,7 @@ func New(ctx context.Context, cfg *Config) wire.Wire {
 				for nsn, w := range r.wireCache.List() {
 					r.l.Info("wire", "nsn", nsn, "wire resp", w.WireResp, "wire status", w.WireResp.StatusCode,
 						"ep0",  fmt.Sprintf("%s/%s", w.WireResp.EndpointsStatus[0].StatusCode.String(), w.WireResp.EndpointsStatus[0].Reason),
-						"ep1",  fmt.Sprintf("%s/%s", w.WireResp.EndpointsStatus[0].StatusCode.String(), w.WireResp.EndpointsStatus[0].Reason),
+						"ep1",  fmt.Sprintf("%s/%s", w.WireResp.EndpointsStatus[1].StatusCode.String(), w.WireResp.EndpointsStatus[1].Reason),
 					)
 				}
 				time.Sleep(5 * time.Second)
@@ -330,7 +330,7 @@ func (r *wc) daemonCallback(ctx context.Context, nsn types.NamespacedName, d any
 
 	r.commonCallback(ctx, nsn, newd, &CallbackCtx{
 		Message:          "daemon failed",
-		Hold:             true,
+		Hold:             true, // when the daemon fails this most likely mean a daemon upgrade or restart, so we dont want to delete the other end
 		EvalHostNodeName: true,
 	})
 	r.l.Info("daemonCallback ...end...", "nsn", nsn, "data", d)
@@ -396,7 +396,7 @@ func (r *wc) commonCallback(ctx context.Context, nsn types.NamespacedName, d any
 						r.wireCache.HandleEvent(wireNSN, ResolutionFailedEvent, &EventCtx{
 							EpIdx:   epIdx,
 							Message: cbctx.Message,
-							Hold:    cbctx.Hold, // we do not want this event to eb replciated to the other endpoint
+							Hold:    cbctx.Hold, // we do not want this event to be replciated to the other endpoint
 						})
 					}()
 				}

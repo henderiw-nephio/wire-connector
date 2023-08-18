@@ -1,7 +1,7 @@
 #include <linux/bpf.h>
 #include <bpf/bpf_helpers.h>
 
-#define XCONNECT_MAP_SIZE 1024
+#define XCONNECT_MAP_SIZE 8192
 
 struct bpf_map_def SEC("maps") xconnect_map = {
 	.type = BPF_MAP_TYPE_DEVMAP,
