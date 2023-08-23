@@ -157,7 +157,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			if err := link.Deploy(); err != nil {
 				log.Error(err, "cannot deploy link")
 				// the issue is that error always changes and this causes continuous reconciliation
-				cr.SetConditions(resourcev1alpha1.WiringFailed(fmt.Errorf("cannot wire link")))
+				cr.SetConditions(resourcev1alpha1.WiringFailed("cannot wire link"))
 				return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 			}
 
@@ -171,7 +171,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			if err := link.Destroy(); err != nil {
 				log.Error(err, "cannot destroy link")
 				// the issue is that error always changes and this causes continuous reconciliation
-				cr.SetConditions(resourcev1alpha1.WiringFailed(fmt.Errorf("cannot destroy link, when link became not ready")))
+				cr.SetConditions(resourcev1alpha1.WiringFailed("cannot destroy link, when link became not ready"))
 				return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 			}
 			log.Info("link destroyed...")

@@ -29,14 +29,17 @@ func listRun(_ *cobra.Command, args []string) error {
 		fmt.Printf("  oper-state: %s\n", l.Attrs().OperState.String())
 		if l.Type() == "vxlan" {
 			fmt.Printf("  group %d\n", l.Attrs().Group)
+			fmt.Printf("  txqlen %d\n", l.Attrs().TxQLen)
 			vxlan, ok := l.(*netlink.Vxlan)
 			if ok {
 				fmt.Printf("  src ip: %s\n", vxlan.SrcAddr)
 				fmt.Printf("  dst ip: %s\n", vxlan.Group.String())
 				fmt.Printf("  port: %d\n", vxlan.Port)
+				fmt.Printf("  vxlanid: %d\n", vxlan.VxlanId)
 				fmt.Printf("  l2miss: %t\n", vxlan.L2miss)
 				fmt.Printf("  l3miss: %t\n", vxlan.L3miss)
 				fmt.Printf("  learning: %t\n", vxlan.Learning)
+
 			}
 		}
 		if l.Attrs().Xdp.Attached == true {

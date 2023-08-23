@@ -96,8 +96,14 @@ func (r *Endpoint) Destroy() error {
 			}
 		}
 		// delete tunnel
+		tun, err := getLinkByName(getTunnelName(r.peerID))
+		if err != nil {
+			return err
+		}
+		if err := r.xdp.DeleteXConnectBPFMap(tun); err != nil {
+			return err
+		}
 		return deleteItfce(getTunnelName(r.peerID))
-		// TODO add the XDP binding
 	}
 }
 
@@ -167,7 +173,7 @@ func (r *Endpoint) Deploy(peerEp *Endpoint) error {
 		}
 		// create tunnel
 		r.l.Info("create tunnel", "peerID", r.peerID, "tunnelName", getTunnelName(r.peerID), "localIP", r.hostIP, "remoteIP", peerEp.hostIP)
-		tun, err := createTunnel(getTunnelName(r.peerID), r.hostIP, peerEp.hostIP, 200)
+		tun, err := createTunnel(getTunnelName(r.peerID), peerEp.hostIP, r.hostIP, 200)
 		if err != nil {
 			r.l.Info("create tunnel failed", "err", err)
 			// delete the links to ensure we dont keep these resources hanging
@@ -182,6 +188,20 @@ func (r *Endpoint) Deploy(peerEp *Endpoint) error {
 		r.l.Info("deploy xdp", "from/to", fmt.Sprintf("%s/%s", r.veth.Attrs().Name, (*tun).Attrs().Name))
 		r.l.Info("deploy xdp", "from/to", fmt.Sprintf("%d/%d", r.veth.Attrs().Index, (*tun).Attrs().Index))
 		if err := r.xdp.UpsertXConnectBPFMap(&r.veth, tun); err != nil {
+			r.l.Info("deploy xdp failed", "err", err)
+			// delete the links to ensure we dont keep these resources hanging
+			if err := netlink.LinkDel(r.veth); err != nil {
+				r.l.Info("delete vethA failed", "name", r.veth.Attrs().Name, "err", err)
+			}
+			if err := netlink.LinkDel(peerEp.veth); err != nil {
+				r.l.Info("delete vethB failed", "name", r.veth.Attrs().Name, "err", err)
+			}
+			if err := deleteItfce(getTunnelName(r.peerID)); err != nil {
+				r.l.Info("delete tunn failed", "tunnel", getTunnelName(r.peerID), "err", err)
+			}
+			return err
+		}
+		if err := r.xdp.UpsertXConnectBPFMap(tun, &r.veth); err != nil {
 			r.l.Info("deploy xdp failed", "err", err)
 			// delete the links to ensure we dont keep these resources hanging
 			if err := netlink.LinkDel(r.veth); err != nil {

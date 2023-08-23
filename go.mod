@@ -3,14 +3,14 @@ module github.com/henderiw-nephio/wire-connector
 go 1.20
 
 require (
-	github.com/cilium/ebpf v0.7.0
+	github.com/cilium/ebpf v0.9.1
 	github.com/go-logr/logr v1.2.4
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/protobuf v1.5.3
 	github.com/google/uuid v1.3.0
 	github.com/itchyny/gojq v0.12.13
 	github.com/nephio-project/nephio/controllers/pkg v0.0.0-20230724195903-feb6c2f91cc3
-	github.com/nokia/k8s-ipam v0.0.4-0.20230808135427-e70973ae40ae
+	github.com/nokia/k8s-ipam v0.0.4-0.20230818120538-59ddf51ca609
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.9.0
 	github.com/spf13/cobra v1.7.0
@@ -24,7 +24,7 @@ require (
 	k8s.io/apimachinery v0.28.0-alpha.3
 	k8s.io/client-go v0.28.0-alpha.3
 	k8s.io/cri-api v0.27.3
-	k8s.io/kubernetes v1.27.4
+	k8s.io/kubernetes v1.27.3
 	sigs.k8s.io/controller-runtime v0.15.0
 )
 
@@ -32,7 +32,7 @@ require (
 	github.com/Microsoft/go-winio v0.6.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
-	github.com/cenkalti/backoff/v4 v4.1.3 // indirect
+	github.com/cenkalti/backoff/v4 v4.2.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/emicklei/go-restful/v3 v3.10.2 // indirect

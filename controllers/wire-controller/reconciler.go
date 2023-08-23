@@ -30,6 +30,7 @@ import (
 	"github.com/nokia/k8s-ipam/pkg/meta"
 	"github.com/pkg/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -121,7 +122,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	wresp, err := r.wireclient.Get(ctx, wreq)
 	if err != nil {
 		log.Error(err, "cannot get wire")
-		cr.SetConditions(resourcev1alpha1.Failed("cannot get wire"))
+		cr.SetConditions(resourcev1alpha1.WiringFailed("cannot get wire"))
 		return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 	}
 	exists := true
@@ -146,16 +147,17 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		if exists {
 			if _, err := r.wireclient.Delete(ctx, wreq); err != nil {
 				log.Error(err, "cannot remove wire")
-				cr.SetConditions(resourcev1alpha1.Failed("cannot remove wire"))
+				cr.SetConditions(resourcev1alpha1.WiringFailed("cannot remove wire"))
 				return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 			}
 			// TODO -> for now we poll, to be changed to event driven
+			cr.SetConditions(resourcev1alpha1.WiringUknown())
 			return reconcile.Result{RequeueAfter: 1 * time.Second}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 		}
 
 		if err := r.finalizer.RemoveFinalizer(ctx, cr); err != nil {
 			log.Error(err, "cannot remove finalizer")
-			cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
+			cr.SetConditions(resourcev1alpha1.WiringFailed(err.Error()))
 			return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 		}
 
@@ -163,27 +165,52 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, nil
 	}
 
-	// we should only add a finalizer when we act
-	if err := r.finalizer.AddFinalizer(ctx, cr); err != nil {
-		log.Error(err, "cannot add finalizer")
-		cr.SetConditions(resourcev1alpha1.Failed("cannot add finalizer"))
+	if !exists && cr.GetCondition(resourcev1alpha1.ConditionTypeReady).Status == v1.ConditionFalse {
+		if err := r.finalizer.RemoveFinalizer(ctx, cr); err != nil {
+			log.Error(err, "cannot remove finalizer")
+			cr.SetConditions(resourcev1alpha1.WiringFailed(err.Error()))
+			return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+		}
+		cr.SetConditions(resourcev1alpha1.WiringUknown())
 		return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 	}
 
-	// if everything is ok we dont have to deploy things
-	if wresp.StatusCode != wirepb.StatusCode_OK {
-		_, err := r.wireclient.Create(ctx, wreq)
-		if err != nil {
-			log.Error(err, "cannot create wire")
-			cr.SetConditions(resourcev1alpha1.Failed("cannot create wire"))
+	if exists && cr.GetCondition(resourcev1alpha1.ConditionTypeReady).Status == v1.ConditionFalse {
+		if _, err := r.wireclient.Delete(ctx, wreq); err != nil {
+			log.Error(err, "cannot remove wire")
+			cr.SetConditions(resourcev1alpha1.WiringFailed("cannot remove wire"))
 			return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 		}
-		log.Info("wire deploying...")
-		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
+		// TODO -> for now we poll, to be changed to event driven
+		cr.SetConditions(resourcev1alpha1.Wiring("deleting"))
+		return reconcile.Result{RequeueAfter: 1 * time.Second}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 	}
 
-	log.Info("wire deployed...")
+	if cr.GetCondition(resourcev1alpha1.ConditionTypeReady).Status == v1.ConditionTrue {
+		// we should only add a finalizer when we act
+		if err := r.finalizer.AddFinalizer(ctx, cr); err != nil {
+			log.Error(err, "cannot add finalizer")
+			cr.SetConditions(resourcev1alpha1.WiringFailed("cannot add finalizer"))
+			return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+		}
 
+		// if everything is ok we dont have to deploy things
+		if wresp.StatusCode != wirepb.StatusCode_OK {
+			_, err := r.wireclient.Create(ctx, wreq)
+			if err != nil {
+				log.Error(err, "cannot create wire")
+				cr.SetConditions(resourcev1alpha1.WiringFailed("cannot create wire"))
+				return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+			}
+			log.Info("wire deploying...")
+			cr.SetConditions(resourcev1alpha1.Wiring("Creating"))
+			return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
+		}
+
+		log.Info("wire deployed...")
+		cr.SetConditions(resourcev1alpha1.Wired())
+		return reconcile.Result{}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+	}
 	// we assume when the link becomes ready we get a new reconcile trigger
 	return ctrl.Result{}, nil
 }

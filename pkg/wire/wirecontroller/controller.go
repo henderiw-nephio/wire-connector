@@ -68,8 +68,8 @@ func New(ctx context.Context, cfg *Config) wire.Wire {
 				r.l.Info("wires...")
 				for nsn, w := range r.wireCache.List() {
 					r.l.Info("wire", "nsn", nsn, "wire resp", w.WireResp, "wire status", w.WireResp.StatusCode,
-						"ep0",  fmt.Sprintf("%s/%s", w.WireResp.EndpointsStatus[0].StatusCode.String(), w.WireResp.EndpointsStatus[0].Reason),
-						"ep1",  fmt.Sprintf("%s/%s", w.WireResp.EndpointsStatus[1].StatusCode.String(), w.WireResp.EndpointsStatus[1].Reason),
+						"ep0", fmt.Sprintf("%s/%s", w.WireResp.EndpointsStatus[0].StatusCode.String(), w.WireResp.EndpointsStatus[0].Reason),
+						"ep1", fmt.Sprintf("%s/%s", w.WireResp.EndpointsStatus[1].StatusCode.String(), w.WireResp.EndpointsStatus[1].Reason),
 					)
 				}
 				time.Sleep(5 * time.Second)
@@ -338,15 +338,18 @@ func (r *wc) daemonCallback(ctx context.Context, nsn types.NamespacedName, d any
 
 func (r *wc) podCallback(ctx context.Context, nsn types.NamespacedName, d any) {
 	r.l.Info("podCallback ...start...", "nsn", nsn, "data", d)
-	p, ok := d.(wirepod.Pod)
-	if !ok {
-		r.l.Info("expect Pod", "got", reflect.TypeOf(d).Name())
-		return
-	}
+
 	var newd any
 	newd = nil
-	if d != nil && p.IsReady {
-		newd = p
+	if d != nil {
+		p, ok := d.(wirepod.Pod)
+		if !ok {
+			r.l.Info("expect Pod", "got", reflect.TypeOf(d).Name())
+			return
+		}
+		if p.IsReady {
+			newd = p
+		}
 	}
 	r.commonCallback(ctx, nsn, newd, &CallbackCtx{
 		Message:          "pod failed",
@@ -358,15 +361,18 @@ func (r *wc) podCallback(ctx context.Context, nsn types.NamespacedName, d any) {
 
 func (r *wc) nodeCallback(ctx context.Context, nsn types.NamespacedName, d any) {
 	r.l.Info("nodeCallback ...start...", "nsn", nsn, "data", d)
-	n, ok := d.(wirenode.Node)
-	if !ok {
-		r.l.Info("expect Node", "got", reflect.TypeOf(d).Name())
-		return
-	}
+
 	var newd any
 	newd = nil
-	if d != nil && n.IsReady {
-		newd = n
+	if d != nil {
+		n, ok := d.(wirenode.Node)
+		if !ok {
+			r.l.Info("expect Node", "got", reflect.TypeOf(d).Name())
+			return
+		}
+		if n.IsReady {
+			newd = n
+		}
 	}
 
 	r.commonCallback(ctx, nsn, newd, &CallbackCtx{
