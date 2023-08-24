@@ -33,7 +33,7 @@ type Worker interface {
 	Write(e state.WorkerEvent)
 }
 
-func NewWorker(ctx context.Context, wireCache WireCache, epCache EpCache, cfg *client.Config) (Worker, error) {
+func NewWorker(ctx context.Context, wireCache WireCache, epCache NodeEpCache, cfg *client.Config) (Worker, error) {
 	l := ctrl.Log.WithName("worker").WithValues("address", cfg.Address)
 
 	c, err := client.New(cfg)
@@ -42,6 +42,7 @@ func NewWorker(ctx context.Context, wireCache WireCache, epCache EpCache, cfg *c
 	}
 	return &worker{
 		wireCache: wireCache,
+		epCache:   epCache,
 		ch:        make(chan state.WorkerEvent, 10),
 		client:    c,
 		l:         l,
@@ -50,7 +51,7 @@ func NewWorker(ctx context.Context, wireCache WireCache, epCache EpCache, cfg *c
 
 type worker struct {
 	wireCache WireCache
-	epCache   EpCache
+	epCache   NodeEpCache
 	ch        chan state.WorkerEvent
 	client    client.Client
 	cancel    context.CancelFunc
@@ -97,7 +98,7 @@ func (r *worker) Start(ctx context.Context) error {
 						r.wireCache.HandleEvent(nsn, state.CreatedEvent, &state.EventCtx{
 							EpIdx: e.EventCtx.EpIdx,
 						})
-					case *EpReq:
+					case *NodeEpReq:
 						nsn := req.GetNSN()
 						r.l.Info("create endpoint event", "nsn", nsn, "data", req.EndpointRequest)
 						resp, err := r.client.EndpointCreate(ctx, req.EndpointRequest)
@@ -138,7 +139,7 @@ func (r *worker) Start(ctx context.Context) error {
 						r.wireCache.HandleEvent(nsn, state.DeletedEvent, &state.EventCtx{
 							EpIdx: e.EventCtx.EpIdx,
 						})
-					case *EpReq:
+					case *NodeEpReq:
 						nsn := req.GetNSN()
 						r.l.Info("delete endpoint event", "nsn", nsn, "data", req.EndpointRequest)
 						resp, err := r.client.EndpointCreate(ctx, req.EndpointRequest)

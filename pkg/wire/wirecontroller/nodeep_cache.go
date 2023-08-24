@@ -28,65 +28,65 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-type EpCache interface {
-	Get(types.NamespacedName) (*Endpoint, error)
-	Upsert(context.Context, types.NamespacedName, *Endpoint)
+type NodeEpCache interface {
+	Get(types.NamespacedName) (*NodeEndpoint, error)
+	Upsert(context.Context, types.NamespacedName, *NodeEndpoint)
 	Delete(context.Context, types.NamespacedName)
-	List() map[types.NamespacedName]*Endpoint
+	List() map[types.NamespacedName]*NodeEndpoint
 	Resolve(nsn types.NamespacedName, resolvedData *resolve.Data)
 	UnResolve(nsn types.NamespacedName)
 	HandleEvent(types.NamespacedName, state.Event, *state.EventCtx) error
 }
 
-func NewEpCache(c wire.Cache[*Endpoint]) EpCache {
+func NewEpCache(c wire.Cache[*NodeEndpoint]) NodeEpCache {
 	l := ctrl.Log.WithName("ep-cache")
-	return &epcache{
+	return &nodeepCache{
 		c: c,
 		l: l,
 	}
 }
 
-type epcache struct {
-	c wire.Cache[*Endpoint]
+type nodeepCache struct {
+	c wire.Cache[*NodeEndpoint]
 	l logr.Logger
 }
 
 // Get return the type
-func (r *epcache) Get(nsn types.NamespacedName) (*Endpoint, error) {
+func (r *nodeepCache) Get(nsn types.NamespacedName) (*NodeEndpoint, error) {
 	return r.c.Get(nsn)
 }
 
 // Upsert creates or updates the entry in the cache
-func (r *epcache) Upsert(ctx context.Context, nsn types.NamespacedName, ep *Endpoint) {
+func (r *nodeepCache) Upsert(ctx context.Context, nsn types.NamespacedName, ep *NodeEndpoint) {
 	r.c.Upsert(ctx, nsn, ep)
 }
 
 // Delete deletes the entry in the cache
-func (r *epcache) Delete(ctx context.Context, nsn types.NamespacedName) {
+func (r *nodeepCache) Delete(ctx context.Context, nsn types.NamespacedName) {
 	r.c.Delete(ctx, nsn)
 }
 
-func (r *epcache) List() map[types.NamespacedName]*Endpoint {
+func (r *nodeepCache) List() map[types.NamespacedName]*NodeEndpoint {
 	return r.c.List()
 }
 
-func (r *epcache) Resolve(nsn types.NamespacedName, resolvedData *resolve.Data) {
+func (r *nodeepCache) Resolve(nsn types.NamespacedName, resolvedData *resolve.Data) {
 	ep, err := r.c.Get(nsn)
 	if err == nil {
-		ep.EpReq.Resolve(resolvedData)
+		ep.NodeEpReq.Resolve(resolvedData)
 		r.c.Upsert(context.Background(), nsn, ep)
 	}
 }
 
-func (r *epcache) UnResolve(nsn types.NamespacedName) {
+func (r *nodeepCache) UnResolve(nsn types.NamespacedName) {
 	ep, err := r.c.Get(nsn)
 	if err == nil {
-		ep.EpReq.Unresolve()
+		ep.NodeEpReq.Unresolve()
 		r.c.Upsert(context.Background(), nsn, ep)
 	}
 }
 
-func (r *epcache) HandleEvent(nsn types.NamespacedName, event state.Event, eventCtx *state.EventCtx) error {
+func (r *nodeepCache) HandleEvent(nsn types.NamespacedName, event state.Event, eventCtx *state.EventCtx) error {
 	ep, err := r.c.Get(nsn)
 	if err != nil {
 		return fmt.Errorf("cannot handleEvent, nsn not found %s", nsn.String())

@@ -29,61 +29,62 @@ import (
 )
 
 // Endoint provides the
-type Endpoint struct {
+type NodeEndpoint struct {
 	//state.StateTransition
 	dispatcher Dispatcher
 	wire.Object
-	EpReq  *EpReq
-	EpResp *EpResp
-	State  state.State
-	l      logr.Logger
+	NodeEpReq  *NodeEpReq
+	NodeEpResp *EpResp
+	State      state.State
+	l          logr.Logger
 }
 
-type EpReq struct {
+type NodeEpReq struct {
 	*endpointpb.EndpointRequest
 }
 
-func NewEndpoint(d Dispatcher, req *EpReq) *Endpoint {
-	l := ctrl.Log.WithName("endpoint").WithValues("nsn", req.GetNSN())
-	return &Endpoint{
+func NewNodeEndpoint(d Dispatcher, req *NodeEpReq) *NodeEndpoint {
+	l := ctrl.Log.WithName("nodeep").WithValues("nsn", req.GetNSN())
+	return &NodeEndpoint{
 		dispatcher: d,
-		EpReq:      req,
-		EpResp:     newEndpointResp(req),
+		NodeEpReq:  req,
+		NodeEpResp: newNodeEndpointResp(req),
+		State:      &state.Deleted{},
 		l:          l,
 	}
 }
 
-func newEndpointResp(req *EpReq) *EpResp {
+func newNodeEndpointResp(req *NodeEpReq) *EpResp {
 	return &EpResp{
 		EndpointResponse: &endpointpb.EndpointResponse{
 			NodeKey:    req.GetNodeKey(),
 			StatusCode: endpointpb.StatusCode_NOK,
-			Reason:     "created",
+			Reason:     "deleted",
 		},
 	}
 }
 
 // GetAdditionalState returns no additional state, since there is only 1 endpoint
-func (r *Endpoint) GetAdditionalState(eventCtx *state.EventCtx) []state.StateCtx {
+func (r *NodeEndpoint) GetAdditionalState(eventCtx *state.EventCtx) []state.StateCtx {
 	return []state.StateCtx{}
 }
 
-func (r *Endpoint) Transition(newState state.State, eventCtx *state.EventCtx, generatedEvents ...state.WorkerAction) {
+func (r *NodeEndpoint) Transition(newState state.State, eventCtx *state.EventCtx, generatedEvents ...state.WorkerAction) {
 	log := r.l.WithValues("from/to", fmt.Sprintf("%s/%s", r.State, newState), "eventCtx", eventCtx)
-	log.Info("transition", "wireResp", r.EpResp, "generated events", generatedEvents)
+	log.Info("transition", "wireResp", r.NodeEpResp, "generated events", generatedEvents)
 	r.State = newState
-	r.EpResp.UpdateStatus(newState, eventCtx)
+	r.NodeEpResp.UpdateStatus(newState, eventCtx)
 
 	for _, ge := range generatedEvents {
 		r.l.Info("transition generated event", "ge", ge)
-		if r.EpReq.IsResolved() {
+		if r.NodeEpReq.IsResolved() {
 			// should always resolve
 			workerNsn := types.NamespacedName{
 				Namespace: "default",
-				Name:      r.EpReq.HostNodeName,
+				Name:      r.NodeEpReq.HostNodeName,
 			}
 
-			if err := r.dispatcher.Write(workerNsn, state.WorkerEvent{Action: ge, Req: r.EpReq, EventCtx: eventCtx}); err != nil {
+			if err := r.dispatcher.Write(workerNsn, state.WorkerEvent{Action: ge, Req: r.NodeEpReq, EventCtx: eventCtx}); err != nil {
 				// should never happen, as it means the worker does not exist
 				r.HandleEvent(state.FailedEvent, eventCtx)
 				continue
@@ -92,32 +93,32 @@ func (r *Endpoint) Transition(newState state.State, eventCtx *state.EventCtx, ge
 	}
 }
 
-func (r *Endpoint) HandleEvent(event state.Event, eventCtx *state.EventCtx) {
+func (r *NodeEndpoint) HandleEvent(event state.Event, eventCtx *state.EventCtx) {
 	r.State.HandleEvent(event, eventCtx, r)
 }
 
-func (r *Endpoint) GetResponse() *endpointpb.EndpointResponse {
-	return r.EpResp.EndpointResponse
+func (r *NodeEndpoint) GetResponse() *endpointpb.EndpointResponse {
+	return r.NodeEpResp.EndpointResponse
 }
 
-func (r *EpReq) GetNSN() types.NamespacedName {
+func (r *NodeEpReq) GetNSN() types.NamespacedName {
 	return types.NamespacedName{
 		Namespace: r.NodeKey.Topology,
 		Name:      r.NodeKey.NodeName,
 	}
 }
 
-func (r *EpReq) IsResolved() bool {
+func (r *NodeEpReq) IsResolved() bool {
 	return r.ServiceEndpoint != ""
 }
 
-func (r *EpReq) Unresolve() {
+func (r *NodeEpReq) Unresolve() {
 	r.HostIP = ""
 	r.HostNodeName = ""
 	r.ServiceEndpoint = ""
 }
 
-func (r *EpReq) Resolve(res *resolve.Data) {
+func (r *NodeEpReq) Resolve(res *resolve.Data) {
 	if res != nil {
 		//r.Endpoints[epIdx].NodeName = res.PodNodeName
 		r.HostIP = res.HostIP
@@ -125,6 +126,18 @@ func (r *EpReq) Resolve(res *resolve.Data) {
 		r.ServiceEndpoint = res.ServiceEndpoint
 	} else {
 		r.Unresolve()
+	}
+}
+
+func (r *NodeEpReq) GetHostNodeName() string {
+	return r.HostNodeName
+}
+
+func (r *NodeEpReq) CompareName(hostNodeName bool, name string) bool {
+	if hostNodeName {
+		return r.HostNodeName == name
+	} else {
+		return r.NodeKey.NodeName == name
 	}
 }
 

@@ -70,22 +70,29 @@ func (r *wep2node) IsReady() bool {
 // or a remote tunnel for which a veth pair gets cross connected with BPF XDP
 func (r *wep2node) Deploy(req *endpointpb.EndpointRequest) error {
 	for _, ep := range req.Endpoints {
-		// get random names for veth sides as they will be created in root netns first
-		vethA, vethB, err := createVethPair()
-		if err != nil {
-			return err
-		}
+		// check veth pair existance
 		epA := Endpoint{
 			ifName:  ep.IfName,
 			isLocal: true,
 			nsPath:  r.nsPath,
-			veth:    vethA,
 		}
 		epB := Endpoint{
 			ifName:  getVethName(getHashValue(getNsIfName(req.NodeKey.Topology, req.NodeKey.NodeName, ep.IfName))),
 			isLocal: true,
-			veth:    vethB,
 			nsPath:  "", // this is explicit since this is the host namespace on which this req is send
+		}
+		// since a veth pair delates both ends we assume that if 1 ens exists the ep2node veth pait exists
+		if doesItfceExistsInNS(epA.ifName, epA.nsPath) || doesItfceExists(epB.ifName) {
+			r.l.Info("veth pair already exists", "epA", ep.IfName, "epB", epB.ifName)
+			continue
+		}
+		// the ep2node veth-pair does not exist -> create it
+
+		// get random names for veth sides as they will be created in root netns first
+		var err error
+		epA.veth, epB.veth, err = createVethPair()
+		if err != nil {
+			return err
 		}
 		if err := epA.DeployEp2Node(); err != nil {
 			return err
@@ -93,7 +100,6 @@ func (r *wep2node) Deploy(req *endpointpb.EndpointRequest) error {
 		if err := epB.DeployEp2Node(); err != nil {
 			return err
 		}
-
 	}
 	return nil
 }

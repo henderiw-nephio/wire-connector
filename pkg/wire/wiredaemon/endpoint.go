@@ -67,7 +67,7 @@ func (r *Endpoint) SetMAC(mac net.HardwareAddr) {
 }
 
 func (r *Endpoint) DeployEp2Node() error {
-	r.l.Info("deploy endpoint", "ifName", r.ifName, "nsPath", r.nsPath)
+	r.l.Info("deploy ep2node endpoint", "ifName", r.ifName, "nsPath", r.nsPath)
 	if r.nsPath != "" {
 		// if this does not exist we add the interface
 		if !doesItfceExistsInNS(r.ifName, r.nsPath) {
@@ -91,14 +91,13 @@ func (r *Endpoint) DeployEp2Node() error {
 }
 
 func (r *Endpoint) DestroyEp2Node() error {
-	r.l.Info("deploy endpoint", "ifName", r.ifName, "nsPath", r.nsPath)
+	r.l.Info("destroy ep2node endpoint", "ifName", r.ifName, "nsPath", r.nsPath)
 	if r.nsPath != "" {
 		// if this does not exist we add the interface
 		// the delete is safe and validate the existance
 		if err := deleteIfInNS(r.ifName, r.nsPath); err != nil {
 			return err
 		}
-
 	} else {
 		if err := deleteItfce(r.ifName); err != nil {
 			return err
@@ -108,7 +107,7 @@ func (r *Endpoint) DestroyEp2Node() error {
 }
 
 func (r *Endpoint) DeployNode2Node(peerEp *Endpoint) error {
-	r.l.Info("deploy endpoint", "ifName", r.ifName, "nsPath", r.nsPath)
+	r.l.Info("deploy wire endpoint", "ifName", r.ifName, "nsPath", r.nsPath)
 	if r.isLocal {
 		// a local interface endpoint should exist
 		if _, err := netlink.LinkByName(r.ifName); err != nil {
@@ -121,7 +120,6 @@ func (r *Endpoint) DeployNode2Node(peerEp *Endpoint) error {
 			if _, err := createTunnel(r.ifName, peerEp.hostIP, r.hostIP, 200); err != nil {
 				return err
 			}
-
 		}
 	}
 	return nil
@@ -131,10 +129,13 @@ func (r *Endpoint) DeployNode2Node(peerEp *Endpoint) error {
 // for local endpoints it deletes the veth itfce from the container ns
 // for remote endpoints it deletes the tun interface and xdp
 func (r *Endpoint) DestroyNode2Node() error {
-	r.l.Info("destroy endpoint", "ifName", r.ifName)
-
-	if err := deleteItfce(r.ifName); err != nil {
-		return err
+	r.l.Info("destroy wire endpoint", "ifName", r.ifName, "local", r.isLocal)
+	// we only need to destroy non local ep of a wire since the other end is managed by node2ep
+	if !r.isLocal {
+		if err := deleteItfce(r.ifName); err != nil {
+			r.l.Info("deleteItfce failed", "itfce", r.ifName, "err", err.Error())
+			return err
+		}
 	}
 	return nil
 }

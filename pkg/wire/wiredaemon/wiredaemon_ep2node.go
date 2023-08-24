@@ -35,11 +35,12 @@ func (r *daemon) EndpointUpSert(ctx context.Context, req *endpointpb.EndpointReq
 	r.l.Info("upsert...")
 
 	// this validates the container exists and returns a valid nsPath if it exists
+	// if the nsPath does not exist the container is not ready and we return a NOK response
 	nsPath, err := r.getContainerNsPath(ctx, types.NamespacedName{Namespace: req.NodeKey.Topology, Name: req.NodeKey.NodeName})
 	if err != nil {
 		return &endpointpb.EmptyResponse{StatusCode: endpointpb.StatusCode_NOK, Reason: fmt.Sprintf("container not ready, err: %s", err.Error())}, nil
 	}
-	// after this check we determine we are ready to wire
+	// container is ready
 	w := NewWireEp2Node(ctx, nsPath, &WireEp2NodeConfig{CRI: r.cri})
 	if err := w.Deploy(req); err != nil {
 		return &endpointpb.EmptyResponse{StatusCode: endpointpb.StatusCode_NOK, Reason: err.Error()}, nil

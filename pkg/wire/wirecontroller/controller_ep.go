@@ -30,13 +30,13 @@ func (r *wc) AddEndpointWatch(fn wire.CallbackFn) {}
 func (r *wc) DeleteEndpointWatch()                {}
 
 func (r *wc) EndpointGet(ctx context.Context, req *endpointpb.EndpointRequest) (*endpointpb.EndpointResponse, error) {
-	r.l.Info("ep get...")
+	r.l.Info("node-epa get...")
 	if req.NodeKey == nil {
 		return &endpointpb.EndpointResponse{}, status.Error(codes.InvalidArgument, "Invalid argument provided nil object")
 	}
-	epreq := &EpReq{EndpointRequest: req}
+	epreq := &NodeEpReq{EndpointRequest: req}
 	r.l.Info("get", "nsn", epreq.GetNSN())
-	ep, err := r.epCache.Get(epreq.GetNSN())
+	ep, err := r.nodeepCache.Get(epreq.GetNSN())
 	if err != nil {
 		return &endpointpb.EndpointResponse{StatusCode: endpointpb.StatusCode_NotFound, Reason: err.Error()}, nil
 	}
@@ -45,74 +45,74 @@ func (r *wc) EndpointGet(ctx context.Context, req *endpointpb.EndpointRequest) (
 
 func (r *wc) EndpointUpSert(ctx context.Context, req *endpointpb.EndpointRequest) (*endpointpb.EmptyResponse, error) {
 	// TODO allocate VPN
-	r.l.Info("ep upsert...")
+	r.l.Info("node-epa upsert...")
 	if req.NodeKey == nil {
 		return &endpointpb.EmptyResponse{}, status.Error(codes.InvalidArgument, "Invalid argument provided nil object")
 	}
-	epreq := &EpReq{EndpointRequest: req}
-	r.l.Info("ep upsert", "nsn", epreq.GetNSN())
-	if _, err := r.epCache.Get(epreq.GetNSN()); err != nil {
+	epreq := &NodeEpReq{EndpointRequest: req}
+	r.l.Info("node-epa upsert", "nsn", epreq.GetNSN())
+	if _, err := r.nodeepCache.Get(epreq.GetNSN()); err != nil {
 		// not found -> create a new link
-		r.l.Info("upsert ep cache", "nsn", epreq.GetNSN())
-		r.epCache.Upsert(ctx, epreq.GetNSN(), NewEndpoint(r.dispatcher, epreq))
+		r.l.Info("node-epa upsert cache", "nsn", epreq.GetNSN())
+		r.nodeepCache.Upsert(ctx, epreq.GetNSN(), NewNodeEndpoint(r.dispatcher, epreq))
 	}
-	r.epCreate(epreq, "api")
-	r.l.Info("creating...", "nsn", epreq.GetNSN())
+	r.nodeepCreate(epreq, "api")
+	r.l.Info("node-epa creating...", "nsn", epreq.GetNSN())
 	return &endpointpb.EmptyResponse{}, nil
 }
 
 func (r *wc) EndpointDelete(ctx context.Context, req *endpointpb.EndpointRequest) (*endpointpb.EmptyResponse, error) {
 	// TODO deallocate VPN
-	r.l.Info("delete...")
+	r.l.Info("node-epa delete...")
 	if req.NodeKey == nil {
 		return &endpointpb.EmptyResponse{}, status.Error(codes.InvalidArgument, "Invalid argument provided nil object")
 	}
-	epreq := &EpReq{EndpointRequest: req}
-	if _, err := r.epCache.Get(epreq.GetNSN()); err == nil {
-		r.l.Info("delete", "nsn", epreq.GetNSN())
-		r.epDelete(epreq, "api")
+	epreq := &NodeEpReq{EndpointRequest: req}
+	if _, err := r.nodeepCache.Get(epreq.GetNSN()); err == nil {
+		r.l.Info("node-epa delete", "nsn", epreq.GetNSN())
+		r.nodeepDelete(epreq, "api")
 	}
-	r.l.Info("deleting...", "nsn", epreq.GetNSN())
+	r.l.Info("node-epa deleting...", "nsn", epreq.GetNSN())
 	return &endpointpb.EmptyResponse{}, nil
 }
 
-func (r *wc) epCreate(req *EpReq, origin string) {
+func (r *wc) nodeepCreate(req *NodeEpReq, origin string) {
 	nsn := req.GetNSN()
-	log := r.l.WithValues("fn", "epCreate", "nsn", nsn, "origin", origin)
-	log.Info("epCreate ...start...")
+	log := r.l.WithValues("fn", "nodeepCreate", "nsn", nsn, "origin", origin)
+	log.Info("nodeepCreate ...start...")
 	// we want to resolve first to see if the daemon is available
 	resolvedData := r.resolveEndpoint(nsn)
-	r.l.Info("resolution", "resolvedData", *resolvedData)
-	r.epCache.Resolve(nsn, resolvedData)
+	r.l.Info("nodeepCreate resolution", "resolvedData", *resolvedData)
+	r.nodeepCache.Resolve(nsn, resolvedData)
 	if resolvedData.Success {
-		log.Info("resolution succeeded")
+		log.Info("nodeepCreate resolution succeeded")
 		// resolution worked for both epA and epB
-		r.epCache.HandleEvent(nsn, state.CreateEvent, &state.EventCtx{})
+		r.nodeepCache.HandleEvent(nsn, state.CreateEvent, &state.EventCtx{})
 
 	} else {
 		// handle event is done by the resolution with more specific info
-		log.Info("resolution failed")
+		log.Info("nodeepCreate resolution failed")
 		// from a callback we try to only deal
 		if origin != "callback" {
-			r.epCache.HandleEvent(nsn, state.ResolutionFailedEvent, &state.EventCtx{
+			r.nodeepCache.HandleEvent(nsn, state.ResolutionFailedEvent, &state.EventCtx{
 				Message: resolvedData.Message,
 			})
 		}
 	}
-	log.Info("epCreate ...end...")
+	log.Info("nodeepCreate ...end...")
 }
 
-func (r *wc) epDelete(req *EpReq, origin string) {
+func (r *wc) nodeepDelete(req *NodeEpReq, origin string) {
 	nsn := req.GetNSN()
-	log := r.l.WithValues("fn", "epDelete", "nsn", nsn, "origin", origin)
-	log.Info("epDelete ...start...")
+	log := r.l.WithValues("fn", "nodeepDelete", "nsn", nsn, "origin", origin)
+	log.Info("nodeepDelete ...start...")
 	// we want to resolve first to see if the daemon is available
 	resolvedData := r.resolveEndpoint(nsn)
 	r.l.Info("resolution", "resolvedData", *resolvedData)
-	r.epCache.Resolve(nsn, resolvedData)
+	r.nodeepCache.Resolve(nsn, resolvedData)
 	if resolvedData.Success {
 		log.Info("resolution succeeded")
-		r.epCache.HandleEvent(nsn, state.DeleteEvent, &state.EventCtx{})
+		r.nodeepCache.HandleEvent(nsn, state.DeleteEvent, &state.EventCtx{})
 	}
-	log.Info("epDelete ...end...")
+	log.Info("nodeepDelete ...end...")
 }

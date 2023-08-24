@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strconv"
 	"time"
 
 	"github.com/henderiw-nephio/network-node-operator/pkg/node"
@@ -36,9 +37,12 @@ import (
 	perrors "github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -80,7 +84,7 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 	r.resources = resources.New(r.APIPatchingApplicator, resources.Config{
 		Owns: []schema.GroupVersionKind{
 			invv1alpha1.EndpointGroupVersionKind,
-			invv1alpha1.TargetGroupVersionKind,
+			//invv1alpha1.TargetGroupVersionKind,
 		},
 	})
 	r.nodeRegistry = cfg.Noderegistry
@@ -138,7 +142,7 @@ func getEndpointReq(n *invv1alpha1.Node, nm *invv1alpha1.NodeModel) *endpointpb.
 }
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := log.FromContext(ctx)
+	log := log.FromContext(ctx).WithValues("resource", "nodeep")
 	log.Info("reconcile")
 
 	cr := &invv1alpha1.Node{}
@@ -150,10 +154,35 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return reconcile.Result{}, nil
 	}
 
+	epReq := getEndpointReq(cr, &invv1alpha1.NodeModel{})
+	epResp, err := r.wireclient.EndpointGet(ctx, epReq)
+	if err != nil {
+		// we should not recive an error since this indicates aan issue with the communication
+		log.Error(err, "cannot get endpoint")
+		cr.SetConditions(resourcev1alpha1.Failed("cannot get endpoint"))
+		return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+	}
+	exists := true
+	if epResp.StatusCode == endpointpb.StatusCode_NotFound {
+		exists = false
+	}
+	log.Info("endpoint get", "nodeKey", epResp.NodeKey.String(), "exists", exists, "status", epResp.StatusCode.String())
+
 	// we assume for now that the cleanup of the endpoints on the node happens automatically
 	// if the pod is deleted, the veth pairs will be cleaned up
 	// xdp entries are useless and will be overwritten to the real once
 	if meta.WasDeleted(cr) {
+		if exists {
+			if _, err := r.wireclient.EndpointDelete(ctx, epReq); err != nil {
+				log.Error(err, "cannot remove wire")
+				cr.SetConditions(resourcev1alpha1.WiringFailed("cannot remove wire"))
+				return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+			}
+			// TODO -> for now we poll, to be changed to event driven
+			cr.SetConditions(resourcev1alpha1.WiringUknown())
+			return reconcile.Result{RequeueAfter: 1 * time.Second}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+		}
+
 		if err := r.finalizer.RemoveFinalizer(ctx, cr); err != nil {
 			log.Error(err, "cannot remove finalizer")
 			cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
@@ -172,8 +201,12 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 	}
 
-	// TODO handle change of the network model config
+	// initialize the resource list + provide the topology key
+	r.resources.Init(client.MatchingLabels{
+		invv1alpha1.NephioTopologyKey: cr.Namespace,
+	})
 
+	// TODO handle change of the network model config
 	nm, err := r.getNodeModel(ctx, cr)
 	if err != nil {
 		// TODO delete interfaces
@@ -187,40 +220,40 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 	}
 
-	epReq := getEndpointReq(cr, nm)
-	epResp, err := r.wireclient.EndpointGet(ctx, epReq)
-	if err != nil {
-		// we should not recive an error since this indicates aan issue with the communication
-		log.Error(err, "cannot get endpoint")
-		cr.SetConditions(resourcev1alpha1.Failed("cannot get endpoint"))
-		return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
-	}
-	exists := true
-	if epResp.StatusCode == endpointpb.StatusCode_NotFound {
-		exists = false
-	}
-	log.Info("endpoint get", "nodeKey", epResp.NodeKey.String(), "exists", exists, "status", epResp.StatusCode.String())
-
-
 	// if everything is ok we dont have to deploy things
 	if epResp.StatusCode != endpointpb.StatusCode_OK {
+		epReq = getEndpointReq(cr, nm)
 		_, err := r.wireclient.EndpointCreate(ctx, epReq)
 		if err != nil {
 			log.Error(err, "cannot create endpoint")
 			cr.SetConditions(resourcev1alpha1.Failed("cannot create endpoint"))
 			return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 		}
-		log.Info("endpoint deploying...")
+		log.Info("deploying...")
 		cr.SetConditions(resourcev1alpha1.Action("creating"))
 		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
 	}
 
-	// TODO create endpoint resources in k8s api
+	// build endpoints based on the node model
+	for epIdx, itfce := range nm.Spec.Interfaces {
+		r.resources.AddNewResource(buildEndpoint(cr, itfce, epIdx).DeepCopy())
+	}
 
-	log.Info("endpoint deployed...")
+	// apply the resources to the api (endpoints)
+	if err := r.resources.APIApply(ctx, cr); err != nil {
+		if errd := r.resources.APIDelete(ctx, cr); errd != nil {
+			err = errors.Join(err, errd)
+			log.Error(err, "cannot populate and delete existingresources")
+			return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+		}
+		log.Error(err, "cannot populate resources")
+		cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
+		return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+	}
+
+	log.Info("deployed...")
 	cr.SetConditions(resourcev1alpha1.Ready())
 	return reconcile.Result{}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
-
 }
 
 func (r *reconciler) getNodeModel(ctx context.Context, cr *invv1alpha1.Node) (*invv1alpha1.NodeModel, error) {
@@ -243,4 +276,36 @@ func (r *reconciler) getNodeModel(ctx context.Context, cr *invv1alpha1.Node) (*i
 	cr.Status.UsedNodeModelRef = node.GetNodeModelConfig(ctx, nc)
 	// get interfaces
 	return node.GetInterfaces(ctx, nc)
+}
+
+func buildEndpoint(cr *invv1alpha1.Node, itfce invv1alpha1.NodeModelInterface, epIdx int) *invv1alpha1.Endpoint {
+	labels := map[string]string{}
+	labels[invv1alpha1.NephioTopologyKey] = cr.Namespace
+	labels[invv1alpha1.NephioProviderKey] = cr.Spec.Provider
+	labels[invv1alpha1.NephioInventoryNodeNameKey] = cr.Name
+	labels[invv1alpha1.NephioInventoryInterfaceNameKey] = itfce.Name
+	labels[invv1alpha1.NephioInventoryEndpointIndex] = strconv.Itoa(epIdx)
+	for k, v := range cr.Spec.GetUserDefinedLabels() {
+		labels[k] = v
+	}
+	for k, v := range cr.GetLabels() {
+		labels[k] = v
+	}
+	epSpec := invv1alpha1.EndpointSpec{
+		NodeName:      cr.GetName(),
+		InterfaceName: itfce.Name,
+	}
+
+	ep := invv1alpha1.BuildEndpoint(
+		metav1.ObjectMeta{
+			Name:            fmt.Sprintf("%s-%s", cr.GetName(), itfce.Name),
+			Namespace:       cr.GetNamespace(),
+			Labels:          labels,
+			OwnerReferences: []metav1.OwnerReference{{APIVersion: cr.APIVersion, Kind: cr.Kind, Name: cr.Name, UID: cr.UID, Controller: pointer.Bool(true)}},
+		},
+		epSpec,
+		invv1alpha1.EndpointStatus{},
+	)
+	ep.SetConditions(resourcev1alpha1.Ready())
+	return ep
 }

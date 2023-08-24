@@ -50,11 +50,9 @@ func NewWireNode2Node(ctx context.Context, req *wirepb.WireRequest, cfg *WireNod
 		l:   l,
 	}
 
-	return &w{
-		endpointA: r.getEndpoint(ctx, req, 0),
-		endpointB: r.getEndpoint(ctx, req, 1),
-		l:         l,
-	}
+	r.endpointA = r.getEndpoint(ctx, req, 0)
+	r.endpointB = r.getEndpoint(ctx, req, 1)
+	return r
 }
 
 type w struct {
@@ -82,7 +80,16 @@ func (r *w) getEndpoint(ctx context.Context, req *wirepb.WireRequest, epIdx int)
 		NsPath:  "", // this is just to indicate the endpoint is set on purpose to true
 	}
 
-	epHash := getHashValue(getNsIfName(epReq.Topology, epReq.NodeName, epReq.IfName))
+	// find the local endpoint since this is name of the hash we need
+	// -> this is mainly relevant for remote endpoints
+	var epHash string
+	if epCfg.IsLocal {
+		epHash = getHashValue(getNsIfName(epReq.Topology, epReq.NodeName, epReq.IfName))
+	} else {
+		otherepIdx := (epIdx + 1) % 2
+		epReq := req.Endpoints[otherepIdx]
+		epHash = getHashValue(getNsIfName(epReq.Topology, epReq.NodeName, epReq.IfName))
+	}
 
 	if epCfg.IsLocal {
 		epCfg.IfName = getVethName(epHash)
@@ -100,45 +107,25 @@ func (r *w) getEndpoint(ctx context.Context, req *wirepb.WireRequest, epIdx int)
 // or a remote tunnel for which a veth pair gets cross connected with BPF XDP
 func (r *w) Deploy() error {
 	if err := r.endpointA.DeployNode2Node(r.endpointB); err != nil {
+		r.l.Info("DeployNode2Node failed", "epA", r.endpointA, "err", err.Error())
 		return err
 	}
 	if err := r.endpointB.DeployNode2Node(r.endpointA); err != nil {
+		r.l.Info("DeployNode2Node failed", "epB", r.endpointB, "err", err.Error())
 		return err
 	}
 	la, err := netlink.LinkByName(r.endpointA.ifName)
 	if err != nil {
+		r.l.Info("DeployNode2Node get epA link failed", "epA", r.endpointA, "err", err.Error())
 		return err
 	}
-	lb, err := netlink.LinkByName(r.endpointA.ifName)
+	lb, err := netlink.LinkByName(r.endpointB.ifName)
 	if err != nil {
+		r.l.Info("DeployNode2Node get epB link failed", "epB", r.endpointB, "err", err.Error())
 		return err
 	}
-
 	if err := r.connect(la, lb); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r *w) Destroy() error {
-	la, err := netlink.LinkByName(r.endpointA.ifName)
-	if err != nil {
-		return err
-	}
-	if err := r.disconnect(la); err != nil {
-		return err
-	}
-	lb, err := netlink.LinkByName(r.endpointA.ifName)
-	if err != nil {
-		return err
-	}
-	if err := r.disconnect(lb); err != nil {
-		return err
-	}
-	if err := r.endpointA.DestroyNode2Node(); err != nil {
-		return err
-	}
-	if err := r.endpointB.DestroyNode2Node(); err != nil {
+		r.l.Info("DeployNode2Node connect failed", "err", err.Error())
 		return err
 	}
 	return nil
@@ -146,9 +133,40 @@ func (r *w) Destroy() error {
 
 func (r *w) connect(la, lb netlink.Link) error {
 	if err := r.xdp.UpsertXConnectBPFMap(la, lb); err != nil {
+		r.l.Info("UpsertXConnectBPFMap a -> b failed", "err", err.Error())
 		return err
 	}
 	if err := r.xdp.UpsertXConnectBPFMap(lb, la); err != nil {
+		r.l.Info("UpsertXConnectBPFMap b -> a failed", "err", err.Error())
+		return err
+	}
+	return nil
+}
+
+func (r *w) Destroy() error {
+	la, err := netlink.LinkByName(r.endpointA.ifName)
+	if err == nil {
+		// only if link exists we need to disconnect
+		if err := r.disconnect(la); err != nil {
+			r.l.Info("disconnect failed", "epA", r.endpointA, "err", err.Error())
+			return err
+		}
+	}
+
+	lb, err := netlink.LinkByName(r.endpointB.ifName)
+	if err == nil {
+		// only if link exists we need to disconnect
+		if err := r.disconnect(lb); err != nil {
+			r.l.Info("disconnect failed", "epB", r.endpointB, "err", err.Error())
+			return err
+		}
+	}
+	// handles only local delete
+	if err := r.endpointA.DestroyNode2Node(); err != nil {
+		return err
+	}
+	// handles only local delete
+	if err := r.endpointB.DestroyNode2Node(); err != nil {
 		return err
 	}
 	return nil

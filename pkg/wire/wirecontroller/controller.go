@@ -56,7 +56,7 @@ func New(ctx context.Context, cfg *Config) wire.Wirer {
 		daemonCache: cfg.DaemonCache,
 		podCache:    cfg.PodCache,
 		nodeCache:   cfg.NodeCache,
-		epCache:     NewEpCache(wire.NewCache[*Endpoint]()),
+		nodeepCache: NewEpCache(wire.NewCache[*NodeEndpoint]()),
 		wireCache:   NewWireCache(wire.NewCache[*Wire]()),
 		dispatcher:  dispatcher,
 		workerCache: workerCache,
@@ -79,8 +79,9 @@ func New(ctx context.Context, cfg *Config) wire.Wirer {
 						"ep1", fmt.Sprintf("%s/%s", o.WireResp.EndpointsStatus[1].StatusCode.String(), o.WireResp.EndpointsStatus[1].Reason),
 					)
 				}
-				for nsn, o := range r.epCache.List() {
-					r.l.Info("ep", "nsn", nsn, "wire resp", o.EpResp, "wire status", o.EpResp.StatusCode)
+				r.l.Info("nodeeps...")
+				for nsn, o := range r.nodeepCache.List() {
+					r.l.Info("nodeep", "nsn", nsn, "nodeep resp", o.NodeEpResp, "nodeep status", o.NodeEpResp.StatusCode)
 				}
 				time.Sleep(5 * time.Second)
 			}
@@ -93,7 +94,7 @@ type wc struct {
 	daemonCache wire.Cache[wiredaemon.Daemon]
 	podCache    wire.Cache[wirepod.Pod]
 	nodeCache   wire.Cache[wirenode.Node]
-	epCache     EpCache
+	nodeepCache NodeEpCache
 	wireCache   WireCache
 	workerCache wire.Cache[Worker]
 	dispatcher  Dispatcher
@@ -165,7 +166,7 @@ func (r *wc) daemonCallback(ctx context.Context, nsn types.NamespacedName, d any
 			r.workerCache.Delete(ctx, nsn)
 		}
 		// create a new client
-		w, err := NewWorker(ctx, r.wireCache, r.epCache, &client.Config{
+		w, err := NewWorker(ctx, r.wireCache, r.nodeepCache, &client.Config{
 			Address:  address,
 			Insecure: true,
 		})
@@ -190,7 +191,7 @@ func (r *wc) daemonCallback(ctx context.Context, nsn types.NamespacedName, d any
 
 	r.commonCallback(ctx, nsn, newd, &CallbackCtx{
 		Message:          "daemon failed",
-		Hold:             true, // when the daemon fails this most likely mean a daemon upgrade or restart, so we dont want to delete the other end
+		Hold:             true, // when the daemon fails this most likely mean a daemon upgrade or restart, so we dont want to delete the other end of the wire
 		EvalHostNodeName: true,
 	})
 	r.l.Info("daemonCallback ...end...", "nsn", nsn, "data", d)
@@ -268,6 +269,20 @@ func (r *wc) commonCallback(ctx context.Context, nsn types.NamespacedName, d any
 				}
 			}
 		}
+		for nodeepNSN, nodeep := range r.nodeepCache.List() {
+			nodeepNSN := nodeepNSN
+			if nodeep.NodeEpReq.IsResolved() && nodeep.NodeEpReq.CompareName(cbctx.EvalHostNodeName, nsn.Name) {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					r.nodeepCache.UnResolve(nodeepNSN)
+					r.nodeepCache.HandleEvent(nodeepNSN, state.ResolutionFailedEvent, &state.EventCtx{
+						Message: cbctx.Message,
+					})
+				}()
+			}
+
+		}
 	} else {
 		// create or update -> we treat these also as adjacent ep create/delete
 		for _, wire := range r.wireCache.List() {
@@ -280,6 +295,14 @@ func (r *wc) commonCallback(ctx context.Context, nsn types.NamespacedName, d any
 				} else {
 					r.wireDelete(wire.WireReq, "callback")
 				}
+			}()
+		}
+		for _, nodeep := range r.nodeepCache.List() {
+			nodeep := nodeep
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				r.nodeepCreate(nodeep.NodeEpReq, "callback")
 			}()
 		}
 	}
