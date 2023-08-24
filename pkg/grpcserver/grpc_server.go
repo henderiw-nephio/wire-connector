@@ -22,28 +22,37 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
+	"github.com/henderiw-nephio/wire-connector/pkg/proto/endpointpb"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/semaphore"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/reflection"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 type GrpcServer struct {
 	config Config
 	wirepb.UnimplementedWireServer
+	endpointpb.UnimplementedNodeEndpointServer
 
 	sem *semaphore.Weighted
 
 	// logger
 	l logr.Logger
 
-	//Resource Handlers
+	//wire Handlers
 	wireGetHandler    WireGetHandler
 	wireCreateHandler WireCreateHandler
 	wireDeleteHandler WireDeleteHandler
 	wireWatchHandler  WireWatchHandler
+
+	//ep Handlers
+	epGetHandler    EndpointGetHandler
+	epCreateHandler EndpointCreateHandler
+	epDeleteHandler EndpointDeleteHandler
+	epWatchHandler  EndpointWatchHandler
 
 	//health handlers
 	checkHandler CheckHandler
@@ -61,6 +70,12 @@ type WireGetHandler func(context.Context, *wirepb.WireRequest) (*wirepb.WireResp
 type WireCreateHandler func(context.Context, *wirepb.WireRequest) (*wirepb.EmptyResponse, error)
 type WireDeleteHandler func(context.Context, *wirepb.WireRequest) (*wirepb.EmptyResponse, error)
 type WireWatchHandler func(*wirepb.WatchRequest, wirepb.Wire_WireWatchServer) error
+
+// Endpoint Handlers
+type EndpointGetHandler func(context.Context, *endpointpb.EndpointRequest) (*endpointpb.EndpointResponse, error)
+type EndpointCreateHandler func(context.Context, *endpointpb.EndpointRequest) (*endpointpb.EmptyResponse, error)
+type EndpointDeleteHandler func(context.Context, *endpointpb.EndpointRequest) (*endpointpb.EmptyResponse, error)
+type EndpointWatchHandler func(*endpointpb.WatchRequest, endpointpb.NodeEndpoint_EndpointWatchServer) error
 
 type Option func(*GrpcServer)
 
@@ -103,8 +118,14 @@ func (s *GrpcServer) Start(ctx context.Context) error {
 	wirepb.RegisterWireServer(grpcServer, s)
 	s.l.Info("grpc server with wire service...")
 
+	endpointpb.RegisterNodeEndpointServer(grpcServer, s)
+	s.l.Info("grpc server with endpoint service...")
+
 	healthpb.RegisterHealthServer(grpcServer, s)
 	s.l.Info("grpc server with health service...")
+
+	reflection.Register(grpcServer)
+	s.l.Info("grpc server withreflection service...")
 
 	s.l.Info("starting grpc server...")
 	err = grpcServer.Serve(l)
@@ -148,6 +169,30 @@ func WithWireDeleteHandler(h WireDeleteHandler) func(*GrpcServer) {
 func WithWireWatchHandler(h WireWatchHandler) func(*GrpcServer) {
 	return func(s *GrpcServer) {
 		s.wireWatchHandler = h
+	}
+}
+
+func WithEndpointGetHandler(h EndpointGetHandler) func(*GrpcServer) {
+	return func(s *GrpcServer) {
+		s.epGetHandler = h
+	}
+}
+
+func WithEndpointCreateHandler(h EndpointCreateHandler) func(*GrpcServer) {
+	return func(s *GrpcServer) {
+		s.epCreateHandler = h
+	}
+}
+
+func WithEndpointDeleteHandler(h EndpointDeleteHandler) func(*GrpcServer) {
+	return func(s *GrpcServer) {
+		s.epDeleteHandler = h
+	}
+}
+
+func WithEndpointWatchHandler(h EndpointWatchHandler) func(*GrpcServer) {
+	return func(s *GrpcServer) {
+		s.epWatchHandler = h
 	}
 }
 

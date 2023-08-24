@@ -14,18 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package wire
+package resolve
 
-import (
-	"context"
-
-	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
-)
-
-type Wire interface {
-	Get(ctx context.Context, req *wirepb.WireRequest) (*wirepb.WireResponse, error)
-	UpSert(ctx context.Context, req *wirepb.WireRequest) (*wirepb.EmptyResponse, error)
-	Delete(ctx context.Context, req *wirepb.WireRequest) (*wirepb.EmptyResponse, error)
-	AddWatch(fn CallbackFn)
-	DeleteWatch()
+type Data struct {
+	Success         bool   // inidctaes if the resolution was successfull or not
+	Message         string // indicates why the resolution failed
+	PodNodeName     string // name of the pod
+	ServiceEndpoint string // ip address or dns name + port
+	HostIP          string // ip address
+	HostNodeName    string // name of the host node
 }

@@ -8,14 +8,13 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-
 // $BPF_CLANG and $BPF_CFLAGS are set by the Makefile.
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc $BPF_CLANG -cflags $BPF_CFLAGS bpf ../../ebpf/xconnect/xconnect.c -- -I../headers
 
 type XDP interface {
 	Init(ctx context.Context) error
-	UpsertXConnectBPFMap(from *netlink.Link, to *netlink.Link) error
-	DeleteXConnectBPFMap(from *netlink.Link) error
+	UpsertXConnectBPFMap(from netlink.Link, to netlink.Link) error
+	DeleteXConnectBPFMap(from netlink.Link) error
 }
 
 type xdpApp struct {
@@ -56,21 +55,21 @@ func xdpFlags(linkType string) int {
 	return 0 // native xdp (xdpdrv) by default
 }
 
-func (r *xdpApp) UpsertXConnectBPFMap(from *netlink.Link, to *netlink.Link) error {
-	if err := r.objs.bpfMaps.XconnectMap.Put(uint32((*from).Attrs().Index), uint32((*to).Attrs().Index)); err != nil {
+func (r *xdpApp) UpsertXConnectBPFMap(from netlink.Link, to netlink.Link) error {
+	if err := r.objs.bpfMaps.XconnectMap.Put(uint32(from.Attrs().Index), uint32(to.Attrs().Index)); err != nil {
 		return err
 	}
-	if err := netlink.LinkSetXdpFdWithFlags(*from, r.objs.bpfPrograms.XdpXconnect.FD(), xdpFlags((*from).Type())); err != nil {
+	if err := netlink.LinkSetXdpFdWithFlags(from, r.objs.bpfPrograms.XdpXconnect.FD(), xdpFlags(from.Type())); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (r *xdpApp) DeleteXConnectBPFMap(from *netlink.Link) error {
-	if err := netlink.LinkSetXdpFdWithFlags(*from, -1, xdpFlags((*from).Type())); err != nil {
+func (r *xdpApp) DeleteXConnectBPFMap(from netlink.Link) error {
+	if err := netlink.LinkSetXdpFdWithFlags(from, -1, xdpFlags(from.Type())); err != nil {
 		return err
 	}
-	if err := r.objs.bpfMaps.XconnectMap.Delete(uint32((*from).Attrs().Index)); err != nil {
+	if err := r.objs.bpfMaps.XconnectMap.Delete(uint32(from.Attrs().Index)); err != nil {
 		return err
 	}
 	return nil

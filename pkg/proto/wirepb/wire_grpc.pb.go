@@ -36,19 +36,19 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	Wire_Get_FullMethodName       = "/wire.Wire/Get"
-	Wire_Create_FullMethodName    = "/wire.Wire/Create"
-	Wire_Delete_FullMethodName    = "/wire.Wire/Delete"
-	Wire_WireWatch_FullMethodName = "/wire.Wire/WireWatch"
+	Wire_WireGet_FullMethodName    = "/wire.Wire/WireGet"
+	Wire_WireCreate_FullMethodName = "/wire.Wire/WireCreate"
+	Wire_WireDelete_FullMethodName = "/wire.Wire/WireDelete"
+	Wire_WireWatch_FullMethodName  = "/wire.Wire/WireWatch"
 )
 
 // WireClient is the client API for Wire service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type WireClient interface {
-	Get(ctx context.Context, in *WireRequest, opts ...grpc.CallOption) (*WireResponse, error)
-	Create(ctx context.Context, in *WireRequest, opts ...grpc.CallOption) (*EmptyResponse, error)
-	Delete(ctx context.Context, in *WireRequest, opts ...grpc.CallOption) (*EmptyResponse, error)
+	WireGet(ctx context.Context, in *WireRequest, opts ...grpc.CallOption) (*WireResponse, error)
+	WireCreate(ctx context.Context, in *WireRequest, opts ...grpc.CallOption) (*EmptyResponse, error)
+	WireDelete(ctx context.Context, in *WireRequest, opts ...grpc.CallOption) (*EmptyResponse, error)
 	WireWatch(ctx context.Context, in *WatchRequest, opts ...grpc.CallOption) (Wire_WireWatchClient, error)
 }
 
@@ -60,27 +60,27 @@ func NewWireClient(cc grpc.ClientConnInterface) WireClient {
 	return &wireClient{cc}
 }
 
-func (c *wireClient) Get(ctx context.Context, in *WireRequest, opts ...grpc.CallOption) (*WireResponse, error) {
+func (c *wireClient) WireGet(ctx context.Context, in *WireRequest, opts ...grpc.CallOption) (*WireResponse, error) {
 	out := new(WireResponse)
-	err := c.cc.Invoke(ctx, Wire_Get_FullMethodName, in, out, opts...)
+	err := c.cc.Invoke(ctx, Wire_WireGet_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *wireClient) Create(ctx context.Context, in *WireRequest, opts ...grpc.CallOption) (*EmptyResponse, error) {
+func (c *wireClient) WireCreate(ctx context.Context, in *WireRequest, opts ...grpc.CallOption) (*EmptyResponse, error) {
 	out := new(EmptyResponse)
-	err := c.cc.Invoke(ctx, Wire_Create_FullMethodName, in, out, opts...)
+	err := c.cc.Invoke(ctx, Wire_WireCreate_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *wireClient) Delete(ctx context.Context, in *WireRequest, opts ...grpc.CallOption) (*EmptyResponse, error) {
+func (c *wireClient) WireDelete(ctx context.Context, in *WireRequest, opts ...grpc.CallOption) (*EmptyResponse, error) {
 	out := new(EmptyResponse)
-	err := c.cc.Invoke(ctx, Wire_Delete_FullMethodName, in, out, opts...)
+	err := c.cc.Invoke(ctx, Wire_WireDelete_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -123,9 +123,9 @@ func (x *wireWireWatchClient) Recv() (*WatchResponse, error) {
 // All implementations must embed UnimplementedWireServer
 // for forward compatibility
 type WireServer interface {
-	Get(context.Context, *WireRequest) (*WireResponse, error)
-	Create(context.Context, *WireRequest) (*EmptyResponse, error)
-	Delete(context.Context, *WireRequest) (*EmptyResponse, error)
+	WireGet(context.Context, *WireRequest) (*WireResponse, error)
+	WireCreate(context.Context, *WireRequest) (*EmptyResponse, error)
+	WireDelete(context.Context, *WireRequest) (*EmptyResponse, error)
 	WireWatch(*WatchRequest, Wire_WireWatchServer) error
 	mustEmbedUnimplementedWireServer()
 }
@@ -134,14 +134,14 @@ type WireServer interface {
 type UnimplementedWireServer struct {
 }
 
-func (UnimplementedWireServer) Get(context.Context, *WireRequest) (*WireResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Get not implemented")
+func (UnimplementedWireServer) WireGet(context.Context, *WireRequest) (*WireResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method WireGet not implemented")
 }
-func (UnimplementedWireServer) Create(context.Context, *WireRequest) (*EmptyResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Create not implemented")
+func (UnimplementedWireServer) WireCreate(context.Context, *WireRequest) (*EmptyResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method WireCreate not implemented")
 }
-func (UnimplementedWireServer) Delete(context.Context, *WireRequest) (*EmptyResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Delete not implemented")
+func (UnimplementedWireServer) WireDelete(context.Context, *WireRequest) (*EmptyResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method WireDelete not implemented")
 }
 func (UnimplementedWireServer) WireWatch(*WatchRequest, Wire_WireWatchServer) error {
 	return status.Errorf(codes.Unimplemented, "method WireWatch not implemented")
@@ -159,56 +159,56 @@ func RegisterWireServer(s grpc.ServiceRegistrar, srv WireServer) {
 	s.RegisterService(&Wire_ServiceDesc, srv)
 }
 
-func _Wire_Get_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Wire_WireGet_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(WireRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(WireServer).Get(ctx, in)
+		return srv.(WireServer).WireGet(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Wire_Get_FullMethodName,
+		FullMethod: Wire_WireGet_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WireServer).Get(ctx, req.(*WireRequest))
+		return srv.(WireServer).WireGet(ctx, req.(*WireRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Wire_Create_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Wire_WireCreate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(WireRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(WireServer).Create(ctx, in)
+		return srv.(WireServer).WireCreate(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Wire_Create_FullMethodName,
+		FullMethod: Wire_WireCreate_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WireServer).Create(ctx, req.(*WireRequest))
+		return srv.(WireServer).WireCreate(ctx, req.(*WireRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Wire_Delete_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Wire_WireDelete_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(WireRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(WireServer).Delete(ctx, in)
+		return srv.(WireServer).WireDelete(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Wire_Delete_FullMethodName,
+		FullMethod: Wire_WireDelete_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WireServer).Delete(ctx, req.(*WireRequest))
+		return srv.(WireServer).WireDelete(ctx, req.(*WireRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -242,16 +242,16 @@ var Wire_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*WireServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "Get",
-			Handler:    _Wire_Get_Handler,
+			MethodName: "WireGet",
+			Handler:    _Wire_WireGet_Handler,
 		},
 		{
-			MethodName: "Create",
-			Handler:    _Wire_Create_Handler,
+			MethodName: "WireCreate",
+			Handler:    _Wire_WireCreate_Handler,
 		},
 		{
-			MethodName: "Delete",
-			Handler:    _Wire_Delete_Handler,
+			MethodName: "WireDelete",
+			Handler:    _Wire_WireDelete_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

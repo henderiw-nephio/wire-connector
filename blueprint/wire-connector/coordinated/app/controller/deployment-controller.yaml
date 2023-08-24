@@ -50,6 +50,8 @@ spec:
           value: "true"
         - name: RECONCILER_WIRECONTROLLER
           value: "true"
+        - name: RECONCILER_NODEEPCONTROLLER
+          value: "true"
         resources:
           requests:
             cpu: "100m"

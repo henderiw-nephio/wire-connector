@@ -17,12 +17,14 @@ limitations under the License.
 package wirecontroller
 
 import (
+	"context"
 	"fmt"
-	"sync"
 
 	"github.com/go-logr/logr"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
+	"github.com/henderiw-nephio/wire-connector/pkg/wire/cache/resolve"
+	"github.com/henderiw-nephio/wire-connector/pkg/wire/state"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
@@ -34,95 +36,72 @@ const (
 
 type WireCache interface {
 	Get(types.NamespacedName) (*Wire, error)
-	Upsert(types.NamespacedName, *Wire)
-	Delete(types.NamespacedName)
+	Upsert(context.Context, types.NamespacedName, *Wire)
+	Delete(context.Context, types.NamespacedName)
 	List() map[types.NamespacedName]*Wire
 	SetDesiredAction(types.NamespacedName, DesiredAction)
-	Resolve(nsn types.NamespacedName, resolvedData []*ResolvedData)
+	Resolve(nsn types.NamespacedName, resolvedData []*resolve.Data)
 	UnResolve(nsn types.NamespacedName, epIdx int)
-	HandleEvent(types.NamespacedName, Event, *EventCtx) error
+	HandleEvent(types.NamespacedName, state.Event, *state.EventCtx) error
 }
 
-func NewWireCache(workerCache wire.Cache[Worker]) WireCache {
+func NewWireCache(c wire.Cache[*Wire]) WireCache {
 	l := ctrl.Log.WithName("wire-cache")
-	return &cache{
-		db:          map[types.NamespacedName]*Wire{},
-		workerCache: workerCache,
-		l:           l,
+	return &wcache{
+		c: c,
+		l: l,
 	}
 }
 
-type cache struct {
-	m           sync.RWMutex
-	db          map[types.NamespacedName]*Wire
-	workerCache wire.Cache[Worker]
-	l           logr.Logger
+type wcache struct {
+	c wire.Cache[*Wire]
+	l logr.Logger
 }
 
 // Get return the type
-func (r *cache) Get(nsn types.NamespacedName) (*Wire, error) {
-	r.m.RLock()
-	defer r.m.RUnlock()
-
-	w, ok := r.db[nsn]
-	if !ok {
-		return nil, fmt.Errorf(NotFound)
-	}
-	return w, nil
+func (r *wcache) Get(nsn types.NamespacedName) (*Wire, error) {
+	return r.c.Get(nsn)
 }
 
 // Upsert creates or updates the entry in the cache
-func (r *cache) Upsert(nsn types.NamespacedName, newd *Wire) {
-	r.m.Lock()
-	defer r.m.Unlock()
-
-	r.db[nsn] = newd
+func (r *wcache) Upsert(ctx context.Context, nsn types.NamespacedName, w *Wire) {
+	r.c.Upsert(ctx, nsn, w)
 }
 
 // Delete deletes the entry in the cache
-func (r *cache) Delete(nsn types.NamespacedName) {
-	r.m.Lock()
-	defer r.m.Unlock()
-
-	delete(r.db, nsn)
+func (r *wcache) Delete(ctx context.Context, nsn types.NamespacedName) {
+	r.c.Delete(ctx, nsn)
 }
 
-func (r *cache) List() map[types.NamespacedName]*Wire {
-	r.m.RLock()
-	defer r.m.RUnlock()
-
-	wires := map[types.NamespacedName]*Wire{}
-	for nsn, x := range r.db {
-		wires[nsn] = x
-	}
-	return wires
+func (r *wcache) List() map[types.NamespacedName]*Wire {
+	return r.c.List()
 }
 
-func (r *cache) SetDesiredAction(nsn types.NamespacedName, desiredAction DesiredAction) {
+func (r *wcache) SetDesiredAction(nsn types.NamespacedName, desiredAction DesiredAction) {
 	w, err := r.Get(nsn)
 	if err == nil {
 		w.SetDesiredAction(desiredAction)
-		r.Upsert(w.WireReq.GetNSN(), w)
+		r.c.Upsert(context.Background(), nsn, w)
 	}
 }
 
-func (r *cache) Resolve(nsn types.NamespacedName, resolvedData []*ResolvedData) {
+func (r *wcache) Resolve(nsn types.NamespacedName, resolvedData []*resolve.Data) {
 	w, err := r.Get(nsn)
 	if err == nil {
 		w.WireReq.Resolve(resolvedData)
-		r.Upsert(w.WireReq.GetNSN(), w)
+		r.c.Upsert(context.Background(), nsn, w)
 	}
 }
 
-func (r *cache) UnResolve(nsn types.NamespacedName, epIdx int) {
+func (r *wcache) UnResolve(nsn types.NamespacedName, epIdx int) {
 	w, err := r.Get(nsn)
 	if err == nil {
 		w.WireReq.Unresolve(epIdx)
-		r.Upsert(w.WireReq.GetNSN(), w)
+		r.c.Upsert(context.Background(), nsn, w)
 	}
 }
 
-func (r *cache) HandleEvent(nsn types.NamespacedName, event Event, eventCtx *EventCtx) error {
+func (r *wcache) HandleEvent(nsn types.NamespacedName, event state.Event, eventCtx *state.EventCtx) error {
 	if eventCtx.EpIdx < 0 || eventCtx.EpIdx > 1 {
 		return fmt.Errorf("cannot handleEvent, invalid endpoint index %d", eventCtx.EpIdx)
 	}
@@ -131,15 +110,16 @@ func (r *cache) HandleEvent(nsn types.NamespacedName, event Event, eventCtx *Eve
 	if err != nil {
 		return fmt.Errorf("cannot handleEvent, nsn not found %s", nsn.String())
 	}
-	r.l.Info("handleEvent", "event", event, "evenCtx", eventCtx, "state", w.EndpointsState[eventCtx.EpIdx])
+	log := r.l.WithValues("event", event, "nsn", nsn, "evenCtx", eventCtx, "state", w.EndpointsState[eventCtx.EpIdx].String())
+	log.Info("handleEvent")
 
 	w.EndpointsState[eventCtx.EpIdx].HandleEvent(event, eventCtx, w)
 
 	// update the wire status
 	if w.DesiredAction == DesiredActionDelete && w.WireResp.StatusCode == wirepb.StatusCode_OK {
-		r.Delete(nsn)
+		r.c.Delete(context.Background(), nsn)
 	} else {
-		r.Upsert(nsn, w)
+		r.Upsert(context.Background(), nsn, w)
 	}
 	return nil
 }

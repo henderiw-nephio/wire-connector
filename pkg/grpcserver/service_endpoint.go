@@ -19,12 +19,12 @@ package grpcserver
 import (
 	"context"
 
-	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
+	"github.com/henderiw-nephio/wire-connector/pkg/proto/endpointpb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-func (s *GrpcServer) WireGet(ctx context.Context, req *wirepb.WireRequest) (*wirepb.WireResponse, error) {
+func (s *GrpcServer) EndpointGet(ctx context.Context, req *endpointpb.EndpointRequest) (*endpointpb.EndpointResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, s.config.Timeout)
 	defer cancel()
 	err := s.acquireSem(ctx)
@@ -32,14 +32,14 @@ func (s *GrpcServer) WireGet(ctx context.Context, req *wirepb.WireRequest) (*wir
 		return nil, err
 	}
 	defer s.sem.Release(1)
-	resp, err := s.wireGetHandler(ctx, req)
+	resp, err := s.epGetHandler(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 	return resp, nil
 }
 
-func (s *GrpcServer) WireCreate(ctx context.Context, req *wirepb.WireRequest) (*wirepb.EmptyResponse, error) {
+func (s *GrpcServer) EndpointCreate(ctx context.Context, req *endpointpb.EndpointRequest) (*endpointpb.EmptyResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, s.config.Timeout)
 	defer cancel()
 	err := s.acquireSem(ctx)
@@ -47,14 +47,14 @@ func (s *GrpcServer) WireCreate(ctx context.Context, req *wirepb.WireRequest) (*
 		return nil, err
 	}
 	defer s.sem.Release(1)
-	resp, err := s.wireCreateHandler(ctx, req)
+	resp, err := s.epCreateHandler(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 	return resp, nil
 }
 
-func (s *GrpcServer) WireDelete(ctx context.Context, req *wirepb.WireRequest) (*wirepb.EmptyResponse, error) {
+func (s *GrpcServer) EndpointDelete(ctx context.Context, req *endpointpb.EndpointRequest) (*endpointpb.EmptyResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, s.config.Timeout)
 	defer cancel()
 	err := s.acquireSem(ctx)
@@ -62,14 +62,14 @@ func (s *GrpcServer) WireDelete(ctx context.Context, req *wirepb.WireRequest) (*
 		return nil, err
 	}
 	defer s.sem.Release(1)
-	resp, err := s.wireDeleteHandler(ctx, req)
+	resp, err := s.epDeleteHandler(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 	return resp, nil
 }
 
-func (s *GrpcServer) WireWatch(req *wirepb.WatchRequest, stream wirepb.Wire_WireWatchServer) error {
+func (s *GrpcServer) EndpointWatch(req *endpointpb.WatchRequest, stream endpointpb.NodeEndpoint_EndpointWatchServer) error {
 	err := s.acquireSem(stream.Context())
 	if err != nil {
 		return err
@@ -77,7 +77,7 @@ func (s *GrpcServer) WireWatch(req *wirepb.WatchRequest, stream wirepb.Wire_Wire
 	defer s.sem.Release(1)
 
 	if s.watchHandler != nil {
-		return s.wireWatchHandler(req, stream)
+		return s.epWatchHandler(req, stream)
 	}
 	return status.Error(codes.Unimplemented, "")
 }

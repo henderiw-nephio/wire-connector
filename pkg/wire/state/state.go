@@ -14,34 +14,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package wirecontroller
+package state
 
-/*
-type Endpoint struct {
-	State   State
-	//Message string
-	//*ResolvedData
-}
-*/
-
-type ResolvedData struct {
-	Success         bool   // inidctaes if the resolution was successfull or not
-	Message         string // indicates why the resolution failed
-	PodNodeName     string // name of the pod
-	ServiceEndpoint string // ip address or dns name + port
-	HostIP          string // ip address
-	HostNodeName    string // name of the host node
+type WorkerEvent struct {
+	Action   WorkerAction
+	Req      any
+	EventCtx *EventCtx
 }
 
 type EventCtx struct {
-	//WireNSN types.NamespacedName
-	//Wire    *Wire
-	EpIdx int
-	//ResolvedData *ResolvedData
+	EpIdx    int
 	Message  string // used to indicate failures
 	Hold     bool
 	SameHost bool // inidcated this ep is on the same host as the peer ep
-	//Reason   string // used for failed events
 }
 
 type Event string
@@ -53,46 +38,67 @@ const (
 	CreatedEvent          Event = "created"
 	DeletedEvent          Event = "deleted"
 	FailedEvent           Event = "failed"
-	//CreateFailedEvent Event = "createFailed"
-	//DeleteFailedEvent Event = "deleteFailed"
 )
+
+type WorkerAction string
+
+const (
+	WorkerActionCreate WorkerAction = "create"
+	WorkerActionDelete WorkerAction = "delete"
+)
+
+type StateCtx struct {
+	State
+	EventCtx
+}
+
+type StateTransition interface {
+	Transition(newState State, eventCtx *EventCtx, generatedEvents ...WorkerAction)
+	GetAdditionalState(eventCtx *EventCtx) []StateCtx
+}
 
 type State interface {
 	String() string
-	HandleEvent(event Event, eventCtx *EventCtx, w *Wire)
+	HandleEvent(event Event, eventCtx *EventCtx, w StateTransition)
 }
 
 type Deleting struct{}
 
-func (s *Deleting) String() string {return "Deleting"}
+func (s *Deleting) String() string { return "Deleting" }
 
-func (s *Deleting) HandleEvent(event Event, eventCtx *EventCtx, w *Wire) {
+func (s *Deleting) HandleEvent(event Event, eventCtx *EventCtx, o StateTransition) {
 	switch event {
 	case CreateEvent:
 		if eventCtx.SameHost {
 			// do nothing
-			w.Transition(&Created{}, eventCtx)
+			o.Transition(&Created{}, eventCtx)
 		} else {
 			// action -> trigger create to the daemon
-			w.Transition(&Creating{}, eventCtx, "create")
+			o.Transition(&Creating{}, eventCtx, "create")
 		}
 
 	case DeleteEvent:
 		// action -> do nothing as deleting is ongoing
 	case ResolutionFailedEvent:
-		w.Transition(&ResolutionFailed{}, eventCtx)
+		o.Transition(&ResolutionFailed{}, eventCtx)
 		// action -> based on hold trigger delete event on the other end
 		if !eventCtx.Hold {
-			otherEpIdx := (eventCtx.EpIdx + 1) % 2
-			w.EndpointsState[otherEpIdx].HandleEvent(DeleteEvent, &EventCtx{
-				EpIdx: otherEpIdx,
-			}, w)
+			sctxs := o.GetAdditionalState(eventCtx)
+			for _, sctx := range sctxs {
+				sctx.State.HandleEvent(DeleteEvent, &sctx.EventCtx, o)
+			}
+			/*
+				otherEpIdx := (eventCtx.EpIdx + 1) % 2
+				w.EndpointsState[otherEpIdx].HandleEvent(DeleteEvent, &EventCtx{
+					EpIdx: otherEpIdx,
+				}, w)
+			*/
 		}
 	case DeletedEvent:
-		w.Transition(&Deleted{}, eventCtx)
+		o.Transition(&Deleted{}, eventCtx)
 		// action -> do nothing since the delete was successfull, trigger genericEvent
 	case FailedEvent:
-		w.Transition(&Failed{}, eventCtx)
+		o.Transition(&Failed{}, eventCtx)
 		// action -> do nothing, trigger genericEvent
 	default:
 		// these events should not happen
@@ -102,15 +108,15 @@ func (s *Deleting) HandleEvent(event Event, eventCtx *EventCtx, w *Wire) {
 
 type Deleted struct{}
 
-func (s *Deleted) String() string {return "Deleted"}
+func (s *Deleted) String() string { return "Deleted" }
 
-func (s *Deleted) HandleEvent(event Event, eventCtx *EventCtx, w *Wire) {
+func (s *Deleted) HandleEvent(event Event, eventCtx *EventCtx, o StateTransition) {
 	switch event {
 	case CreateEvent:
 		if eventCtx.SameHost {
-			w.Transition(&Created{}, eventCtx)
+			o.Transition(&Created{}, eventCtx)
 		} else {
-			w.Transition(&Creating{}, eventCtx, "create")
+			o.Transition(&Creating{}, eventCtx, "create")
 		}
 		// action -> trigger create to the daemon
 	case DeleteEvent:
@@ -125,31 +131,37 @@ func (s *Deleted) HandleEvent(event Event, eventCtx *EventCtx, w *Wire) {
 
 type Failed struct{} // here we trigger an action on the other end
 
-func (s *Failed) String() string {return "Failed"}
+func (s *Failed) String() string { return "Failed" }
 
-func (s *Failed) HandleEvent(event Event, eventCtx *EventCtx, w *Wire) {
+func (s *Failed) HandleEvent(event Event, eventCtx *EventCtx, o StateTransition) {
 	switch event {
 	case CreateEvent:
 		if eventCtx.SameHost {
-			w.Transition(&Created{}, eventCtx)
+			o.Transition(&Created{}, eventCtx)
 		} else {
-			w.Transition(&Creating{}, eventCtx, "create")
+			o.Transition(&Creating{}, eventCtx, "create")
 		}
 		// action -> trigger create to the daemon
 	case DeleteEvent:
 		if eventCtx.SameHost {
-			w.Transition(&Deleted{}, eventCtx)
+			o.Transition(&Deleted{}, eventCtx)
 		} else {
-			w.Transition(&Deleting{}, eventCtx, "delete")
+			o.Transition(&Deleting{}, eventCtx, "delete")
 		}
 		// action -> trigger create to the daemon
 	case ResolutionFailedEvent:
-		w.Transition(&ResolutionFailed{}, eventCtx)
+		o.Transition(&ResolutionFailed{}, eventCtx)
 		if !eventCtx.Hold {
-			otherEpIdx := (eventCtx.EpIdx + 1) % 2
-			w.EndpointsState[otherEpIdx].HandleEvent(DeleteEvent, &EventCtx{
-				EpIdx: otherEpIdx,
-			}, w)
+			sctxs := o.GetAdditionalState(eventCtx)
+			for _, sctx := range sctxs {
+				sctx.State.HandleEvent(DeleteEvent, &sctx.EventCtx, o)
+			}
+			/*
+				otherEpIdx := (eventCtx.EpIdx + 1) % 2
+				o.EndpointsState[otherEpIdx].HandleEvent(DeleteEvent, &EventCtx{
+					EpIdx: otherEpIdx,
+				}, o)
+			*/
 		}
 	default:
 		// these events should not happen
@@ -160,35 +172,41 @@ func (s *Failed) HandleEvent(event Event, eventCtx *EventCtx, w *Wire) {
 
 type Creating struct{}
 
-func (s *Creating) String() string {return "Creating"}
+func (s *Creating) String() string { return "Creating" }
 
-func (s *Creating) HandleEvent(event Event, eventCtx *EventCtx, w *Wire) {
+func (s *Creating) HandleEvent(event Event, eventCtx *EventCtx, o StateTransition) {
 	switch event {
 	case CreateEvent:
 		if eventCtx.SameHost {
-			w.Transition(&Created{}, eventCtx)
+			o.Transition(&Created{}, eventCtx)
 		}
 		// action -> do nothing as creating is ongoing
 	case DeleteEvent:
 		if eventCtx.SameHost {
-			w.Transition(&Deleted{}, eventCtx)
+			o.Transition(&Deleted{}, eventCtx)
 		} else {
-			w.Transition(&Deleting{}, eventCtx, "delete")
+			o.Transition(&Deleting{}, eventCtx, "delete")
 		}
 		// action -> trigger delete to the daemon
 	case ResolutionFailedEvent:
-		w.Transition(&ResolutionFailed{}, eventCtx)
+		o.Transition(&ResolutionFailed{}, eventCtx)
 		if !eventCtx.Hold {
-			otherEpIdx := (eventCtx.EpIdx + 1) % 2
-			w.EndpointsState[otherEpIdx].HandleEvent(DeleteEvent, &EventCtx{
-				EpIdx: otherEpIdx,
-			}, w)
+			sctxs := o.GetAdditionalState(eventCtx)
+			for _, sctx := range sctxs {
+				sctx.State.HandleEvent(DeleteEvent, &sctx.EventCtx, o)
+			}
+			/*
+				otherEpIdx := (eventCtx.EpIdx + 1) % 2
+				w.EndpointsState[otherEpIdx].HandleEvent(DeleteEvent, &EventCtx{
+					EpIdx: otherEpIdx,
+				}, w)
+			*/
 		}
 	case CreatedEvent:
-		w.Transition(&Created{}, eventCtx)
+		o.Transition(&Created{}, eventCtx)
 		// done
 	case FailedEvent:
-		w.Transition(&Failed{}, eventCtx)
+		o.Transition(&Failed{}, eventCtx)
 		// done
 	default:
 		// these events should not happen: DeletedEvent
@@ -197,26 +215,32 @@ func (s *Creating) HandleEvent(event Event, eventCtx *EventCtx, w *Wire) {
 
 type Created struct{}
 
-func (s *Created) String() string {return "Created"}
+func (s *Created) String() string { return "Created" }
 
-func (s *Created) HandleEvent(event Event, eventCtx *EventCtx, w *Wire) {
+func (s *Created) HandleEvent(event Event, eventCtx *EventCtx, o StateTransition) {
 	switch event {
 	case CreateEvent:
 		// do nothing
 	case DeleteEvent:
 		if eventCtx.SameHost {
-			w.Transition(&Deleted{}, eventCtx)
+			o.Transition(&Deleted{}, eventCtx)
 		} else {
-			w.Transition(&Deleting{}, eventCtx, "delete")
+			o.Transition(&Deleting{}, eventCtx, "delete")
 		}
 		// action -> trigger delete to the daemon
 	case ResolutionFailedEvent:
-		w.Transition(&ResolutionFailed{}, eventCtx)
+		o.Transition(&ResolutionFailed{}, eventCtx)
 		if !eventCtx.Hold {
-			otherEpIdx := (eventCtx.EpIdx + 1) % 2
-			w.EndpointsState[otherEpIdx].HandleEvent(DeleteEvent, &EventCtx{
-				EpIdx: otherEpIdx,
-			}, w)
+			sctxs := o.GetAdditionalState(eventCtx)
+			for _, sctx := range sctxs {
+				sctx.State.HandleEvent(DeleteEvent, &sctx.EventCtx, o)
+			}
+			/*
+				otherEpIdx := (eventCtx.EpIdx + 1) % 2
+				o.EndpointsState[otherEpIdx].HandleEvent(DeleteEvent, &EventCtx{
+					EpIdx: otherEpIdx,
+				}, o)
+			*/
 		}
 	default:
 		// these events should not happen: CreatedEvent, DeletedEvent, FailedEvent
@@ -225,9 +249,9 @@ func (s *Created) HandleEvent(event Event, eventCtx *EventCtx, w *Wire) {
 
 type ResolutionFailed struct{} // here we can either hold or trigger an action on the other end
 
-func (s *ResolutionFailed) String() string {return "ResolutionFailed"}
+func (s *ResolutionFailed) String() string { return "ResolutionFailed" }
 
-func (s *ResolutionFailed) HandleEvent(event Event, eventCtx *EventCtx, w *Wire) {
+func (s *ResolutionFailed) HandleEvent(event Event, eventCtx *EventCtx, w StateTransition) {
 	switch event {
 	case CreateEvent:
 		if eventCtx.SameHost {

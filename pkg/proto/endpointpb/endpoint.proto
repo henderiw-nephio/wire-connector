@@ -1,0 +1,84 @@
+/*
+Copyright 2022 Nokia.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+syntax = "proto3";
+
+//import "google/protobuf/any.proto";
+
+package endpoint;
+option go_package = "github.com/henderiw-nephio/wire-connector/pkg/proto/endpointpb";
+
+service NodeEndpoint {
+  rpc EndpointGet (EndpointRequest) returns (EndpointResponse) {}
+  rpc EndpointCreate (EndpointRequest) returns (EmptyResponse) {}
+  rpc EndpointDelete (EndpointRequest) returns (EmptyResponse) {}
+  rpc EndpointWatch (WatchRequest) returns (stream WatchResponse) {}
+}
+
+message NodeKey {
+  string topology = 1; // topology is reflected as a namespace
+  string nodeName = 2; // this is the podName
+}
+
+message EndpointRequest {
+  NodeKey nodeKey = 1;
+  repeated Endpoint endpoints = 2;
+  string hostNodeName = 3;
+  string hostIP = 4;
+  string serviceEndpoint = 5;
+}
+
+message Endpoint {
+  string ifName = 1; 
+}
+
+message EndpointResponse {
+  NodeKey nodeKey = 1;
+  repeated EndpointStatus endpointsStatus = 2;
+  StatusCode statusCode = 3;
+  string reason = 4;
+}
+
+message EndpointStatus {
+  string ifName = 1; 
+  StatusCode statusCode = 2;
+  string reason = 3;
+}
+
+message EmptyResponse{
+  StatusCode statusCode = 1;
+  string reason = 2;
+}
+
+message WatchRequest {
+  string topology = 1; // topology is reflected as a namespace
+  string nodeName = 2; // this is the podName
+  string ifName = 3; 
+}
+
+message WatchResponse {
+  string topology = 1; // topology is reflected as a namespace
+  string nodeName = 2; // this is the podName
+  string ifName = 3; 
+  StatusCode statusCode = 4;
+  string reason = 5;
+}
+
+enum StatusCode {
+  OK = 0; // the status is OK
+  NOK = 1; // the status is NOK
+  NotFound = 2; // the object does not exists
+}

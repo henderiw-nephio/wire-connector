@@ -61,7 +61,9 @@ generate: export BPF_CLANG := $(CLANG)
 generate: export BPF_CFLAGS := $(CFLAGS)
 generate: ## Run go generate against code.
 	go generate ./...
-	protoc -I . $(shell find ./pkg/ -name '*.proto') --gofast_out=. --gofast_opt=paths=source_relative  --go-grpc_out=. --go-grpc_opt=paths=source_relative
+	protoc -I . ./pkg/proto/endpointpb/endpoint.proto --gofast_out=. --gofast_opt=paths=source_relative  --go-grpc_out=. --go-grpc_opt=paths=source_relative
+	protoc -I . ./pkg/proto/wirepb/wire.proto --gofast_out=. --gofast_opt=paths=source_relative  --go-grpc_out=. --go-grpc_opt=paths=source_relative
+
 
 .PHONY: test
 test: fmt vet envtest ## Run tests.

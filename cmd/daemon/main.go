@@ -70,12 +70,12 @@ func main() {
 	}
 	// THIS IS JUST A TEST -> AVOID RUNNING THE XDP INIT PER DAEMON
 	/*
-	if os.Getenv("NODE_NAME") == "topo-control-plane" {
-		if err := xdpapp.Init(ctx); err != nil {
-			setupLog.Error(err, "cannot init xdp app")
-			os.Exit(1)
+		if os.Getenv("NODE_NAME") == "topo-control-plane" {
+			if err := xdpapp.Init(ctx); err != nil {
+				setupLog.Error(err, "cannot init xdp app")
+				os.Exit(1)
+			}
 		}
-	}
 	*/
 
 	if err := xdpapp.Init(ctx); err != nil {
@@ -95,9 +95,9 @@ func main() {
 		Address:  ":" + strconv.Itoa(9999),
 		Insecure: true,
 	},
-		grpcserver.WithWireGetHandler(p.Get),
-		grpcserver.WithWireCreateHandler(p.Create),
-		grpcserver.WithWireDeleteHandler(p.Delete),
+		grpcserver.WithWireGetHandler(p.WireGet),
+		grpcserver.WithWireCreateHandler(p.WireCreate),
+		grpcserver.WithWireDeleteHandler(p.WireDelete),
 		grpcserver.WithWireWatchHandler(p.WireWatch),
 		grpcserver.WithWatchHandler(wh.Watch),
 		grpcserver.WithCheckHandler(wh.Check),

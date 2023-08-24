@@ -72,7 +72,7 @@ func createVethPair() (netlink.Link, netlink.Link, error) {
 	return vethA, vethB, nil
 }
 
-func createTunnel(tunName, localIP, remoteIP string, vni int) (*netlink.Link, error) {
+func createTunnel(tunName, localIP, remoteIP string, vni int) (netlink.Link, error) {
 
 	tun := &netlink.Vxlan{
 		LinkAttrs: netlink.LinkAttrs{
@@ -104,7 +104,7 @@ func createTunnel(tunName, localIP, remoteIP string, vni int) (*netlink.Link, er
 		return nil, err
 	}
 	tunLink := netlink.Link(tun)
-	return &tunLink, nil
+	return tunLink, nil
 }
 
 func getLinkByName(name string) (*netlink.Link, error) {
@@ -129,9 +129,8 @@ func deleteItfce(name string) error {
 	return netlink.LinkDel(itfce)
 }
 
-func validateIfItfceExists(ifName string) bool {
-	_, err := netlink.LinkByName(ifName)
-	if err != nil {
+func doesItfceExists(ifName string) bool {
+	if _, err := netlink.LinkByName(ifName); err != nil {
 		// we assume the interface does not exist
 		return false
 	}
@@ -139,7 +138,7 @@ func validateIfItfceExists(ifName string) bool {
 	return true
 }
 
-func validateIfInNSExists(nsPath, ifName string) bool {
+func doesItfceExistsInNS(ifName, nsPath string) bool {
 	log.Infof("validate itfce %s in container ns %s", ifName, nsPath)
 	netns, err := ns.GetNS(nsPath)
 	if err != nil {
@@ -190,6 +189,17 @@ func getPeerVethIndexFrimIfInNS(nsPath, ifName string) (int, bool) {
 	return peerIndex, true
 }
 
+func setIfNameAndUp(ifName string, veth netlink.Link) error {
+	if err := netlink.LinkSetName(veth, ifName); err != nil {
+		return err
+	}
+	// set the link uo
+	if err := netlink.LinkSetUp(veth); err != nil {
+		return err
+	}
+	return nil
+}
+
 func addIfInNS(nsPath, ifName string, veth netlink.Link) error {
 	log.Infof("add itfce %s in container ns %s", ifName, nsPath)
 	netns, err := ns.GetNS(nsPath)
@@ -204,14 +214,7 @@ func addIfInNS(nsPath, ifName string, veth netlink.Link) error {
 	}
 	if err := netns.Do(func(_ ns.NetNS) error {
 		// change the name to the real interface name
-		if err := netlink.LinkSetName(veth, ifName); err != nil {
-			return err
-		}
-		// set the link uo
-		if err := netlink.LinkSetUp(veth); err != nil {
-			return err
-		}
-		return nil
+		return setIfNameAndUp(ifName, veth)
 	}); err != nil {
 		return err
 	}
@@ -222,7 +225,7 @@ func setIfUp(itfce netlink.Link) error {
 	return netlink.LinkSetUp(itfce)
 }
 
-func deleteIfInNS(nsPath, ifName string) error {
+func deleteIfInNS(ifName, nsPath string) error {
 	log.Infof("delete itfce %s in container: %s", ifName, nsPath)
 	netns, err := ns.GetNS(nsPath)
 	if err != nil {

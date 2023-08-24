@@ -1,34 +1,39 @@
+/*
+Copyright 2022 Nokia.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package wirecontroller
 
 import (
 	"context"
 
 	"github.com/go-logr/logr"
+	"github.com/henderiw-nephio/wire-connector/pkg/proto/endpointpb"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire/client"
+	"github.com/henderiw-nephio/wire-connector/pkg/wire/state"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
-
-type WorkerAction string
-
-const (
-	WorkerActionCreate WorkerAction = "create"
-	WorkerActionDelete WorkerAction = "delete"
-)
-
-type WorkerEvent struct {
-	Action   WorkerAction
-	WireReq  *WireReq
-	EventCtx *EventCtx
-}
 
 type Worker interface {
 	Start(ctx context.Context) error
 	Stop()
-	Write(e WorkerEvent)
+	Write(e state.WorkerEvent)
 }
 
-func NewWorker(ctx context.Context, wireCache WireCache, cfg *client.Config) (Worker, error) {
+func NewWorker(ctx context.Context, wireCache WireCache, epCache EpCache, cfg *client.Config) (Worker, error) {
 	l := ctrl.Log.WithName("worker").WithValues("address", cfg.Address)
 
 	c, err := client.New(cfg)
@@ -37,7 +42,7 @@ func NewWorker(ctx context.Context, wireCache WireCache, cfg *client.Config) (Wo
 	}
 	return &worker{
 		wireCache: wireCache,
-		ch:        make(chan WorkerEvent, 10),
+		ch:        make(chan state.WorkerEvent, 10),
 		client:    c,
 		l:         l,
 	}, nil
@@ -45,7 +50,8 @@ func NewWorker(ctx context.Context, wireCache WireCache, cfg *client.Config) (Wo
 
 type worker struct {
 	wireCache WireCache
-	ch        chan WorkerEvent
+	epCache   EpCache
+	ch        chan state.WorkerEvent
 	client    client.Client
 	cancel    context.CancelFunc
 	//logger
@@ -64,55 +70,93 @@ func (r *worker) Start(ctx context.Context) error {
 		for {
 			select {
 			case e, ok := <-r.ch:
+				r.l.Info("event", "ok", ok, "e", e)
 				if !ok {
-					r.l.Info("event", "nok", e)
 					continue
 				}
-				r.l.Info("event", "ok", e)
 				switch e.Action {
-				case WorkerActionCreate:
-					r.l.Info("create event", "nsn", e.WireReq.GetNSN(), "data", e.WireReq.WireRequest)
-					var eventCtx *EventCtx
-					resp, err := r.client.Create(ctx, e.WireReq.WireRequest)
-					r.l.Info("create event", "nsn", e.WireReq.GetNSN(), "resp", resp, "err", err)
-					if err != nil {
-						//failed
-						eventCtx = e.EventCtx
-						eventCtx.Message = err.Error()
-						r.wireCache.HandleEvent(e.WireReq.GetNSN(), FailedEvent, eventCtx)
-						continue
+				case state.WorkerActionCreate:
+					switch req := e.Req.(type) {
+					case *WireReq:
+						nsn := req.GetNSN()
+						r.l.Info("create wire event", "nsn", nsn, "data", req.WireRequest)
+						resp, err := r.client.WireCreate(ctx, req.WireRequest)
+						r.l.Info("create wire event", "nsn", nsn, "resp", resp, "err", err)
+						if err != nil {
+							eventCtx := e.EventCtx
+							eventCtx.Message = err.Error()
+							r.wireCache.HandleEvent(nsn, state.FailedEvent, eventCtx)
+							continue
+						}
+						if resp.StatusCode == wirepb.StatusCode_NOK {
+							eventCtx := e.EventCtx
+							eventCtx.Message = resp.GetReason()
+							r.wireCache.HandleEvent(nsn, state.FailedEvent, eventCtx)
+						}
+						// success
+						r.wireCache.HandleEvent(nsn, state.CreatedEvent, &state.EventCtx{
+							EpIdx: e.EventCtx.EpIdx,
+						})
+					case *EpReq:
+						nsn := req.GetNSN()
+						r.l.Info("create endpoint event", "nsn", nsn, "data", req.EndpointRequest)
+						resp, err := r.client.EndpointCreate(ctx, req.EndpointRequest)
+						r.l.Info("create endpoint event", "nsn", nsn, "resp", resp, "err", err)
+						if err != nil {
+							eventCtx := e.EventCtx
+							eventCtx.Message = err.Error()
+							r.epCache.HandleEvent(nsn, state.FailedEvent, eventCtx)
+							continue
+						}
+						if resp.StatusCode == endpointpb.StatusCode_NOK {
+							eventCtx := e.EventCtx
+							eventCtx.Message = resp.GetReason()
+							r.epCache.HandleEvent(nsn, state.FailedEvent, eventCtx)
+						}
+						// success
+						r.epCache.HandleEvent(nsn, state.CreatedEvent, &state.EventCtx{})
 					}
-					if resp.StatusCode == wirepb.StatusCode_NOK {
-						// event failed
-						eventCtx = e.EventCtx
-						eventCtx.Message = resp.GetReason()
-						r.wireCache.HandleEvent(e.WireReq.GetNSN(), FailedEvent, eventCtx)
-						continue
+				case state.WorkerActionDelete:
+					switch req := e.Req.(type) {
+					case *WireReq:
+						nsn := req.GetNSN()
+						r.l.Info("delete wire event", "nsn", nsn, "data", req.WireRequest)
+						resp, err := r.client.WireDelete(ctx, req.WireRequest)
+						r.l.Info("delete wire event", "nsn", nsn, "resp", resp, "err", err)
+						if err != nil {
+							eventCtx := e.EventCtx
+							eventCtx.Message = err.Error()
+							r.wireCache.HandleEvent(nsn, state.FailedEvent, eventCtx)
+							continue
+						}
+						if resp.StatusCode == wirepb.StatusCode_NOK {
+							eventCtx := e.EventCtx
+							eventCtx.Message = resp.GetReason()
+							r.wireCache.HandleEvent(nsn, state.FailedEvent, eventCtx)
+						}
+						// success
+						r.wireCache.HandleEvent(nsn, state.DeletedEvent, &state.EventCtx{
+							EpIdx: e.EventCtx.EpIdx,
+						})
+					case *EpReq:
+						nsn := req.GetNSN()
+						r.l.Info("delete endpoint event", "nsn", nsn, "data", req.EndpointRequest)
+						resp, err := r.client.EndpointCreate(ctx, req.EndpointRequest)
+						r.l.Info("delete endpoint event", "nsn", nsn, "resp", resp, "err", err)
+						if err != nil {
+							eventCtx := e.EventCtx
+							eventCtx.Message = err.Error()
+							r.epCache.HandleEvent(nsn, state.FailedEvent, eventCtx)
+							continue
+						}
+						if resp.StatusCode == endpointpb.StatusCode_NOK {
+							eventCtx := e.EventCtx
+							eventCtx.Message = resp.GetReason()
+							r.epCache.HandleEvent(nsn, state.FailedEvent, eventCtx)
+						}
+						// success
+						r.epCache.HandleEvent(nsn, state.DeletedEvent, &state.EventCtx{})
 					}
-					r.wireCache.HandleEvent(e.WireReq.GetNSN(), CreatedEvent, &EventCtx{
-						EpIdx: e.EventCtx.EpIdx,
-					})
-				case WorkerActionDelete:
-					r.l.Info("delete event", "event", e.WireReq)
-					var eventCtx *EventCtx
-					resp, err := r.client.Delete(ctx, e.WireReq.WireRequest)
-					if err != nil {
-						//failed
-						eventCtx = e.EventCtx
-						eventCtx.Message = err.Error()
-						r.wireCache.HandleEvent(e.WireReq.GetNSN(), FailedEvent, eventCtx)
-						continue
-					}
-					if resp.StatusCode == wirepb.StatusCode_NOK {
-						// event failed
-						eventCtx = e.EventCtx
-						eventCtx.Message = resp.GetReason()
-						r.wireCache.HandleEvent(e.WireReq.GetNSN(), FailedEvent, eventCtx)
-						continue
-					}
-					r.wireCache.HandleEvent(e.WireReq.GetNSN(), DeletedEvent, &EventCtx{
-						EpIdx: e.EventCtx.EpIdx,
-					})
 				}
 			case <-ctx.Done():
 				// cancelled
@@ -128,7 +172,7 @@ func (r *worker) Stop() {
 	r.cancel()
 }
 
-func (r *worker) Write(e WorkerEvent) {
+func (r *worker) Write(e state.WorkerEvent) {
 	r.ch <- e
 	/*
 		for {

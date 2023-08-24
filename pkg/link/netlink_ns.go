@@ -72,7 +72,7 @@ func createVethPair() (netlink.Link, netlink.Link, error) {
 	return vethA, vethB, nil
 }
 
-func createTunnel(tunName, localIP, remoteIP string, vni int) (*netlink.Link, error) {
+func createTunnel(tunName, localIP, remoteIP string, vni int) (netlink.Link, error) {
 
 	tun := &netlink.Vxlan{
 		LinkAttrs: netlink.LinkAttrs{
@@ -80,7 +80,7 @@ func createTunnel(tunName, localIP, remoteIP string, vni int) (*netlink.Link, er
 			Flags:  net.FlagUp,
 			TxQLen: 1000,
 		},
-		VxlanId:  200,
+		VxlanId: 200,
 		//VtepDevIndex: parentIf.Attrs().Index,
 		SrcAddr:  net.IP(localIP),
 		Group:    net.IP(remoteIP),
@@ -104,10 +104,10 @@ func createTunnel(tunName, localIP, remoteIP string, vni int) (*netlink.Link, er
 		return nil, err
 	}
 	tunLink := netlink.Link(tun)
-	return &tunLink, nil
+	return tunLink, nil
 }
 
-func getLinkByName(name string) (*netlink.Link, error) {
+func getLinkByName(name string) (netlink.Link, error) {
 	itfce, err := netlink.LinkByName(name)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
@@ -115,7 +115,7 @@ func getLinkByName(name string) (*netlink.Link, error) {
 		}
 		return nil, err
 	}
-	return &itfce, nil
+	return itfce, nil
 }
 
 func deleteItfce(name string) error {

@@ -19,6 +19,7 @@ package ctrlconfig
 import (
 	"time"
 
+	noder "github.com/henderiw-nephio/network-node-operator/pkg/node"
 	"github.com/henderiw-nephio/wire-connector/pkg/cri"
 	"github.com/henderiw-nephio/wire-connector/pkg/node"
 	"github.com/henderiw-nephio/wire-connector/pkg/pod"
@@ -41,4 +42,5 @@ type ControllerConfig struct {
 	PodCache    wire.Cache[wirepod.Pod]
 	DaemonCache wire.Cache[wiredaemon.Daemon]
 	NodeCache   wire.Cache[wirenode.Node]
+	Noderegistry noder.NodeRegistry
 }

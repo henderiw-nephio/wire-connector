@@ -29,7 +29,7 @@ import (
 )
 
 type stateConfig struct {
-	be wire.Wire
+	be wire.Wirer
 }
 
 type clientContext struct {
@@ -41,7 +41,7 @@ type s struct {
 	m sync.RWMutex
 	// key is clientName
 	clients map[string]*clientContext
-	be      wire.Wire
+	be      wire.Wirer
 	l       logr.Logger
 }
 
@@ -49,13 +49,12 @@ func NewProxyState(cfg *stateConfig) *s {
 	l := ctrl.Log.WithName("proxy-state")
 	return &s{
 		clients: map[string]*clientContext{},
-		//ipam:    c.Ipam,
-		be: cfg.be,
-		l:  l,
+		be:      cfg.be,
+		l:       l,
 	}
 }
 
-func (r *s) AddCallBackFn(req *wirepb.WatchRequest, stream wirepb.Wire_WireWatchServer) {
+func (r *s) AddWireCallBackFn(req *wirepb.WatchRequest, stream wirepb.Wire_WireWatchServer) {
 	p, _ := peer.FromContext(stream.Context())
 
 	r.m.Lock()
@@ -72,20 +71,20 @@ func (r *s) AddCallBackFn(req *wirepb.WatchRequest, stream wirepb.Wire_WireWatch
 	r.m.Unlock()
 
 	// we already validated the existance of the backend before calling this function
-	r.be.AddWatch(r.CreateCallBackFn(stream))
+	r.be.AddWireWatch(r.CreateCallBackFn(stream))
 
 	for range ctx.Done() {
-		r.DeleteCallBackFn(p.Addr.String())
+		r.DeleteWireCallBackFn(p.Addr.String())
 		r.l.Info("watch stopped", "address", p.Addr.String())
 		return
 
 	}
 }
 
-func (r *s) DeleteCallBackFn(clientName string) {
+func (r *s) DeleteWireCallBackFn(clientName string) {
 	r.m.Lock()
 	defer r.m.Unlock()
-	r.be.DeleteWatch()
+	r.be.DeleteWireWatch()
 	delete(r.clients, clientName)
 }
 

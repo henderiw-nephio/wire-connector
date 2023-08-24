@@ -18,14 +18,13 @@ package wiredaemon
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-logr/logr"
 	"github.com/henderiw-nephio/wire-connector/pkg/cri"
-	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
 	"github.com/henderiw-nephio/wire-connector/pkg/xdp"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -35,7 +34,7 @@ type Config struct {
 	CRI cri.CRI
 }
 
-func New(cfg *Config) wire.Wire {
+func New(cfg *Config) wire.Wirer {
 	l := ctrl.Log.WithName("wiredaemon")
 	return &daemon{
 		//wireCache: wire.NewCache[daemonwire.Wire](),
@@ -47,45 +46,34 @@ func New(cfg *Config) wire.Wire {
 
 type daemon struct {
 	//wireCache wire.Cache[daemonwire.Wire]
-
 	xdp xdp.XDP
 	cri cri.CRI
 	//logger
 	l logr.Logger
 }
 
-func (r *daemon) Get(ctx context.Context, req *wirepb.WireRequest) (*wirepb.WireResponse, error) {
-	return &wirepb.WireResponse{}, status.Error(codes.Unimplemented, "not implemented")
-}
+// TODO optimize this by using a cache to avoid querying all the time
+func (r *daemon) getContainerNsPath(ctx context.Context, nodeNSN types.NamespacedName) (string, error) {
+	containers, err := r.cri.ListContainers(ctx, nil)
+	if err != nil {
+		r.l.Error(err, "cannot get containers from cri")
+		return "", err
+	}
 
-func (r *daemon) UpSert(ctx context.Context, req *wirepb.WireRequest) (*wirepb.EmptyResponse, error) {
-	r.l.Info("upsert...")
-	w := NewWire(ctx, req, &WireConfig{XDP: r.xdp, CRI: r.cri})
-	if !w.IsReady() {
-		return &wirepb.EmptyResponse{StatusCode: wirepb.StatusCode_NOK, Reason: "endpoint not ready"}, nil
+	for _, c := range containers {
+		containerName := ""
+		if c.GetMetadata() != nil {
+			containerName = c.GetMetadata().GetName()
+		}
+		info, err := r.cri.GetContainerInfo(ctx, c.GetId())
+		if err != nil {
+			r.l.Error(err, "cannot get container info", "name", containerName, "id", c.GetId())
+			continue
+		}
+		r.l.Info("container", "name", containerName, "name", fmt.Sprintf("%s=%s", nodeNSN.Name, info.PodName), "namespace", fmt.Sprintf("%s=%s", nodeNSN.Namespace, info.Namespace))
+		if info.PodName == nodeNSN.Name && info.Namespace == nodeNSN.Namespace {
+			return info.NsPath, nil
+		}
 	}
-	if w.Exists() {
-		return &wirepb.EmptyResponse{StatusCode: wirepb.StatusCode_OK}, nil
-	}
-	if err := w.Deploy(); err != nil {
-		return &wirepb.EmptyResponse{StatusCode: wirepb.StatusCode_NOK, Reason: err.Error()}, nil
-	}
-	return &wirepb.EmptyResponse{StatusCode: wirepb.StatusCode_OK}, nil
+	return "", fmt.Errorf("not found")
 }
-
-func (r *daemon) Delete(ctx context.Context, req *wirepb.WireRequest) (*wirepb.EmptyResponse, error) {
-	w := NewWire(ctx, req, &WireConfig{XDP: r.xdp, CRI: r.cri})
-	if !w.IsReady() {
-		return &wirepb.EmptyResponse{StatusCode: wirepb.StatusCode_NOK, Reason: "endpoint not ready"}, nil
-	}
-	if !w.Exists() {
-		return &wirepb.EmptyResponse{StatusCode: wirepb.StatusCode_OK}, nil
-	}
-	if err := w.Destroy(); err != nil {
-		return &wirepb.EmptyResponse{StatusCode: wirepb.StatusCode_NOK, Reason: err.Error()}, nil
-	}
-	return &wirepb.EmptyResponse{StatusCode: wirepb.StatusCode_OK}, nil
-}
-
-func (r *daemon) AddWatch(fn wire.CallbackFn) {}
-func (r *daemon) DeleteWatch()                {}

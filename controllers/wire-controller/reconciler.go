@@ -90,8 +90,10 @@ type reconciler struct {
 
 func getWireReq(l *invv1alpha1.Link) *wirepb.WireRequest {
 	req := &wirepb.WireRequest{
-		Namespace: l.Namespace,
-		Name:      l.Name,
+		WireKey: &wirepb.WireKey{
+			Namespace: l.Namespace,
+			Name:      l.Name,
+		},
 		Endpoints: make([]*wirepb.Endpoint, len(l.Spec.Endpoints), len(l.Spec.Endpoints)),
 	}
 	for epIdx, ep := range l.Spec.Endpoints {
@@ -119,7 +121,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	wreq := getWireReq(cr)
-	wresp, err := r.wireclient.Get(ctx, wreq)
+	wresp, err := r.wireclient.WireGet(ctx, wreq)
 	if err != nil {
 		log.Error(err, "cannot get wire")
 		cr.SetConditions(resourcev1alpha1.WiringFailed("cannot get wire"))
@@ -145,7 +147,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	if meta.WasDeleted(cr) {
 		if exists {
-			if _, err := r.wireclient.Delete(ctx, wreq); err != nil {
+			if _, err := r.wireclient.WireDelete(ctx, wreq); err != nil {
 				log.Error(err, "cannot remove wire")
 				cr.SetConditions(resourcev1alpha1.WiringFailed("cannot remove wire"))
 				return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
@@ -176,7 +178,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	if exists && cr.GetCondition(resourcev1alpha1.ConditionTypeReady).Status == v1.ConditionFalse {
-		if _, err := r.wireclient.Delete(ctx, wreq); err != nil {
+		if _, err := r.wireclient.WireDelete(ctx, wreq); err != nil {
 			log.Error(err, "cannot remove wire")
 			cr.SetConditions(resourcev1alpha1.WiringFailed("cannot remove wire"))
 			return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
@@ -196,7 +198,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 		// if everything is ok we dont have to deploy things
 		if wresp.StatusCode != wirepb.StatusCode_OK {
-			_, err := r.wireclient.Create(ctx, wreq)
+			_, err := r.wireclient.WireCreate(ctx, wreq)
 			if err != nil {
 				log.Error(err, "cannot create wire")
 				cr.SetConditions(resourcev1alpha1.WiringFailed("cannot create wire"))

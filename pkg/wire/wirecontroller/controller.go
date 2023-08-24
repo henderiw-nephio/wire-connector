@@ -24,14 +24,16 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
 	wiredaemon "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/daemon"
 	wirenode "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/node"
 	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/pod"
+	"github.com/henderiw-nephio/wire-connector/pkg/wire/cache/resolve"
+
+	//"github.com/henderiw-nephio/wire-connector/pkg/wire/cache/worker"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire/client"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+	//"github.com/henderiw-nephio/wire-connector/pkg/wire/dispatcher"
+	"github.com/henderiw-nephio/wire-connector/pkg/wire/state"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	//"sigs.k8s.io/controller-runtime/pkg/event"
@@ -41,17 +43,22 @@ type Config struct {
 	DaemonCache wire.Cache[wiredaemon.Daemon]
 	PodCache    wire.Cache[wirepod.Pod]
 	NodeCache   wire.Cache[wirenode.Node]
+	//EndpointCache wire.Cache[*wireep.Endpoint]
 }
 
-func New(ctx context.Context, cfg *Config) wire.Wire {
+func New(ctx context.Context, cfg *Config) wire.Wirer {
 	l := ctrl.Log.WithName("wire-controller")
 
 	workerCache := wire.NewCache[Worker]()
+	dispatcher := NewDispatcher(workerCache)
+
 	r := &wc{
 		daemonCache: cfg.DaemonCache,
 		podCache:    cfg.PodCache,
 		nodeCache:   cfg.NodeCache,
-		wireCache:   NewWireCache(workerCache),
+		epCache:     NewEpCache(wire.NewCache[*Endpoint]()),
+		wireCache:   NewWireCache(wire.NewCache[*Wire]()),
+		dispatcher:  dispatcher,
 		workerCache: workerCache,
 		l:           l,
 	}
@@ -66,11 +73,14 @@ func New(ctx context.Context, cfg *Config) wire.Wire {
 				return
 			default:
 				r.l.Info("wires...")
-				for nsn, w := range r.wireCache.List() {
-					r.l.Info("wire", "nsn", nsn, "wire resp", w.WireResp, "wire status", w.WireResp.StatusCode,
-						"ep0", fmt.Sprintf("%s/%s", w.WireResp.EndpointsStatus[0].StatusCode.String(), w.WireResp.EndpointsStatus[0].Reason),
-						"ep1", fmt.Sprintf("%s/%s", w.WireResp.EndpointsStatus[1].StatusCode.String(), w.WireResp.EndpointsStatus[1].Reason),
+				for nsn, o := range r.wireCache.List() {
+					r.l.Info("wire", "nsn", nsn, "wire resp", o.WireResp, "wire status", o.WireResp.StatusCode,
+						"ep0", fmt.Sprintf("%s/%s", o.WireResp.EndpointsStatus[0].StatusCode.String(), o.WireResp.EndpointsStatus[0].Reason),
+						"ep1", fmt.Sprintf("%s/%s", o.WireResp.EndpointsStatus[1].StatusCode.String(), o.WireResp.EndpointsStatus[1].Reason),
 					)
+				}
+				for nsn, o := range r.epCache.List() {
+					r.l.Info("ep", "nsn", nsn, "wire resp", o.EpResp, "wire status", o.EpResp.StatusCode)
 				}
 				time.Sleep(5 * time.Second)
 			}
@@ -83,198 +93,48 @@ type wc struct {
 	daemonCache wire.Cache[wiredaemon.Daemon]
 	podCache    wire.Cache[wirepod.Pod]
 	nodeCache   wire.Cache[wirenode.Node]
+	epCache     EpCache
+	wireCache   WireCache
 	workerCache wire.Cache[Worker]
-
-	wireCache WireCache
+	dispatcher  Dispatcher
 
 	//geventCh chan event.GenericEvent
 
 	l logr.Logger
 }
 
-//type ResourceCallbackFn[T1 any] func(types.NamespacedName, T1)
-
-func (r *wc) validate(req *wirepb.WireRequest) error {
-	if r.wireCache == nil {
-		return fmt.Errorf("cache not initialized")
-	}
-	if req == nil {
-		return fmt.Errorf("invalid argument provided nil object")
-	}
-	if len(req.Endpoints) != 2 {
-		return fmt.Errorf("invalid argument provided emdpoints should have exectly 2 element, got: %d", len(req.Endpoints))
-	}
-	return nil
-}
-
-func (r *wc) AddWatch(fn wire.CallbackFn) {}
-func (r *wc) DeleteWatch()                {}
-
-func (r *wc) Get(ctx context.Context, req *wirepb.WireRequest) (*wirepb.WireResponse, error) {
-	r.l.Info("get...")
-	if err := r.validate(req); err != nil {
-		return &wirepb.WireResponse{}, status.Error(codes.InvalidArgument, "Invalid argument provided nil object")
-	}
-	wreq := &WireReq{req}
-	r.l.Info("get", "nsn", wreq.GetNSN())
-	w, err := r.wireCache.Get(wreq.GetNSN())
-	if err != nil {
-		return &wirepb.WireResponse{StatusCode: wirepb.StatusCode_NotFound, Reason: err.Error()}, nil
-	}
-	return w.GetWireResponse(), nil
-}
-
-func (r *wc) UpSert(ctx context.Context, req *wirepb.WireRequest) (*wirepb.EmptyResponse, error) {
-	// TODO allocate VPN
-	r.l.Info("upsert...")
-	if err := r.validate(req); err != nil {
-		return &wirepb.EmptyResponse{}, status.Error(codes.InvalidArgument, "Invalid argument provided nil object")
-	}
-	wreq := &WireReq{req}
-	r.l.Info("upsert", "nsn", wreq.GetNSN())
-	if _, err := r.wireCache.Get(wreq.GetNSN()); err != nil {
-		// not found -> create a new link
-		r.l.Info("upsert cache", "nsn", wreq.GetNSN())
-		r.wireCache.Upsert(wreq.GetNSN(), NewWire(r.workerCache, wreq, 200))
-	} else {
-		r.l.Info("upsert cache", "nsn", wreq.GetNSN(), "desired action", DesiredActionCreate)
-		r.wireCache.SetDesiredAction(wreq.GetNSN(), DesiredActionCreate)
-	}
-	r.wireCreate(wreq, "api")
-	r.l.Info("creating...", "nsn", wreq.GetNSN())
-	return &wirepb.EmptyResponse{}, nil
-}
-
-func (r *wc) Delete(ctx context.Context, req *wirepb.WireRequest) (*wirepb.EmptyResponse, error) {
-	// TODO deallocate VPN
-	r.l.Info("delete...")
-	if err := r.validate(req); err != nil {
-		return &wirepb.EmptyResponse{}, status.Error(codes.InvalidArgument, "Invalid argument provided nil object")
-	}
-	wreq := &WireReq{req}
-	if _, err := r.wireCache.Get(wreq.GetNSN()); err == nil {
-		r.wireCache.SetDesiredAction(wreq.GetNSN(), DesiredActionDelete)
-		r.l.Info("delete", "nsn", wreq.GetNSN())
-		r.wireDelete(wreq, "api")
-	}
-	r.l.Info("deleting...", "nsn", wreq.GetNSN())
-	return &wirepb.EmptyResponse{}, nil
-}
-
 // resolveEndpoint finds the service endpoint and daemon nodeName based on the network pod (namespace/name)
 // - check if the pod exists in the cache and if it is ready
 // -> if ready we get the nodeName the network pod is running on
 // - via the nodeName we can find the serviceendpoint in the daemon cache if the daemon is ready
-func (r *wc) resolveEndpoint(wreq *WireReq, epIdx int) *ResolvedData {
-	pod, err := r.podCache.Get(wreq.GetEndpointNodeNSN(epIdx))
+func (r *wc) resolveEndpoint(nsn types.NamespacedName) *resolve.Data {
+	pod, err := r.podCache.Get(nsn)
 	if err != nil {
-		return &ResolvedData{Message: fmt.Sprintf("pod not found: %s", wreq.GetEndpointNodeNSN(epIdx).String())}
+		return &resolve.Data{Message: fmt.Sprintf("pod not found: %s", nsn.String())}
 	}
 	if !pod.IsReady {
-		return &ResolvedData{Message: fmt.Sprintf("pod not ready: %s", wreq.GetEndpointNodeNSN(epIdx).String())}
+		return &resolve.Data{Message: fmt.Sprintf("pod not ready: %s", nsn.String())}
 	}
 	daemonHostNodeNSN := types.NamespacedName{
 		Namespace: "default",
 		Name:      pod.HostNodeName}
 	d, err := r.daemonCache.Get(daemonHostNodeNSN)
 	if err != nil {
-		return &ResolvedData{Message: fmt.Sprintf("wireDaemon not found: %s", daemonHostNodeNSN.String())}
+		return &resolve.Data{Message: fmt.Sprintf("wireDaemon not found: %s", daemonHostNodeNSN.String())}
 	}
 	if !d.IsReady {
-		return &ResolvedData{Message: fmt.Sprintf("wireDaemon not found: %s", daemonHostNodeNSN.String())}
+		return &resolve.Data{Message: fmt.Sprintf("wireDaemon not found: %s", daemonHostNodeNSN.String())}
 	}
 	if d.GRPCAddress == "" || d.GRPCPort == "" {
-		return &ResolvedData{Message: fmt.Sprintf("wireDaemon no grpc address/port: %s", daemonHostNodeNSN.String())}
+		return &resolve.Data{Message: fmt.Sprintf("wireDaemon no grpc address/port: %s", daemonHostNodeNSN.String())}
 	}
-	return &ResolvedData{
+	return &resolve.Data{
 		Success:         true,
 		PodNodeName:     pod.HostNodeName,
 		ServiceEndpoint: fmt.Sprintf("%s:%s", d.GRPCAddress, d.GRPCPort),
 		HostIP:          d.HostIP,
 		HostNodeName:    pod.HostNodeName,
 	}
-}
-
-func (r *wc) resolve(wreq *WireReq) []*ResolvedData {
-	resolvedData := make([]*ResolvedData, 2)
-	for epIdx := range wreq.Endpoints {
-		resolvedData[epIdx] = r.resolveEndpoint(wreq, epIdx)
-	}
-	return resolvedData
-}
-
-func (r *wc) wireCreate(wreq *WireReq, origin string) {
-	r.l.Info("wireCreate ...start...", "nsn", wreq.GetNSN(), "origin", origin)
-	// we want to resolve first to see if both endpoints resolve
-	// if not we dont create the endpoint event
-	resolvedData := r.resolve(wreq)
-	r.l.Info("wireCreate", "nsn", wreq.GetNSN(), "origin", origin, "resolvedData0", resolvedData[0], "resolvedData1", resolvedData[1])
-	r.wireCache.Resolve(wreq.GetNSN(), resolvedData)
-	if resolvedData[0].Success && resolvedData[1].Success {
-		r.l.Info("wireCreate", "nsn", wreq.GetNSN(), "origin", origin, "resolution", "succeeded")
-		// resolution worked for both epA and epB
-		r.wireCache.HandleEvent(wreq.GetNSN(), CreateEvent, &EventCtx{
-			EpIdx: 0,
-		})
-		// both endpoints resolve to the same host -> through dependency we indicate
-		// this (the state machine handles the dependency)
-		if resolvedData[0].HostIP == resolvedData[1].HostIP {
-			r.wireCache.HandleEvent(wreq.GetNSN(), CreateEvent, &EventCtx{
-				EpIdx:    1,
-				SameHost: true,
-			})
-		} else {
-			r.wireCache.HandleEvent(wreq.GetNSN(), CreateEvent, &EventCtx{
-				EpIdx: 1,
-			})
-		}
-	} else {
-		// handle event is done by the resolution with more specific info
-		r.l.Info("wireCreate", "nsn", wreq.GetNSN(), "origin", origin, "resolution", "failed")
-		// from a callback we try to only deal
-		if origin != "callback" {
-			r.wireCache.HandleEvent(wreq.GetNSN(), ResolutionFailedEvent, &EventCtx{
-				EpIdx:   0,
-				Message: resolvedData[0].Message,
-				Hold:    true,
-			})
-			r.wireCache.HandleEvent(wreq.GetNSN(), ResolutionFailedEvent, &EventCtx{
-				EpIdx:   1,
-				Message: resolvedData[0].Message,
-				Hold:    true,
-			})
-		}
-	}
-	r.l.Info("wireCreate ...end...", "nsn", wreq.GetNSN(), "origin", origin)
-}
-
-func (r *wc) wireDelete(wreq *WireReq, origin string) {
-	r.l.Info("wireDelete ...start...", "nsn", wreq.GetNSN(), "origin", origin)
-	// we want to resolve first to see if the endpoints resolve
-	// depending on this we generate delete events if the resolution was ok
-	resolvedData := r.resolve(wreq)
-	r.l.Info("wireDelete", "nsn", wreq.GetNSN(), "origin", origin, "resolvedData0", resolvedData[0], "resolvedData1", resolvedData[1])
-	r.wireCache.Resolve(wreq.GetNSN(), resolvedData)
-	if resolvedData[0].Success {
-		r.wireCache.HandleEvent(wreq.GetNSN(), DeleteEvent, &EventCtx{
-			EpIdx: 0,
-		})
-	}
-	if resolvedData[1].Success {
-		if resolvedData[0].Success && resolvedData[0].HostIP == resolvedData[1].HostIP {
-			// both endpoints resolve to the same host -> through dependency we indicate
-			// this (the state machine handles the dependency)
-			r.wireCache.HandleEvent(wreq.GetNSN(), DeleteEvent, &EventCtx{
-				EpIdx:    1,
-				SameHost: true,
-			})
-			return
-		}
-		r.wireCache.HandleEvent(wreq.GetNSN(), DeleteEvent, &EventCtx{
-			EpIdx: 1,
-		})
-	}
-	r.l.Info("wireDelete ...end...", "nsn", wreq.GetNSN(), "origin", origin)
 }
 
 type CallbackCtx struct {
@@ -305,7 +165,7 @@ func (r *wc) daemonCallback(ctx context.Context, nsn types.NamespacedName, d any
 			r.workerCache.Delete(ctx, nsn)
 		}
 		// create a new client
-		w, err := NewWorker(ctx, r.wireCache, &client.Config{
+		w, err := NewWorker(ctx, r.wireCache, r.epCache, &client.Config{
 			Address:  address,
 			Insecure: true,
 		})
@@ -399,7 +259,7 @@ func (r *wc) commonCallback(ctx context.Context, nsn types.NamespacedName, d any
 					go func() {
 						defer wg.Done()
 						r.wireCache.UnResolve(wireNSN, epIdx)
-						r.wireCache.HandleEvent(wireNSN, ResolutionFailedEvent, &EventCtx{
+						r.wireCache.HandleEvent(wireNSN, state.ResolutionFailedEvent, &state.EventCtx{
 							EpIdx:   epIdx,
 							Message: cbctx.Message,
 							Hold:    cbctx.Hold, // we do not want this event to be replciated to the other endpoint

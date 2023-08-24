@@ -28,6 +28,7 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/node-controller"
+	_ "github.com/henderiw-nephio/wire-connector/controllers/node-ep-controller"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/pod-controller"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/wire-controller"
 	"github.com/henderiw-nephio/wire-connector/pkg/grpcserver"
@@ -101,9 +102,9 @@ func main() {
 		Address:  ":" + strconv.Itoa(9999),
 		Insecure: true,
 	},
-		grpcserver.WithWireGetHandler(p.Get),
-		grpcserver.WithWireCreateHandler(p.Create),
-		grpcserver.WithWireDeleteHandler(p.Delete),
+		grpcserver.WithWireGetHandler(p.WireGet),
+		grpcserver.WithWireCreateHandler(p.WireCreate),
+		grpcserver.WithWireDeleteHandler(p.WireDelete),
 		grpcserver.WithWireWatchHandler(p.WireWatch),
 		grpcserver.WithWatchHandler(wh.Watch),
 		grpcserver.WithCheckHandler(wh.Check),
@@ -122,6 +123,7 @@ func main() {
 		PodCache:    pd,
 		DaemonCache: d,
 		NodeCache:   n,
+		//EpCache:     ep,
 	}
 
 	enabledReconcilers := parseReconcilers(enabledReconcilersString)

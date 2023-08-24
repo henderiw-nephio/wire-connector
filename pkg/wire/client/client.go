@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/henderiw-nephio/wire-connector/pkg/proto/endpointpb"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -38,10 +39,13 @@ const (
 type Client interface {
 	Start(ctx context.Context) error
 	Stop()
-	Get(ctx context.Context, req *wirepb.WireRequest) (*wirepb.WireResponse, error)
-	Create(ctx context.Context, req *wirepb.WireRequest) (*wirepb.EmptyResponse, error)
-	Delete(ctx context.Context, req *wirepb.WireRequest) (*wirepb.EmptyResponse, error)
+	WireGet(ctx context.Context, req *wirepb.WireRequest) (*wirepb.WireResponse, error)
+	WireCreate(ctx context.Context, req *wirepb.WireRequest) (*wirepb.EmptyResponse, error)
+	WireDelete(ctx context.Context, req *wirepb.WireRequest) (*wirepb.EmptyResponse, error)
 	// WireWatch
+	EndpointGet(ctx context.Context, req *endpointpb.EndpointRequest) (*endpointpb.EndpointResponse, error)
+	EndpointCreate(ctx context.Context, req *endpointpb.EndpointRequest) (*endpointpb.EmptyResponse, error)
+	EndpointDelete(ctx context.Context, req *endpointpb.EndpointRequest) (*endpointpb.EmptyResponse, error)
 }
 
 type Config struct {
@@ -72,10 +76,11 @@ func New(cfg *Config) (Client, error) {
 }
 
 type client struct {
-	cfg    *Config
-	cancel context.CancelFunc
-	conn   *grpc.ClientConn
-	client wirepb.WireClient
+	cfg      *Config
+	cancel   context.CancelFunc
+	conn     *grpc.ClientConn
+	wclient  wirepb.WireClient
+	epclient endpointpb.NodeEndpointClient
 	//logger
 	l logr.Logger
 }
@@ -101,9 +106,9 @@ func (r *client) Start(ctx context.Context) error {
 	clientCtx, cancel := context.WithCancel(ctx)
 	r.cancel = cancel
 
-	
 	//defer conn.Close()
-	r.client = wirepb.NewWireClient(r.conn)
+	r.wclient = wirepb.NewWireClient(r.conn)
+	r.epclient = endpointpb.NewNodeEndpointClient(r.conn)
 	r.l.Info("started...")
 	go func() {
 		for {
@@ -117,16 +122,28 @@ func (r *client) Start(ctx context.Context) error {
 	return nil
 }
 
-func (r *client) Get(ctx context.Context, req *wirepb.WireRequest) (*wirepb.WireResponse, error) {
-	return r.client.Get(ctx, req)
+func (r *client) WireGet(ctx context.Context, req *wirepb.WireRequest) (*wirepb.WireResponse, error) {
+	return r.wclient.WireGet(ctx, req)
 }
 
-func (r *client) Delete(ctx context.Context, req *wirepb.WireRequest) (*wirepb.EmptyResponse, error) {
-	return r.client.Delete(ctx, req)
+func (r *client) WireDelete(ctx context.Context, req *wirepb.WireRequest) (*wirepb.EmptyResponse, error) {
+	return r.wclient.WireDelete(ctx, req)
 }
 
-func (r *client) Create(ctx context.Context, req *wirepb.WireRequest) (*wirepb.EmptyResponse, error) {
-	return r.client.Create(ctx, req)
+func (r *client) WireCreate(ctx context.Context, req *wirepb.WireRequest) (*wirepb.EmptyResponse, error) {
+	return r.wclient.WireCreate(ctx, req)
+}
+
+func (r *client) EndpointGet(ctx context.Context, req *endpointpb.EndpointRequest) (*endpointpb.EndpointResponse, error) {
+	return r.epclient.EndpointGet(ctx, req)
+}
+
+func (r *client) EndpointDelete(ctx context.Context, req *endpointpb.EndpointRequest) (*endpointpb.EmptyResponse, error) {
+	return r.epclient.EndpointDelete(ctx, req)
+}
+
+func (r *client) EndpointCreate(ctx context.Context, req *endpointpb.EndpointRequest) (*endpointpb.EmptyResponse, error) {
+	return r.epclient.EndpointCreate(ctx, req)
 }
 
 func (r *client) getConn(opts []grpc.DialOption) (conn *grpc.ClientConn, err error) {

@@ -22,18 +22,22 @@ package wire;
 option go_package = "github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb";
 
 service Wire {
-  rpc Get (WireRequest) returns (WireResponse) {}
-  rpc Create (WireRequest) returns (EmptyResponse) {}
-  rpc Delete (WireRequest) returns (EmptyResponse) {}
+  rpc WireGet (WireRequest) returns (WireResponse) {}
+  rpc WireCreate (WireRequest) returns (EmptyResponse) {}
+  rpc WireDelete (WireRequest) returns (EmptyResponse) {}
   rpc WireWatch (WatchRequest) returns (stream WatchResponse) {}
 }
 
-message WireRequest {
+message WireKey {
   string namespace = 1;
   string name = 2;
-  repeated Endpoint endpoints = 3;
-  uint32 mtu = 5;
-  uint32 vpnID = 6;
+}
+
+message WireRequest {
+  WireKey wireKey = 1;
+  repeated Endpoint endpoints = 2;
+  uint32 mtu = 3;
+  uint32 vpnID = 4;
 }
 
 message Endpoint {
@@ -47,11 +51,10 @@ message Endpoint {
 }
 
 message WireResponse {
-  string namespace = 1;
-  string name = 2;
-  repeated EndpointStatus endpointsStatus = 3;
-  StatusCode statusCode = 4;
-  string reason = 5;
+  WireKey wireKey = 1;
+  repeated EndpointStatus endpointsStatus = 2;
+  StatusCode statusCode = 3;
+  string reason = 4;
 }
 
 message EndpointStatus {

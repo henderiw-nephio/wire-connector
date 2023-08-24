@@ -21,7 +21,8 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
-	"github.com/henderiw-nephio/wire-connector/pkg/wire"
+	"github.com/henderiw-nephio/wire-connector/pkg/wire/cache/resolve"
+	"github.com/henderiw-nephio/wire-connector/pkg/wire/state"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
@@ -34,25 +35,25 @@ const (
 )
 
 type Wire struct {
-	WorkerCache    wire.Cache[Worker]
+	dispatcher     Dispatcher
 	DesiredAction  DesiredAction
 	WireReq        *WireReq
 	WireResp       *WireResp
-	EndpointsState []State
+	EndpointsState []state.State
 	l              logr.Logger
 }
 
 // NewWire is like create link/wire, once the object exists, this is no longer required
-func NewWire(wc wire.Cache[Worker], wreq *WireReq, vpnID uint32) *Wire {
+func NewWire(d Dispatcher, wreq *WireReq, vpnID uint32) *Wire {
 	l := ctrl.Log.WithName("wire").WithValues("nsn", wreq.GetNSN())
 
 	wreq.AddVPN(vpnID)
 	return &Wire{
-		WorkerCache:    wc,
+		dispatcher:     d,
 		DesiredAction:  DesiredActionCreate,
 		WireReq:        wreq,
 		WireResp:       newWireResp(wreq),
-		EndpointsState: []State{&Deleted{}, &Deleted{}},
+		EndpointsState: []state.State{&state.Deleted{}, &state.Deleted{}},
 		l:              l,
 	}
 }
@@ -65,7 +66,20 @@ func (r *Wire) SetDesiredAction(a DesiredAction) {
 	r.DesiredAction = a
 }
 
-func (r *Wire) Transition(newState State, eventCtx *EventCtx, generatedEvents ...WorkerAction) {
+// GetAdditionalState returns the other endpoint state on the wire
+// + its associated event context to handle further events on the adjacent endpoint
+func (r *Wire) GetAdditionalState(eventCtx *state.EventCtx) []state.StateCtx {
+	otherEpIdx := (eventCtx.EpIdx + 1) % 2
+
+	return []state.StateCtx{
+		{
+			State:    r.EndpointsState[otherEpIdx],
+			EventCtx: state.EventCtx{EpIdx: otherEpIdx},
+		},
+	}
+}
+
+func (r *Wire) Transition(newState state.State, eventCtx *state.EventCtx, generatedEvents ...state.WorkerAction) {
 	r.l.Info("transition", "from/to", fmt.Sprintf("%s/%s", r.EndpointsState[eventCtx.EpIdx], newState), "eventCtx", eventCtx, "wireResp", r.WireResp, "generated events", generatedEvents)
 	r.EndpointsState[eventCtx.EpIdx] = newState
 	r.WireResp.UpdateStatus(newState, eventCtx)
@@ -74,27 +88,25 @@ func (r *Wire) Transition(newState State, eventCtx *EventCtx, generatedEvents ..
 		"ep1 status", fmt.Sprintf("%s/%s", r.WireResp.EndpointsStatus[1].StatusCode.String(), r.WireResp.EndpointsStatus[1].Reason),
 	)
 
-	// TODO update wirecache
-
 	for _, ge := range generatedEvents {
 		r.l.Info("transition generated event", "from/to", fmt.Sprintf("%s/%s", r.EndpointsState[eventCtx.EpIdx], newState), "ge", ge)
 		if r.WireReq.IsResolved(eventCtx.EpIdx) {
 			// should always resolve
-			worker, err := r.WorkerCache.Get(types.NamespacedName{
+			workerNsn := types.NamespacedName{
 				Namespace: "default",
 				Name:      r.WireReq.GetHostNodeName(eventCtx.EpIdx),
-			})
-			if err != nil {
-				// should never happen
-				r.HandleEvent(FailedEvent, eventCtx)
+			}
+
+			if err := r.dispatcher.Write(workerNsn, state.WorkerEvent{Action: ge, Req: r.WireReq, EventCtx: eventCtx}); err != nil {
+				// should never happen, as it means the worker does not exist
+				r.HandleEvent(state.FailedEvent, eventCtx)
 				continue
 			}
-			worker.Write(WorkerEvent{Action: ge, WireReq: r.WireReq, EventCtx: eventCtx})
 		}
 	}
 }
 
-func (r *Wire) HandleEvent(event Event, eventCtx *EventCtx) {
+func (r *Wire) HandleEvent(event state.Event, eventCtx *state.EventCtx) {
 	r.EndpointsState[eventCtx.EpIdx].HandleEvent(event, eventCtx, r)
 }
 
@@ -104,12 +116,22 @@ type WireReq struct {
 
 func (r *WireReq) GetNSN() types.NamespacedName {
 	return types.NamespacedName{
-		Namespace: r.Namespace,
-		Name:      r.Name,
+		Namespace: r.WireKey.Namespace,
+		Name:      r.WireKey.Name,
 	}
 }
 
-func (r *WireReq) Resolve(resolvedData []*ResolvedData) {
+func (r *WireReq) IsResolved(epIdx int) bool {
+	return r.Endpoints[epIdx].ServiceEndpoint != ""
+}
+
+func (r *WireReq) Unresolve(epIdx int) {
+	r.Endpoints[epIdx].HostIP = ""
+	r.Endpoints[epIdx].HostNodeName = ""
+	r.Endpoints[epIdx].ServiceEndpoint = ""
+}
+
+func (r *WireReq) Resolve(resolvedData []*resolve.Data) {
 	for epIdx, res := range resolvedData {
 		if res != nil {
 			//r.Endpoints[epIdx].NodeName = res.PodNodeName
@@ -133,16 +155,6 @@ func (r *WireReq) GetEndpointNodeNSN(epIdx int) types.NamespacedName {
 	}
 }
 
-func (r *WireReq) IsResolved(epIdx int) bool {
-	return r.Endpoints[epIdx].ServiceEndpoint != ""
-}
-
-func (r *WireReq) Unresolve(epIdx int) {
-	r.Endpoints[epIdx].HostIP = ""
-	r.Endpoints[epIdx].HostNodeName = ""
-	r.Endpoints[epIdx].ServiceEndpoint = ""
-}
-
 func (r *WireReq) GetHostNodeName(epIdx int) string {
 	return r.Endpoints[epIdx].HostNodeName
 }
@@ -158,8 +170,7 @@ func (r *WireReq) CompareName(epIdx int, hostNodeName bool, name string) bool {
 func newWireResp(req *WireReq) *WireResp {
 	return &WireResp{
 		WireResponse: &wirepb.WireResponse{
-			Namespace:       req.GetNamespace(),
-			Name:            req.GetName(),
+			WireKey: req.GetWireKey(),
 			EndpointsStatus: []*wirepb.EndpointStatus{{Reason: ""}, {Reason: ""}},
 		},
 	}
@@ -169,13 +180,13 @@ type WireResp struct {
 	*wirepb.WireResponse
 }
 
-func (r *WireResp) UpdateStatus(newState State, eventCtx *EventCtx) {
+func (r *WireResp) UpdateStatus(newState state.State, eventCtx *state.EventCtx) {
 	if r.EndpointsStatus == nil || len(r.EndpointsStatus) == 0 {
 		r.EndpointsStatus = []*wirepb.EndpointStatus{{Reason: ""}, {Reason: ""}}
 	}
 	// if the eventCtx massage is empty it means the transition was successfull
 	// only when we transition to Created or Deleted we put the status to OK
-	// when message is empty but the newState is not 
+	// when message is empty but the newState is not
 	if eventCtx.Message == "" {
 		if newState.String() == "Created" || newState.String() == "Deleted" {
 			r.EndpointsStatus[eventCtx.EpIdx] = &wirepb.EndpointStatus{
