@@ -26,6 +26,9 @@ import (
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
+	"github.com/henderiw-nephio/network-node-operator/pkg/node"
+	"github.com/henderiw-nephio/network-node-operator/pkg/node/srlinux"
+	"github.com/henderiw-nephio/network-node-operator/pkg/node/xserver"
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/node-controller"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/node-ep-controller"
@@ -106,6 +109,10 @@ func main() {
 		grpcserver.WithWireCreateHandler(p.WireCreate),
 		grpcserver.WithWireDeleteHandler(p.WireDelete),
 		grpcserver.WithWireWatchHandler(p.WireWatch),
+		grpcserver.WithEndpointGetHandler(p.EndpointGet),
+		grpcserver.WithEndpointCreateHandler(p.EndpointCreate),
+		grpcserver.WithEndpointDeleteHandler(p.EndpointDelete),
+		grpcserver.WithEndpointWatchHandler(p.EndpointWatch),
 		grpcserver.WithWatchHandler(wh.Watch),
 		grpcserver.WithCheckHandler(wh.Check),
 	)
@@ -123,7 +130,7 @@ func main() {
 		PodCache:    pd,
 		DaemonCache: d,
 		NodeCache:   n,
-		//EpCache:     ep,
+		Noderegistry: registerSupportedNodeProviders(),
 	}
 
 	enabledReconcilers := parseReconcilers(enabledReconcilersString)
@@ -200,4 +207,12 @@ func reconcilerIsEnabled(reconcilers []string, reconciler string) bool {
 		}
 	}
 	return false
+}
+
+func registerSupportedNodeProviders() node.NodeRegistry {
+	nodeRegistry := node.NewNodeRegistry()
+	srlinux.Register(nodeRegistry)
+	xserver.Register(nodeRegistry)
+
+	return nodeRegistry
 }

@@ -99,6 +99,10 @@ func main() {
 		grpcserver.WithWireCreateHandler(p.WireCreate),
 		grpcserver.WithWireDeleteHandler(p.WireDelete),
 		grpcserver.WithWireWatchHandler(p.WireWatch),
+		grpcserver.WithEndpointGetHandler(p.EndpointGet),
+		grpcserver.WithEndpointCreateHandler(p.EndpointCreate),
+		grpcserver.WithEndpointDeleteHandler(p.EndpointDelete),
+		grpcserver.WithEndpointWatchHandler(p.EndpointWatch),
 		grpcserver.WithWatchHandler(wh.Watch),
 		grpcserver.WithCheckHandler(wh.Check),
 	)

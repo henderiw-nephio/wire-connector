@@ -38,6 +38,12 @@ rules:
   resources:
   - links
   - links/status
+  - nodes
+  - nodes/status
+  - endpoints
+  - endpoints/status
+  - targets
+  - targets/status
   verbs:
   - get
   - list
@@ -46,3 +52,14 @@ rules:
   - patch
   - create
   - delete
+- apiGroups:
+  - inv.nephio.org
+  resources:
+  - nodeconfigs
+  - nodeconfigs/status
+  - nodemodels
+  - nodemodels/status
+  verbs:
+  - get
+  - list
+  - watch
