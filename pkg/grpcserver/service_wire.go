@@ -25,6 +25,9 @@ import (
 )
 
 func (s *GrpcServer) WireGet(ctx context.Context, req *wirepb.WireRequest) (*wirepb.WireResponse, error) {
+	if s.wireGetHandler == nil {
+		return &wirepb.WireResponse{}, status.Error(codes.Unimplemented, "not implemented")
+	}
 	ctx, cancel := context.WithTimeout(ctx, s.config.Timeout)
 	defer cancel()
 	err := s.acquireSem(ctx)
@@ -40,6 +43,9 @@ func (s *GrpcServer) WireGet(ctx context.Context, req *wirepb.WireRequest) (*wir
 }
 
 func (s *GrpcServer) WireCreate(ctx context.Context, req *wirepb.WireRequest) (*wirepb.EmptyResponse, error) {
+	if s.wireCreateHandler == nil {
+		return &wirepb.EmptyResponse{}, status.Error(codes.Unimplemented, "not implemented")
+	}
 	ctx, cancel := context.WithTimeout(ctx, s.config.Timeout)
 	defer cancel()
 	err := s.acquireSem(ctx)
@@ -55,6 +61,9 @@ func (s *GrpcServer) WireCreate(ctx context.Context, req *wirepb.WireRequest) (*
 }
 
 func (s *GrpcServer) WireDelete(ctx context.Context, req *wirepb.WireRequest) (*wirepb.EmptyResponse, error) {
+	if s.wireDeleteHandler == nil {
+		return &wirepb.EmptyResponse{}, status.Error(codes.Unimplemented, "not implemented")
+	}
 	ctx, cancel := context.WithTimeout(ctx, s.config.Timeout)
 	defer cancel()
 	err := s.acquireSem(ctx)
@@ -70,6 +79,9 @@ func (s *GrpcServer) WireDelete(ctx context.Context, req *wirepb.WireRequest) (*
 }
 
 func (s *GrpcServer) WireWatch(req *wirepb.WatchRequest, stream wirepb.Wire_WireWatchServer) error {
+	if s.wireWatchHandler == nil {
+		return status.Error(codes.Unimplemented, "not implemented")
+	}
 	err := s.acquireSem(stream.Context())
 	if err != nil {
 		return err

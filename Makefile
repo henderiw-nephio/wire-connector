@@ -13,7 +13,8 @@ CFLAGS := -O2 -g -Wall -Werror $(CFLAGS)
 # Image URL to use all building/pushing image targets
 IMG_DDAEMON ?= $(REGISTRY)/${PROJECT}-ddaemon:$(VERSION)
 IMG_DAEMON ?= $(REGISTRY)/${PROJECT}-daemon:$(VERSION)
-IMG_CONTROLLER ?= $(REGISTRY)/${PROJECT}-controller:$(VERSION)
+IMG_IN_CLUSTER_CONTROLLER ?= $(REGISTRY)/${PROJECT}-incluster-controller:$(VERSION)
+IMG_INTER_CLUSTER_CONTROLLER ?= $(REGISTRY)/${PROJECT}-intercluster-controller:$(VERSION)
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -63,6 +64,7 @@ generate: ## Run go generate against code.
 	go generate ./...
 	protoc -I . ./pkg/proto/endpointpb/endpoint.proto --gofast_out=. --gofast_opt=paths=source_relative  --go-grpc_out=. --go-grpc_opt=paths=source_relative
 	protoc -I . ./pkg/proto/wirepb/wire.proto --gofast_out=. --gofast_opt=paths=source_relative  --go-grpc_out=. --go-grpc_opt=paths=source_relative
+	protoc -I . ./pkg/proto/resolverpb/resolver.proto --gofast_out=. --gofast_opt=paths=source_relative  --go-grpc_out=. --go-grpc_opt=paths=source_relative
 
 
 .PHONY: test
@@ -85,12 +87,14 @@ run: fmt vet ## Run a controller from your host.
 .PHONY: docker-build
 docker-build: generate ## Build docker image with the manager.
 	docker build -f Dockerfile_Daemon -t ${IMG_DAEMON} .
-	docker build -f Dockerfile_Controller -t ${IMG_CONTROLLER} .
+	docker build -f Dockerfile_InClusterController -t ${IMG_IN_CLUSTER_CONTROLLER} .
+	docker build -f Dockerfile_InterClusterController -t ${IMG_INTER_CLUSTER_CONTROLLER} .
 
 .PHONY: docker-push
 docker-push:  ## Push docker image with the manager.
 	docker push ${IMG_DAEMON}
-	docker push ${IMG_CONTROLLER}
+	docker push ${IMG_IN_CLUSTER_CONTROLLER}
+	docker push ${IMG_INTER_CLUSTER_CONTROLLER}
 
 .PHONY: docker-build-controller
 docker-build-controller: generate ## Build docker image with the manager.

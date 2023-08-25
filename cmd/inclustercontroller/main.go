@@ -40,7 +40,9 @@ import (
 	wiredaemon "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/daemon"
 	wirenode "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/node"
 	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/pod"
-	"github.com/henderiw-nephio/wire-connector/pkg/wire/proxy"
+	nodeepproxy "github.com/henderiw-nephio/wire-connector/pkg/wire/proxy/nodeep"
+	resolverproxy "github.com/henderiw-nephio/wire-connector/pkg/wire/proxy/resolver"
+	wireproxy "github.com/henderiw-nephio/wire-connector/pkg/wire/proxy/wire"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire/wirecontroller"
 	reconciler "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
 	"go.uber.org/zap/zapcore"
@@ -92,12 +94,21 @@ func main() {
 	d := wire.NewCache[wiredaemon.Daemon]()
 	n := wire.NewCache[wirenode.Node]()
 
-	p := proxy.New(&proxy.Config{
-		Backend: wirecontroller.New(ctx, &wirecontroller.Config{
-			DaemonCache: d,
-			PodCache:    pd,
-			NodeCache:   n,
-		}),
+	wc := wirecontroller.New(ctx, &wirecontroller.Config{
+		DaemonCache: d,
+		PodCache:    pd,
+		NodeCache:   n,
+	})
+
+	nodeepp := nodeepproxy.New(&nodeepproxy.Config{
+		Backend: wc,
+	})
+	wirep := wireproxy.New(&wireproxy.Config{
+		Backend: wc,
+	})
+
+	resp := resolverproxy.New(&resolverproxy.Config{
+		Backend: wc,
 	})
 	wh := healthhandler.New()
 
@@ -105,14 +116,15 @@ func main() {
 		Address:  ":" + strconv.Itoa(9999),
 		Insecure: true,
 	},
-		grpcserver.WithWireGetHandler(p.WireGet),
-		grpcserver.WithWireCreateHandler(p.WireCreate),
-		grpcserver.WithWireDeleteHandler(p.WireDelete),
-		grpcserver.WithWireWatchHandler(p.WireWatch),
-		grpcserver.WithEndpointGetHandler(p.EndpointGet),
-		grpcserver.WithEndpointCreateHandler(p.EndpointCreate),
-		grpcserver.WithEndpointDeleteHandler(p.EndpointDelete),
-		grpcserver.WithEndpointWatchHandler(p.EndpointWatch),
+		grpcserver.WithWireGetHandler(wirep.WireGet),
+		grpcserver.WithWireCreateHandler(wirep.WireCreate),
+		grpcserver.WithWireDeleteHandler(wirep.WireDelete),
+		grpcserver.WithWireWatchHandler(wirep.WireWatch),
+		grpcserver.WithEndpointGetHandler(nodeepp.EndpointGet),
+		grpcserver.WithEndpointCreateHandler(nodeepp.EndpointCreate),
+		grpcserver.WithEndpointDeleteHandler(nodeepp.EndpointDelete),
+		grpcserver.WithEndpointWatchHandler(nodeepp.EndpointWatch),
+		grpcserver.WithResolverHandler(resp.Resolve),
 		grpcserver.WithWatchHandler(wh.Watch),
 		grpcserver.WithCheckHandler(wh.Check),
 	)
@@ -127,9 +139,9 @@ func main() {
 	}()
 
 	ctrlCfg := &ctrlconfig.ControllerConfig{
-		PodCache:    pd,
-		DaemonCache: d,
-		NodeCache:   n,
+		PodCache:     pd,
+		DaemonCache:  d,
+		NodeCache:    n,
 		Noderegistry: registerSupportedNodeProviders(),
 	}
 

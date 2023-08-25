@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: 
+  name: wire-connector-controller
+  namespace: network-system
+  annotations:
+    internal.kpt.dev/upstream-identifier: 'apps|DaemonSet|network-system|wire-connectore-controller'
+spec:
+  selector:
+    matchLabels:
+      fn.kptgen.dev/controller: wire-connector-controller
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: tbd
+        app.kubernetes.io/instance: tbd
+        app.kubernetes.io/managed-by: kpt
+        app.kubernetes.io/name: wire-connector
+        app.kubernetes.io/part-of: wire-connector
+        app.kubernetes.io/version: tbd
+        fn.kptgen.dev/controller: wire-connector-controller
+    spec:
+      tolerations:
+      - operator: Exists
+        effect: NoSchedule
+      serviceAccountName: wire-connector-controller
+      containers:
+      - name: wire-connector
+        image: europe-docker.pkg.dev/srlinux/eu.gcr.io/wire-connector-intercluster-controller:latest
+        command:
+        - /manager
+        env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: "NODE_NAME"
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: "NODE_IP"
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.hostIP
+        - name: RECONCILER_WIRECONTROLLER
+          value: "true"
+        - name: RECONCILER_CLUSTERCONTROLLER
+          value: "true"
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "50Mi"
+          limits:
+            cpu: "100m"
+            memory: "50Mi"

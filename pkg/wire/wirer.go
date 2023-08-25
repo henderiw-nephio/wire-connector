@@ -20,15 +20,38 @@ import (
 	"context"
 
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/endpointpb"
+	"github.com/henderiw-nephio/wire-connector/pkg/proto/resolverpb"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
 )
 
-type Wirer interface {
+type DaemonWirer interface {
+	Node2NodeWirer
+	Ep2NodeWirer
+}
+
+type InClusterWirer interface {
+	Node2NodeWirer
+	Ep2NodeWirer
+	Resolver
+}
+
+type InterClusterWirer interface {
+	Node2NodeWirer
+}
+
+type Resolver interface {
+	Resolve(ctx context.Context, req *resolverpb.ResolveRequest) (*resolverpb.ResolveResponse, error)
+}
+
+type Node2NodeWirer interface {
 	WireGet(ctx context.Context, req *wirepb.WireRequest) (*wirepb.WireResponse, error)
 	WireUpSert(ctx context.Context, req *wirepb.WireRequest) (*wirepb.EmptyResponse, error)
 	WireDelete(ctx context.Context, req *wirepb.WireRequest) (*wirepb.EmptyResponse, error)
 	AddWireWatch(fn CallbackFn)
 	DeleteWireWatch()
+}
+
+type Ep2NodeWirer interface {
 	EndpointGet(ctx context.Context, req *endpointpb.EndpointRequest) (*endpointpb.EndpointResponse, error)
 	EndpointUpSert(ctx context.Context, req *endpointpb.EndpointRequest) (*endpointpb.EmptyResponse, error)
 	EndpointDelete(ctx context.Context, req *endpointpb.EndpointRequest) (*endpointpb.EmptyResponse, error)

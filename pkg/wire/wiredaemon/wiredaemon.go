@@ -34,7 +34,7 @@ type Config struct {
 	CRI cri.CRI
 }
 
-func New(cfg *Config) wire.Wirer {
+func New(cfg *Config) wire.DaemonWirer {
 	l := ctrl.Log.WithName("wiredaemon")
 	return &daemon{
 		//wireCache: wire.NewCache[daemonwire.Wire](),

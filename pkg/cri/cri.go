@@ -18,7 +18,7 @@ import (
 const (
 	defaultTimeout  = 2 * time.Second
 	RuntimeEndpoint = "unix:///var/run/containerd/containerd.sock"
-	ImageEndpoint   = "unix:///var/run/containerd/containerd.sock"
+	//ImageEndpoint   = "unix:///var/run/containerd/containerd.sock"
 )
 
 const (
@@ -34,7 +34,7 @@ type CRI interface {
 type cri struct {
 	timeout       time.Duration
 	runtimeClient internalapi.RuntimeService
-	imageClient   internalapi.ImageManagerService
+	//imageClient   internalapi.ImageManagerService
 }
 
 func New() (CRI, error) {
@@ -42,15 +42,17 @@ func New() (CRI, error) {
 	if err != nil {
 		return nil, err
 	}
+	/*
 	imageClient, err := remote.NewRemoteImageService(ImageEndpoint, defaultTimeout, nil)
 	if err != nil {
 		return nil, err
 	}
+	*/
 
 	return &cri{
 		timeout:       defaultTimeout,
 		runtimeClient: runtimeClient,
-		imageClient:   imageClient,
+		//imageClient:   imageClient,
 	}, nil
 }
 

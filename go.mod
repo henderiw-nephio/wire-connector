@@ -7,6 +7,7 @@ require (
 	github.com/go-logr/logr v1.2.4
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/protobuf v1.5.3
+	github.com/google/go-cmp v0.5.9
 	github.com/google/uuid v1.3.0
 	github.com/henderiw-nephio/network-node-operator v0.0.0-20230725011206-3110827f2100
 	github.com/itchyny/gojq v0.12.13
@@ -26,12 +27,15 @@ require (
 	k8s.io/client-go v0.28.0-alpha.3
 	k8s.io/cri-api v0.27.3
 	k8s.io/kubernetes v1.27.0
+	k8s.io/utils v0.0.0-20230726121419-3b25d923346b
+	sigs.k8s.io/cluster-api v1.4.0-beta.2.0.20230527123250-e111168cdff3
 	sigs.k8s.io/controller-runtime v0.15.0
 )
 
 require (
 	github.com/Microsoft/go-winio v0.6.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
+	github.com/blang/semver v3.5.1+incompatible // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.2.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
@@ -48,7 +52,6 @@ require (
 	github.com/go-openapi/swag v0.22.4 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/google/gnostic-models v0.6.8 // indirect
-	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/pprof v0.0.0-20230323073829-e72429f035bd // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.7.0 // indirect
@@ -104,7 +107,6 @@ require (
 	k8s.io/component-base v0.27.4 // indirect
 	k8s.io/klog/v2 v2.100.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20230718181711-3c0fae5ee9fd // indirect
-	k8s.io/utils v0.0.0-20230726121419-3b25d923346b // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.3.0 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect

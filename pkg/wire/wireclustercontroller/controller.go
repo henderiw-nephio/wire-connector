@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package wirecontroller
+package wireclustercontroller
 
 import (
 	"context"
@@ -25,9 +25,13 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
-	wiredaemon "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/daemon"
-	wirenode "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/node"
-	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/pod"
+
+	wirecluster "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/cluster"
+	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/service"
+
+	//wiredaemon "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/daemon"
+	//wirenode "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/node"
+	//wirepod "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/pod"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire/cache/resolve"
 
 	"github.com/henderiw-nephio/wire-connector/pkg/wire/client"
@@ -38,31 +42,39 @@ import (
 )
 
 type Config struct {
-	DaemonCache wire.Cache[wiredaemon.Daemon]
-	PodCache    wire.Cache[wirepod.Pod]
-	NodeCache   wire.Cache[wirenode.Node]
+	ClusterCache  wire.Cache[wirecluster.Cluster]
+	ServiceCache  wire.Cache[wireservice.Service]
+	TopologyCache wire.Cache[struct{}]
+	//PodCache    wire.Cache[wirepod.Pod]
+	//NodeCache   wire.Cache[wirenode.Node]
 	//EndpointCache wire.Cache[*wireep.Endpoint]
 }
 
-func New(ctx context.Context, cfg *Config) wire.InClusterWirer {
-	l := ctrl.Log.WithName("wire-controller")
+func New(ctx context.Context, cfg *Config) wire.InterClusterWirer {
+	l := ctrl.Log.WithName("wire-cluster-controller")
 
 	workerCache := wire.NewCache[Worker]()
 	dispatcher := NewDispatcher(workerCache)
 
 	r := &wc{
-		daemonCache: cfg.DaemonCache,
-		podCache:    cfg.PodCache,
-		nodeCache:   cfg.NodeCache,
-		nodeepCache: NewEpCache(wire.NewCache[*NodeEndpoint]()),
+		clusterCache:  cfg.ClusterCache,
+		serviceCache:  cfg.ServiceCache,
+		topologyCache: cfg.TopologyCache,
+		//daemonCache: cfg.DaemonCache,
+		//podCache:    cfg.PodCache,
+		//nodeCache:   cfg.NodeCache,
+		//nodeepCache: NewEpCache(wire.NewCache[*NodeEndpoint]()),
 		wireCache:   NewWireCache(wire.NewCache[*Wire]()),
 		dispatcher:  dispatcher,
 		workerCache: workerCache,
 		l:           l,
 	}
-	r.daemonCache.AddWatch(r.daemonCallback)
-	r.podCache.AddWatch(r.podCallback)
-	r.nodeCache.AddWatch((r.nodeCallback))
+	//r.daemonCache.AddWatch(r.daemonCallback)
+	//r.podCache.AddWatch(r.podCallback)
+	//r.nodeCache.AddWatch((r.nodeCallback))
+	r.clusterCache.AddWatch(r.clusterCallback)
+	r.serviceCache.AddWatch(r.serviceCallback)
+	r.topologyCache.AddWatch(r.topologyCallback)
 
 	go func() {
 		for {
@@ -77,10 +89,6 @@ func New(ctx context.Context, cfg *Config) wire.InClusterWirer {
 						"ep1", fmt.Sprintf("%s/%s", o.WireResp.EndpointsStatus[1].StatusCode.String(), o.WireResp.EndpointsStatus[1].Reason),
 					)
 				}
-				r.l.Info("nodeeps...")
-				for nsn, o := range r.nodeepCache.List() {
-					r.l.Info("nodeep", "nsn", nsn, "nodeep resp", o.NodeEpResp, "nodeep status", o.NodeEpResp.StatusCode)
-				}
 				time.Sleep(5 * time.Second)
 			}
 		}
@@ -89,10 +97,13 @@ func New(ctx context.Context, cfg *Config) wire.InClusterWirer {
 }
 
 type wc struct {
-	daemonCache wire.Cache[wiredaemon.Daemon]
-	podCache    wire.Cache[wirepod.Pod]
-	nodeCache   wire.Cache[wirenode.Node]
-	nodeepCache NodeEpCache
+	clusterCache  wire.Cache[wirecluster.Cluster]
+	serviceCache  wire.Cache[wireservice.Service]
+	topologyCache wire.Cache[struct{}]
+	//daemonCache wire.Cache[wiredaemon.Daemon]
+	//podCache    wire.Cache[wirepod.Pod]
+	//nodeCache   wire.Cache[wirenode.Node]
+	//nodeepCache NodeEpCache
 	wireCache   WireCache
 	workerCache wire.Cache[Worker]
 	dispatcher  Dispatcher
@@ -107,33 +118,38 @@ type wc struct {
 // -> if ready we get the nodeName the network pod is running on
 // - via the nodeName we can find the serviceendpoint in the daemon cache if the daemon is ready
 func (r *wc) resolveEndpoint(nsn types.NamespacedName) *resolve.Data {
-	pod, err := r.podCache.Get(nsn)
-	if err != nil {
-		return &resolve.Data{Message: fmt.Sprintf("pod not found: %s", nsn.String())}
-	}
-	if !pod.IsReady {
-		return &resolve.Data{Message: fmt.Sprintf("pod not ready: %s", nsn.String())}
-	}
-	daemonHostNodeNSN := types.NamespacedName{
-		Namespace: "default",
-		Name:      pod.HostNodeName}
-	d, err := r.daemonCache.Get(daemonHostNodeNSN)
-	if err != nil {
-		return &resolve.Data{Message: fmt.Sprintf("wireDaemon not found: %s", daemonHostNodeNSN.String())}
-	}
-	if !d.IsReady {
-		return &resolve.Data{Message: fmt.Sprintf("wireDaemon not found: %s", daemonHostNodeNSN.String())}
-	}
-	if d.GRPCAddress == "" || d.GRPCPort == "" {
-		return &resolve.Data{Message: fmt.Sprintf("wireDaemon no grpc address/port: %s", daemonHostNodeNSN.String())}
-	}
-	return &resolve.Data{
-		Success:         true,
-		PodNodeName:     pod.HostNodeName,
-		ServiceEndpoint: fmt.Sprintf("%s:%s", d.GRPCAddress, d.GRPCPort),
-		HostIP:          d.HostIP,
-		HostNodeName:    pod.HostNodeName,
-	}
+	// THIS NEEDS TO BECOME A GRPC SERVICE
+
+	/*
+		pod, err := r.podCache.Get(nsn)
+		if err != nil {
+			return &resolve.Data{Message: fmt.Sprintf("pod not found: %s", nsn.String())}
+		}
+		if !pod.IsReady {
+			return &resolve.Data{Message: fmt.Sprintf("pod not ready: %s", nsn.String())}
+		}
+		daemonHostNodeNSN := types.NamespacedName{
+			Namespace: "default",
+			Name:      pod.HostNodeName}
+		d, err := r.daemonCache.Get(daemonHostNodeNSN)
+		if err != nil {
+			return &resolve.Data{Message: fmt.Sprintf("wireDaemon not found: %s", daemonHostNodeNSN.String())}
+		}
+		if !d.IsReady {
+			return &resolve.Data{Message: fmt.Sprintf("wireDaemon not found: %s", daemonHostNodeNSN.String())}
+		}
+		if d.GRPCAddress == "" || d.GRPCPort == "" {
+			return &resolve.Data{Message: fmt.Sprintf("wireDaemon no grpc address/port: %s", daemonHostNodeNSN.String())}
+		}
+		return &resolve.Data{
+			Success:         true,
+			PodNodeName:     pod.HostNodeName,
+			ServiceEndpoint: fmt.Sprintf("%s:%s", d.GRPCAddress, d.GRPCPort),
+			HostIP:          d.HostIP,
+			HostNodeName:    pod.HostNodeName,
+		}
+	*/
+	return &resolve.Data{}
 }
 
 type CallbackCtx struct {
@@ -142,20 +158,50 @@ type CallbackCtx struct {
 	EvalHostNodeName bool
 }
 
-// daemonCallback notifies the wire controller about the fact
-// that the daemon status changed and should reconcile the object
-func (r *wc) daemonCallback(ctx context.Context, nsn types.NamespacedName, d any) {
-	r.l.Info("daemonCallback ...start...", "nsn", nsn, "data", d)
-	daemon, ok := d.(wiredaemon.Daemon)
+// clusterCallback notifies the wire controller about the fact
+// that the cluster is no longer available
+func (r *wc) clusterCallback(ctx context.Context, nsn types.NamespacedName, d any) {
+	r.l.Info("clusterCallback ...start...", "nsn", nsn, "data", d)
+
+	if d != nil {
+		p, ok := d.(wirecluster.Cluster)
+		if !ok {
+			r.l.Info("expect Cluster", "got", reflect.TypeOf(d).Name())
+			return
+		}
+		if p.IsReady {
+			// start the watch
+		}
+	} else {
+		// delete the watch
+		r.serviceCache.Delete(ctx, nsn)
+		// for topologies we store the following data
+		// namespace = cluster, name = namespace which is the topology
+		// we check if the Namespace of the topology matches the clusterName
+		for topoNSN := range r.topologyCache.List() {
+			if topoNSN.Namespace == nsn.Name {
+				r.topologyCache.Delete(ctx, topoNSN)
+			}
+		}
+	}
+
+	r.l.Info("clusterCallback ...end...", "nsn", nsn, "data", d)
+}
+
+// serviceCallback notifies the wire controller about the fact
+// that the service status changed and should reconcile the object
+func (r *wc) serviceCallback(ctx context.Context, nsn types.NamespacedName, d any) {
+	r.l.Info("serviceCallback ...start...", "nsn", nsn, "data", d)
+	service, ok := d.(wireservice.Service)
 	if !ok {
-		r.l.Info("expect Daemon", "got", reflect.TypeOf(d).Name())
+		r.l.Info("expect Service", "got", reflect.TypeOf(d).Name())
 		return
 	}
 	var newd any
 	newd = nil
-	if d != nil && daemon.IsReady {
-		newd = daemon
-		address := fmt.Sprintf("%s:%s", daemon.GRPCAddress, daemon.GRPCPort)
+	if d != nil && service.IsReady {
+		newd = service
+		address := fmt.Sprintf("%s:%s", service.GRPCAddress, service.GRPCPort)
 
 		// this is a safety
 		oldw, err := r.workerCache.Get(nsn)
@@ -164,7 +210,7 @@ func (r *wc) daemonCallback(ctx context.Context, nsn types.NamespacedName, d any
 			r.workerCache.Delete(ctx, nsn)
 		}
 		// create a new client
-		w, err := NewWorker(ctx, r.wireCache, r.nodeepCache, &client.Config{
+		w, err := NewWorker(ctx, r.wireCache, &client.Config{
 			Address:  address,
 			Insecure: true,
 		})
@@ -185,61 +231,25 @@ func (r *wc) daemonCallback(ctx context.Context, nsn types.NamespacedName, d any
 			r.workerCache.Delete(ctx, nsn)
 		}
 	}
-	r.l.Info("daemonCallback ...call common callback...", "nsn", nsn, "data", d)
+	r.l.Info("serviceCallback ...call common callback...", "nsn", nsn, "data", d)
 
 	r.commonCallback(ctx, nsn, newd, &CallbackCtx{
-		Message:          "daemon failed",
-		Hold:             true, // when the daemon fails this most likely mean a daemon upgrade or restart, so we dont want to delete the other end of the wire
+		Message:          "service/cluster failed",
+		Hold:             false, // to be checked what it means to the client if the grpc service restores
 		EvalHostNodeName: true,
 	})
-	r.l.Info("daemonCallback ...end...", "nsn", nsn, "data", d)
+	r.l.Info("serviceCallback ...end...", "nsn", nsn, "data", d)
 }
 
-func (r *wc) podCallback(ctx context.Context, nsn types.NamespacedName, d any) {
-	r.l.Info("podCallback ...start...", "nsn", nsn, "data", d)
+func (r *wc) topologyCallback(ctx context.Context, nsn types.NamespacedName, d any) {
+	r.l.Info("topologyCallback ...start...", "nsn", nsn, "data", d)
 
-	var newd any
-	newd = nil
-	if d != nil {
-		p, ok := d.(wirepod.Pod)
-		if !ok {
-			r.l.Info("expect Pod", "got", reflect.TypeOf(d).Name())
-			return
-		}
-		if p.IsReady {
-			newd = p
-		}
-	}
-	r.commonCallback(ctx, nsn, newd, &CallbackCtx{
+	r.commonCallback(ctx, nsn, d, &CallbackCtx{
 		Message:          "pod failed",
 		Hold:             false,
 		EvalHostNodeName: false,
 	})
-	r.l.Info("podCallback ...end...", "nsn", nsn, "data", d)
-}
-
-func (r *wc) nodeCallback(ctx context.Context, nsn types.NamespacedName, d any) {
-	r.l.Info("nodeCallback ...start...", "nsn", nsn, "data", d)
-
-	var newd any
-	newd = nil
-	if d != nil {
-		n, ok := d.(wirenode.Node)
-		if !ok {
-			r.l.Info("expect Node", "got", reflect.TypeOf(d).Name())
-			return
-		}
-		if n.IsReady {
-			newd = n
-		}
-	}
-
-	r.commonCallback(ctx, nsn, newd, &CallbackCtx{
-		Message:          "node failed",
-		Hold:             false,
-		EvalHostNodeName: true,
-	})
-	r.l.Info("nodeCallback ...end...", "nsn", nsn, "data", d)
+	r.l.Info("topologyCallback ...end...", "nsn", nsn, "data", d)
 }
 
 func (r *wc) commonCallback(ctx context.Context, nsn types.NamespacedName, d any, cbctx *CallbackCtx) {
@@ -261,25 +271,11 @@ func (r *wc) commonCallback(ctx context.Context, nsn types.NamespacedName, d any
 						r.wireCache.HandleEvent(wireNSN, state.ResolutionFailedEvent, &state.EventCtx{
 							EpIdx:   epIdx,
 							Message: cbctx.Message,
-							Hold:    cbctx.Hold, // we do not want this event to be replciated to the other endpoint
+							Hold:    cbctx.Hold, // we do not want this event to be replicated to the other endpoint
 						})
 					}()
 				}
 			}
-		}
-		for nodeepNSN, nodeep := range r.nodeepCache.List() {
-			nodeepNSN := nodeepNSN
-			if nodeep.NodeEpReq.IsResolved() && nodeep.NodeEpReq.CompareName(cbctx.EvalHostNodeName, nsn.Name) {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
-					r.nodeepCache.UnResolve(nodeepNSN)
-					r.nodeepCache.HandleEvent(nodeepNSN, state.ResolutionFailedEvent, &state.EventCtx{
-						Message: cbctx.Message,
-					})
-				}()
-			}
-
 		}
 	} else {
 		// create or update -> we treat these also as adjacent ep create/delete
@@ -293,14 +289,6 @@ func (r *wc) commonCallback(ctx context.Context, nsn types.NamespacedName, d any
 				} else {
 					r.wireDelete(wire.WireReq, "callback")
 				}
-			}()
-		}
-		for _, nodeep := range r.nodeepCache.List() {
-			nodeep := nodeep
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				r.nodeepCreate(nodeep.NodeEpReq, "callback")
 			}()
 		}
 	}

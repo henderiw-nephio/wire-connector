@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package proxy
+package wireproxy
 
 import (
 	"context"
@@ -29,7 +29,7 @@ import (
 )
 
 type stateConfig struct {
-	be wire.Wirer
+	be wire.Node2NodeWirer
 }
 
 type clientContext struct {
@@ -41,7 +41,7 @@ type s struct {
 	m sync.RWMutex
 	// key is clientName
 	clients map[string]*clientContext
-	be      wire.Wirer
+	be      wire.Node2NodeWirer
 	l       logr.Logger
 }
 

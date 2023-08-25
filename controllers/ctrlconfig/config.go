@@ -24,9 +24,11 @@ import (
 	"github.com/henderiw-nephio/wire-connector/pkg/node"
 	"github.com/henderiw-nephio/wire-connector/pkg/pod"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
+	wirecluster "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/cluster"
 	wiredaemon "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/daemon"
 	wirenode "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/node"
 	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/pod"
+	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/service"
 	"github.com/henderiw-nephio/wire-connector/pkg/xdp"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 )
@@ -35,12 +37,15 @@ type ControllerConfig struct {
 	Poll  time.Duration
 	Copts controller.Options
 
-	PodManager  pod.Manager
-	NodeManager node.Manager
-	CRI         cri.CRI
-	XDP         xdp.XDP
-	PodCache    wire.Cache[wirepod.Pod]
-	DaemonCache wire.Cache[wiredaemon.Daemon]
-	NodeCache   wire.Cache[wirenode.Node]
-	Noderegistry noder.NodeRegistry
+	PodManager    pod.Manager
+	NodeManager   node.Manager
+	CRI           cri.CRI
+	XDP           xdp.XDP
+	PodCache      wire.Cache[wirepod.Pod]
+	DaemonCache   wire.Cache[wiredaemon.Daemon]
+	NodeCache     wire.Cache[wirenode.Node]
+	ClusterCache  wire.Cache[wirecluster.Cluster]
+	ServiceCache  wire.Cache[wireservice.Service]
+	TopologyCache wire.Cache[struct{}]
+	Noderegistry  noder.NodeRegistry
 }

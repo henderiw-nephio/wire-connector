@@ -29,7 +29,8 @@ import (
 	"github.com/henderiw-nephio/wire-connector/pkg/cri"
 	"github.com/henderiw-nephio/wire-connector/pkg/grpcserver"
 	"github.com/henderiw-nephio/wire-connector/pkg/grpcserver/healthhandler"
-	"github.com/henderiw-nephio/wire-connector/pkg/wire/proxy"
+	nodeepproxy "github.com/henderiw-nephio/wire-connector/pkg/wire/proxy/nodeep"
+	wireproxy "github.com/henderiw-nephio/wire-connector/pkg/wire/proxy/wire"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire/wiredaemon"
 	"github.com/henderiw-nephio/wire-connector/pkg/xdp"
 	"go.uber.org/zap/zapcore"
@@ -74,26 +75,32 @@ func main() {
 		os.Exit(1)
 	}
 
-	p := proxy.New(&proxy.Config{
-		Backend: wiredaemon.New(&wiredaemon.Config{
-			XDP: xdpapp,
-			CRI: cri,
-		}),
+	wd := wiredaemon.New(&wiredaemon.Config{
+		XDP: xdpapp,
+		CRI: cri,
 	})
+
+	nodeepp := nodeepproxy.New(&nodeepproxy.Config{
+		Backend: wd,
+	})
+	wirep := wireproxy.New(&wireproxy.Config{
+		Backend: wd,
+	})
+
 	wh := healthhandler.New()
 
 	s := grpcserver.New(grpcserver.Config{
 		Address:  ":" + strconv.Itoa(9999),
 		Insecure: true,
 	},
-		grpcserver.WithWireGetHandler(p.WireGet),
-		grpcserver.WithWireCreateHandler(p.WireCreate),
-		grpcserver.WithWireDeleteHandler(p.WireDelete),
-		grpcserver.WithWireWatchHandler(p.WireWatch),
-		grpcserver.WithEndpointGetHandler(p.EndpointGet),
-		grpcserver.WithEndpointCreateHandler(p.EndpointCreate),
-		grpcserver.WithEndpointDeleteHandler(p.EndpointDelete),
-		grpcserver.WithEndpointWatchHandler(p.EndpointWatch),
+		grpcserver.WithWireGetHandler(wirep.WireGet),
+		grpcserver.WithWireCreateHandler(wirep.WireCreate),
+		grpcserver.WithWireDeleteHandler(wirep.WireDelete),
+		grpcserver.WithWireWatchHandler(wirep.WireWatch),
+		grpcserver.WithEndpointGetHandler(nodeepp.EndpointGet),
+		grpcserver.WithEndpointCreateHandler(nodeepp.EndpointCreate),
+		grpcserver.WithEndpointDeleteHandler(nodeepp.EndpointDelete),
+		grpcserver.WithEndpointWatchHandler(nodeepp.EndpointWatch),
 		grpcserver.WithWatchHandler(wh.Watch),
 		grpcserver.WithCheckHandler(wh.Check),
 	)

@@ -25,6 +25,9 @@ import (
 )
 
 func (s *GrpcServer) EndpointGet(ctx context.Context, req *endpointpb.EndpointRequest) (*endpointpb.EndpointResponse, error) {
+	if s.epGetHandler == nil {
+		return &endpointpb.EndpointResponse{}, status.Error(codes.Unimplemented, "not implemented")
+	}
 	ctx, cancel := context.WithTimeout(ctx, s.config.Timeout)
 	defer cancel()
 	err := s.acquireSem(ctx)
@@ -40,6 +43,9 @@ func (s *GrpcServer) EndpointGet(ctx context.Context, req *endpointpb.EndpointRe
 }
 
 func (s *GrpcServer) EndpointCreate(ctx context.Context, req *endpointpb.EndpointRequest) (*endpointpb.EmptyResponse, error) {
+	if s.epCreateHandler == nil {
+		return &endpointpb.EmptyResponse{}, status.Error(codes.Unimplemented, "not implemented")
+	}
 	ctx, cancel := context.WithTimeout(ctx, s.config.Timeout)
 	defer cancel()
 	err := s.acquireSem(ctx)
@@ -55,6 +61,9 @@ func (s *GrpcServer) EndpointCreate(ctx context.Context, req *endpointpb.Endpoin
 }
 
 func (s *GrpcServer) EndpointDelete(ctx context.Context, req *endpointpb.EndpointRequest) (*endpointpb.EmptyResponse, error) {
+	if s.epDeleteHandler == nil {
+		return &endpointpb.EmptyResponse{}, status.Error(codes.Unimplemented, "not implemented")
+	}
 	ctx, cancel := context.WithTimeout(ctx, s.config.Timeout)
 	defer cancel()
 	err := s.acquireSem(ctx)
@@ -70,6 +79,9 @@ func (s *GrpcServer) EndpointDelete(ctx context.Context, req *endpointpb.Endpoin
 }
 
 func (s *GrpcServer) EndpointWatch(req *endpointpb.WatchRequest, stream endpointpb.NodeEndpoint_EndpointWatchServer) error {
+	if s.epWatchHandler == nil {
+		return status.Error(codes.Unimplemented, "not implemented")
+	}
 	err := s.acquireSem(stream.Context())
 	if err != nil {
 		return err

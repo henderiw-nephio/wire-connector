@@ -23,6 +23,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/endpointpb"
+	"github.com/henderiw-nephio/wire-connector/pkg/proto/resolverpb"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/semaphore"
@@ -36,6 +37,7 @@ type GrpcServer struct {
 	config Config
 	wirepb.UnimplementedWireServer
 	endpointpb.UnimplementedNodeEndpointServer
+	resolverpb.UnimplementedResolverServer
 
 	sem *semaphore.Weighted
 
@@ -53,6 +55,9 @@ type GrpcServer struct {
 	epCreateHandler EndpointCreateHandler
 	epDeleteHandler EndpointDeleteHandler
 	epWatchHandler  EndpointWatchHandler
+
+	// resolver Handlers
+	resolverHandler ResolverHandler
 
 	//health handlers
 	checkHandler CheckHandler
@@ -76,6 +81,9 @@ type EndpointGetHandler func(context.Context, *endpointpb.EndpointRequest) (*end
 type EndpointCreateHandler func(context.Context, *endpointpb.EndpointRequest) (*endpointpb.EmptyResponse, error)
 type EndpointDeleteHandler func(context.Context, *endpointpb.EndpointRequest) (*endpointpb.EmptyResponse, error)
 type EndpointWatchHandler func(*endpointpb.WatchRequest, endpointpb.NodeEndpoint_EndpointWatchServer) error
+
+// Resolver Handlers
+type ResolverHandler func(context.Context, *resolverpb.ResolveRequest) (*resolverpb.ResolveResponse, error)
 
 type Option func(*GrpcServer)
 
@@ -121,11 +129,14 @@ func (s *GrpcServer) Start(ctx context.Context) error {
 	endpointpb.RegisterNodeEndpointServer(grpcServer, s)
 	s.l.Info("grpc server with endpoint service...")
 
+	resolverpb.RegisterResolverServer(grpcServer, s)
+	s.l.Info("grpc server with resolver service...")
+
 	healthpb.RegisterHealthServer(grpcServer, s)
 	s.l.Info("grpc server with health service...")
 
 	reflection.Register(grpcServer)
-	s.l.Info("grpc server withreflection service...")
+	s.l.Info("grpc server with reflection service...")
 
 	s.l.Info("starting grpc server...")
 	err = grpcServer.Serve(l)
@@ -193,6 +204,12 @@ func WithEndpointDeleteHandler(h EndpointDeleteHandler) func(*GrpcServer) {
 func WithEndpointWatchHandler(h EndpointWatchHandler) func(*GrpcServer) {
 	return func(s *GrpcServer) {
 		s.epWatchHandler = h
+	}
+}
+
+func WithResolverHandler(h ResolverHandler) func(*GrpcServer) {
+	return func(s *GrpcServer) {
+		s.resolverHandler = h
 	}
 }
 
