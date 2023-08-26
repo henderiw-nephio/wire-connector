@@ -144,7 +144,7 @@ type CallbackCtx struct {
 
 // daemonCallback notifies the wire controller about the fact
 // that the daemon status changed and should reconcile the object
-func (r *wc) daemonCallback(ctx context.Context, nsn types.NamespacedName, d any) {
+func (r *wc) daemonCallback(ctx context.Context, a wire.Action, nsn types.NamespacedName, d any) {
 	r.l.Info("daemonCallback ...start...", "nsn", nsn, "data", d)
 	daemon, ok := d.(wiredaemon.Daemon)
 	if !ok {
@@ -153,7 +153,7 @@ func (r *wc) daemonCallback(ctx context.Context, nsn types.NamespacedName, d any
 	}
 	var newd any
 	newd = nil
-	if d != nil && daemon.IsReady {
+	if a == wire.UpsertAction && daemon.IsReady {
 		newd = daemon
 		address := fmt.Sprintf("%s:%s", daemon.GRPCAddress, daemon.GRPCPort)
 
@@ -178,6 +178,7 @@ func (r *wc) daemonCallback(ctx context.Context, nsn types.NamespacedName, d any
 		}
 		r.workerCache.Upsert(ctx, nsn, w)
 	} else {
+		// delete
 		c, err := r.workerCache.Get(nsn)
 		if err == nil {
 			// worker found
@@ -187,7 +188,7 @@ func (r *wc) daemonCallback(ctx context.Context, nsn types.NamespacedName, d any
 	}
 	r.l.Info("daemonCallback ...call common callback...", "nsn", nsn, "data", d)
 
-	r.commonCallback(ctx, nsn, newd, &CallbackCtx{
+	r.commonCallback(ctx, a, nsn, newd, &CallbackCtx{
 		Message:          "daemon failed",
 		Hold:             true, // when the daemon fails this most likely mean a daemon upgrade or restart, so we dont want to delete the other end of the wire
 		EvalHostNodeName: true,
@@ -195,22 +196,24 @@ func (r *wc) daemonCallback(ctx context.Context, nsn types.NamespacedName, d any
 	r.l.Info("daemonCallback ...end...", "nsn", nsn, "data", d)
 }
 
-func (r *wc) podCallback(ctx context.Context, nsn types.NamespacedName, d any) {
+func (r *wc) podCallback(ctx context.Context, a wire.Action, nsn types.NamespacedName, d any) {
 	r.l.Info("podCallback ...start...", "nsn", nsn, "data", d)
 
-	var newd any
-	newd = nil
-	if d != nil {
-		p, ok := d.(wirepod.Pod)
-		if !ok {
-			r.l.Info("expect Pod", "got", reflect.TypeOf(d).Name())
-			return
+	/*
+		var newd any
+		newd = nil
+		if a == wire.UpsertAction {
+			p, ok := d.(wirepod.Pod)
+			if !ok {
+				r.l.Info("expect Pod", "got", reflect.TypeOf(d).Name())
+				return
+			}
+			if p.IsReady {
+				newd = p
+			}
 		}
-		if p.IsReady {
-			newd = p
-		}
-	}
-	r.commonCallback(ctx, nsn, newd, &CallbackCtx{
+	*/
+	r.commonCallback(ctx, a, nsn, d, &CallbackCtx{
 		Message:          "pod failed",
 		Hold:             false,
 		EvalHostNodeName: false,
@@ -218,23 +221,25 @@ func (r *wc) podCallback(ctx context.Context, nsn types.NamespacedName, d any) {
 	r.l.Info("podCallback ...end...", "nsn", nsn, "data", d)
 }
 
-func (r *wc) nodeCallback(ctx context.Context, nsn types.NamespacedName, d any) {
+func (r *wc) nodeCallback(ctx context.Context, a wire.Action, nsn types.NamespacedName, d any) {
 	r.l.Info("nodeCallback ...start...", "nsn", nsn, "data", d)
 
-	var newd any
-	newd = nil
-	if d != nil {
-		n, ok := d.(wirenode.Node)
-		if !ok {
-			r.l.Info("expect Node", "got", reflect.TypeOf(d).Name())
-			return
+	/*
+		var newd any
+		newd = nil
+		if a == wire.UpsertAction {
+			n, ok := d.(wirenode.Node)
+			if !ok {
+				r.l.Info("expect Node", "got", reflect.TypeOf(d).Name())
+				return
+			}
+			if n.IsReady {
+				newd = n
+			}
 		}
-		if n.IsReady {
-			newd = n
-		}
-	}
+	*/
 
-	r.commonCallback(ctx, nsn, newd, &CallbackCtx{
+	r.commonCallback(ctx, a, nsn, d, &CallbackCtx{
 		Message:          "node failed",
 		Hold:             false,
 		EvalHostNodeName: true,
@@ -242,11 +247,11 @@ func (r *wc) nodeCallback(ctx context.Context, nsn types.NamespacedName, d any) 
 	r.l.Info("nodeCallback ...end...", "nsn", nsn, "data", d)
 }
 
-func (r *wc) commonCallback(ctx context.Context, nsn types.NamespacedName, d any, cbctx *CallbackCtx) {
+func (r *wc) commonCallback(ctx context.Context, a wire.Action, nsn types.NamespacedName, d any, cbctx *CallbackCtx) {
 	//log := log.FromContext(ctx)
 	r.l.Info("commonCallback ...start...", "nsn", nsn, "data", d)
 	var wg sync.WaitGroup
-	if d == nil {
+	if a == wire.DeleteAction {
 		// delete
 		for wireNSN, wire := range r.wireCache.List() {
 			wireNSN := wireNSN

@@ -28,7 +28,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	capiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -45,23 +45,29 @@ type Capi struct {
 	l      logr.Logger
 }
 
-func (r *Capi) GetClusterName() string {
+func (r *Capi) GetName() string {
 	if r.Secret == nil {
 		return ""
 	}
 	return strings.TrimSuffix(r.Secret.GetName(), kubeConfigSuffix)
 }
 
-func (r *Capi) GetClusterClient(ctx context.Context) (*kubernetes.Clientset, error) {
+func (r *Capi) GetRESTConfig(ctx context.Context) (*rest.Config, error) {
 	if !r.isCapiClusterReady(ctx) {
 		return nil, fmt.Errorf("not ready")
 	}
-	return getCapiClusterClient(r.Secret)
+	//provide a restconfig from the secret value
+	return clientcmd.RESTConfigFromKubeConfig(r.Secret.Data["value"])
+
+	// build a cluster client from the kube rest config
+	//return client.New(config, client.Options{})
+
+	//return kubernetes.NewForConfig(config)
 }
 
 func (r *Capi) isCapiClusterReady(ctx context.Context) bool {
 	r.l = log.FromContext(ctx)
-	name := r.GetClusterName()
+	name := r.GetName()
 
 	cl := resource.GetUnstructuredFromGVK(&schema.GroupVersionKind{Group: capiv1beta1.GroupVersion.Group, Version: capiv1beta1.GroupVersion.Version, Kind: reflect.TypeOf(capiv1beta1.Cluster{}).Name()})
 	if err := r.Get(ctx, types.NamespacedName{Namespace: r.Secret.GetNamespace(), Name: name}, cl); err != nil {
@@ -90,13 +96,4 @@ func isReady(cs capiv1beta1.Conditions) bool {
 		}
 	}
 	return false
-}
-
-func getCapiClusterClient(secret *corev1.Secret) (*kubernetes.Clientset, error) {
-	//provide a restconfig from the secret value
-	config, err := clientcmd.RESTConfigFromKubeConfig(secret.Data["value"])
-	if err != nil {
-		return nil, err
-	}
-	return kubernetes.NewForConfig(config)
 }

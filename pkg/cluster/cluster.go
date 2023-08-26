@@ -22,7 +22,7 @@ import (
 
 	"github.com/henderiw-nephio/wire-connector/pkg/cluster/capi"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -41,6 +41,6 @@ func (r Cluster) GetClusterClient(secret *corev1.Secret) ClusterClient {
 }
 
 type ClusterClient interface {
-	GetClusterClient(context.Context) (*kubernetes.Clientset, error)
-	GetClusterName() string
+	GetRESTConfig(context.Context) (*rest.Config, error)
+	GetName() string
 }

@@ -1,5 +1,5 @@
 /*
-Copyright 2022 Nokia.
+Copyright 2023 The Nephio Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,15 +14,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package cluster
+package ctrlconfig
 
 import (
-	clusterwatchcontroller "github.com/henderiw-nephio/wire-connector/controllers/cluster-controller/clusterwatch-controller"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
+	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/service"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type Cluster struct {
-	wire.Object
-	//Clientset *kubernetes.Clientset
-	clusterwatchcontroller.Controller
+type Config struct {
+	ClusterName   string
+	Client        client.Client
+	ServiceCache  wire.Cache[wireservice.Service]
+	TopologyCache wire.Cache[struct{}]
 }

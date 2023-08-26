@@ -38,6 +38,7 @@ import (
 	"github.com/henderiw-nephio/wire-connector/pkg/wire/state"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	//"sigs.k8s.io/controller-runtime/pkg/event"
 )
 
@@ -160,20 +161,30 @@ type CallbackCtx struct {
 
 // clusterCallback notifies the wire controller about the fact
 // that the cluster is no longer available
-func (r *wc) clusterCallback(ctx context.Context, nsn types.NamespacedName, d any) {
-	r.l.Info("clusterCallback ...start...", "nsn", nsn, "data", d)
+func (r *wc) clusterCallback(ctx context.Context, a wire.Action, nsn types.NamespacedName, d any) {
+	log := log.FromContext(ctx).WithValues("nsn", nsn, "data", d)
+	log.Info("clusterCallback ...start...")
 
-	if d != nil {
+	if a == wire.UpsertAction {
 		p, ok := d.(wirecluster.Cluster)
 		if !ok {
 			r.l.Info("expect Cluster", "got", reflect.TypeOf(d).Name())
 			return
 		}
 		if p.IsReady {
-			// start the watch
+			if err := p.Start(ctx); err != nil {
+				log.Error(err, "cannot start cluster controller watchers")
+			}
 		}
 	} else {
-		// delete the watch
+		p, ok := d.(wirecluster.Cluster)
+		if !ok {
+			r.l.Info("expect Cluster", "got", reflect.TypeOf(d).Name())
+			return
+		}
+		// delete the cluster controller watches
+		p.Stop()
+		// delete the respective caches
 		r.serviceCache.Delete(ctx, nsn)
 		// for topologies we store the following data
 		// namespace = cluster, name = namespace which is the topology
@@ -184,14 +195,15 @@ func (r *wc) clusterCallback(ctx context.Context, nsn types.NamespacedName, d an
 			}
 		}
 	}
-
-	r.l.Info("clusterCallback ...end...", "nsn", nsn, "data", d)
+	log.Info("clusterCallback ...end...")
 }
 
 // serviceCallback notifies the wire controller about the fact
 // that the service status changed and should reconcile the object
-func (r *wc) serviceCallback(ctx context.Context, nsn types.NamespacedName, d any) {
-	r.l.Info("serviceCallback ...start...", "nsn", nsn, "data", d)
+func (r *wc) serviceCallback(ctx context.Context, a wire.Action, nsn types.NamespacedName, d any) {
+	log := log.FromContext(ctx).WithValues("nsn", nsn, "data", d)
+	log.Info("serviceCallback ...start...")
+
 	service, ok := d.(wireservice.Service)
 	if !ok {
 		r.l.Info("expect Service", "got", reflect.TypeOf(d).Name())
@@ -231,32 +243,33 @@ func (r *wc) serviceCallback(ctx context.Context, nsn types.NamespacedName, d an
 			r.workerCache.Delete(ctx, nsn)
 		}
 	}
-	r.l.Info("serviceCallback ...call common callback...", "nsn", nsn, "data", d)
+	log.Info("serviceCallback ...call common callback...")
 
-	r.commonCallback(ctx, nsn, newd, &CallbackCtx{
+	r.commonCallback(ctx, a, nsn, newd, &CallbackCtx{
 		Message:          "service/cluster failed",
 		Hold:             false, // to be checked what it means to the client if the grpc service restores
 		EvalHostNodeName: true,
 	})
-	r.l.Info("serviceCallback ...end...", "nsn", nsn, "data", d)
+	log.Info("serviceCallback ...end...")
 }
 
-func (r *wc) topologyCallback(ctx context.Context, nsn types.NamespacedName, d any) {
-	r.l.Info("topologyCallback ...start...", "nsn", nsn, "data", d)
+func (r *wc) topologyCallback(ctx context.Context, a wire.Action, nsn types.NamespacedName, d any) {
+	log := log.FromContext(ctx).WithValues("nsn", nsn, "data", d)
+	log.Info("topologyCallback ...start...")
 
-	r.commonCallback(ctx, nsn, d, &CallbackCtx{
+	r.commonCallback(ctx, a, nsn, d, &CallbackCtx{
 		Message:          "pod failed",
 		Hold:             false,
 		EvalHostNodeName: false,
 	})
-	r.l.Info("topologyCallback ...end...", "nsn", nsn, "data", d)
+	log.Info("topologyCallback ...start...")
 }
 
-func (r *wc) commonCallback(ctx context.Context, nsn types.NamespacedName, d any, cbctx *CallbackCtx) {
-	//log := log.FromContext(ctx)
-	r.l.Info("commonCallback ...start...", "nsn", nsn, "data", d)
+func (r *wc) commonCallback(ctx context.Context, a wire.Action, nsn types.NamespacedName, d any, cbctx *CallbackCtx) {
+	log := log.FromContext(ctx).WithValues("nsn", nsn, "data", d)
+	log.Info("commonCallback ...start...")
 	var wg sync.WaitGroup
-	if d == nil {
+	if a == wire.DeleteAction {
 		// delete
 		for wireNSN, wire := range r.wireCache.List() {
 			wireNSN := wireNSN
@@ -293,7 +306,7 @@ func (r *wc) commonCallback(ctx context.Context, nsn types.NamespacedName, d any
 		}
 	}
 	wg.Wait()
-	r.l.Info("commonCallback ...end...", "nsn", nsn, "data", d)
+	log.Info("commonCallback ...end...")
 }
 
 /* generic event update

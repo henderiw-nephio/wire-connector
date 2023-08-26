@@ -24,4 +24,11 @@ import (
 
 type CallbackFn func([]types.NamespacedName, string)
 
-type ResourceCallbackFn func(context.Context, types.NamespacedName, any)
+type Action string
+
+const (
+	DeleteAction Action = "delete"
+	UpsertAction Action = "upsert"
+)
+
+type ResourceCallbackFn func(context.Context, Action, types.NamespacedName, any)

@@ -53,7 +53,7 @@ func TestGetClusterName(t *testing.T) {
 			c := Capi{
 				Secret: tc.secret,
 			}
-			got := c.GetClusterName()
+			got := c.GetName()
 
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("-want, +got:\n%s", diff)
