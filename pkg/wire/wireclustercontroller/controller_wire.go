@@ -77,7 +77,7 @@ func (r *wc) WireUpSert(ctx context.Context, req *wirepb.WireRequest) (*wirepb.E
 		r.l.Info("upsert cache", "nsn", wreq.GetNSN(), "desired action", DesiredActionCreate)
 		r.wireCache.SetDesiredAction(wreq.GetNSN(), DesiredActionCreate)
 	}
-	r.wireCreate(wreq, "api")
+	r.wireCreate(ctx, wreq, "api")
 	r.l.Info("creating...", "nsn", wreq.GetNSN())
 	return &wirepb.EmptyResponse{}, nil
 }
@@ -92,25 +92,25 @@ func (r *wc) WireDelete(ctx context.Context, req *wirepb.WireRequest) (*wirepb.E
 	if _, err := r.wireCache.Get(wreq.GetNSN()); err == nil {
 		r.wireCache.SetDesiredAction(wreq.GetNSN(), DesiredActionDelete)
 		r.l.Info("delete", "nsn", wreq.GetNSN())
-		r.wireDelete(wreq, "api")
+		r.wireDelete(ctx, wreq, "api")
 	}
 	r.l.Info("deleting...", "nsn", wreq.GetNSN())
 	return &wirepb.EmptyResponse{}, nil
 }
 
-func (r *wc) resolveWire(wreq *WireReq) []*resolve.Data {
+func (r *wc) resolveWire(ctx context.Context, wreq *WireReq) []*resolve.Data {
 	resolvedData := make([]*resolve.Data, 2)
 	for epIdx := range wreq.Endpoints {
-		resolvedData[epIdx] = r.resolveEndpoint(wreq.GetEndpointNodeNSN(epIdx))
+		resolvedData[epIdx] = r.resolveEndpoint(ctx, wreq.GetEndpointNodeNSN(epIdx))
 	}
 	return resolvedData
 }
 
-func (r *wc) wireCreate(wreq *WireReq, origin string) {
+func (r *wc) wireCreate(ctx context.Context, wreq *WireReq, origin string) {
 	r.l.Info("wireCreate ...start...", "nsn", wreq.GetNSN(), "origin", origin)
 	// we want to resolve first to see if both endpoints resolve
 	// if not we dont create the endpoint event
-	resolvedData := r.resolveWire(wreq)
+	resolvedData := r.resolveWire(ctx, wreq)
 	r.l.Info("wireCreate", "nsn", wreq.GetNSN(), "origin", origin, "resolvedData0", resolvedData[0], "resolvedData1", resolvedData[1])
 	r.wireCache.Resolve(wreq.GetNSN(), resolvedData)
 	if resolvedData[0].Success && resolvedData[1].Success {
@@ -151,11 +151,11 @@ func (r *wc) wireCreate(wreq *WireReq, origin string) {
 	r.l.Info("wireCreate ...end...", "nsn", wreq.GetNSN(), "origin", origin)
 }
 
-func (r *wc) wireDelete(wreq *WireReq, origin string) {
+func (r *wc) wireDelete(ctx context.Context, wreq *WireReq, origin string) {
 	r.l.Info("wireDelete ...start...", "nsn", wreq.GetNSN(), "origin", origin)
 	// we want to resolve first to see if the endpoints resolve
 	// depending on this we generate delete events if the resolution was ok
-	resolvedData := r.resolveWire(wreq)
+	resolvedData := r.resolveWire(ctx, wreq)
 	r.l.Info("wireDelete", "nsn", wreq.GetNSN(), "origin", origin, "resolvedData0", resolvedData[0], "resolvedData1", resolvedData[1])
 	r.wireCache.Resolve(wreq.GetNSN(), resolvedData)
 	if resolvedData[0].Success {

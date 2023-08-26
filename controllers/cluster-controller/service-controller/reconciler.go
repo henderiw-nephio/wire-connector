@@ -81,7 +81,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	// update (add/update) node to cache
 	if cr.Name == "wirer-service" && len(cr.Spec.ExternalIPs) > 0 {
 		r.serviceCache.Upsert(ctx,
-			types.NamespacedName{Namespace: r.clusterName, Name: req.Name},
+			types.NamespacedName{Name: r.clusterName},
 			wireservice.Service{
 				Object:      wire.Object{IsReady: true},
 				GRPCAddress: cr.Spec.ExternalIPs[0],             // we pick the first IP
@@ -89,7 +89,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			},
 		)
 	} else {
-		r.serviceCache.Delete(ctx, types.NamespacedName{Namespace: r.clusterName, Name: req.Name})
+		r.serviceCache.Delete(ctx, types.NamespacedName{Name: r.clusterName})
 	}
 
 	return ctrl.Result{}, nil

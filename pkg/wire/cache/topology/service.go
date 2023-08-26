@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The Nephio Authors.
+Copyright 2022 Nokia.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,18 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package ctrlconfig
+package topology
 
 import (
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
-	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/service"
-	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/topology"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type Config struct {
-	ClusterName   string
-	Client        client.Client
-	ServiceCache  wire.Cache[wireservice.Service]
-	TopologyCache wire.Cache[wiretopology.Topology]
+type Topology struct {
+	wire.Object
+	ClusterName string
 }

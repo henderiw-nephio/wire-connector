@@ -37,6 +37,7 @@ import (
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
 	wirecluster "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/cluster"
 	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/service"
+	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/topology"
 	wireproxy "github.com/henderiw-nephio/wire-connector/pkg/wire/proxy/wire"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire/wireclustercontroller"
 	reconciler "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
@@ -87,7 +88,7 @@ func main() {
 
 	c := wire.NewCache[wirecluster.Cluster]()
 	svc := wire.NewCache[wireservice.Service]()
-	t := wire.NewCache[struct{}]()
+	t := wire.NewCache[wiretopology.Topology]()
 
 	p := wireproxy.New(&wireproxy.Config{
 		Backend: wireclustercontroller.New(ctx, &wireclustercontroller.Config{

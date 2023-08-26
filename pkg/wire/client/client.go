@@ -24,6 +24,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/endpointpb"
+	"github.com/henderiw-nephio/wire-connector/pkg/proto/resolverpb"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -46,6 +47,8 @@ type Client interface {
 	EndpointGet(ctx context.Context, req *endpointpb.EndpointRequest) (*endpointpb.EndpointResponse, error)
 	EndpointCreate(ctx context.Context, req *endpointpb.EndpointRequest) (*endpointpb.EmptyResponse, error)
 	EndpointDelete(ctx context.Context, req *endpointpb.EndpointRequest) (*endpointpb.EmptyResponse, error)
+
+	Resolve(ctx context.Context, req *resolverpb.ResolveRequest) (*resolverpb.ResolveResponse, error)
 }
 
 type Config struct {
@@ -76,11 +79,12 @@ func New(cfg *Config) (Client, error) {
 }
 
 type client struct {
-	cfg      *Config
-	cancel   context.CancelFunc
-	conn     *grpc.ClientConn
-	wclient  wirepb.WireClient
-	epclient endpointpb.NodeEndpointClient
+	cfg           *Config
+	cancel        context.CancelFunc
+	conn          *grpc.ClientConn
+	wclient       wirepb.WireClient
+	epclient      endpointpb.NodeEndpointClient
+	resolveClinet resolverpb.ResolverClient
 	//logger
 	l logr.Logger
 }
@@ -109,6 +113,7 @@ func (r *client) Start(ctx context.Context) error {
 	//defer conn.Close()
 	r.wclient = wirepb.NewWireClient(r.conn)
 	r.epclient = endpointpb.NewNodeEndpointClient(r.conn)
+	r.resolveClinet = resolverpb.NewResolverClient(r.conn)
 	r.l.Info("started...")
 	go func() {
 		for {
@@ -144,6 +149,10 @@ func (r *client) EndpointDelete(ctx context.Context, req *endpointpb.EndpointReq
 
 func (r *client) EndpointCreate(ctx context.Context, req *endpointpb.EndpointRequest) (*endpointpb.EmptyResponse, error) {
 	return r.epclient.EndpointCreate(ctx, req)
+}
+
+func (r *client) Resolve(ctx context.Context, req *resolverpb.ResolveRequest) (*resolverpb.ResolveResponse, error) {
+	return r.resolveClinet.Resolve(ctx, req)
 }
 
 func (r *client) getConn(opts []grpc.DialOption) (conn *grpc.ClientConn, err error) {

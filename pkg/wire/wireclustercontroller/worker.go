@@ -20,7 +20,9 @@ import (
 	"context"
 
 	"github.com/go-logr/logr"
+	"github.com/henderiw-nephio/wire-connector/pkg/proto/resolverpb"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
+	"github.com/henderiw-nephio/wire-connector/pkg/wire/cache/resolve"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire/client"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire/state"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -32,6 +34,7 @@ type Worker interface {
 	Start(ctx context.Context) error
 	Stop()
 	Write(e state.WorkerEvent)
+	Resolve(ctx context.Context, req *resolverpb.ResolveRequest) *resolve.Data
 }
 
 func NewWorker(ctx context.Context, wireCache WireCache, cfg *client.Config) (Worker, error) {
@@ -150,4 +153,15 @@ func (r *worker) Write(e state.WorkerEvent) {
 			}
 		}
 	*/
+}
+
+func (r *worker) Resolve(ctx context.Context, req *resolverpb.ResolveRequest) *resolve.Data {
+	resp, err := r.client.Resolve(ctx, req)
+	if err != nil {
+		return &resolve.Data{Message: err.Error()}
+	}
+	if resp.StatusCode != resolverpb.StatusCode_OK {
+		return &resolve.Data{Message: resp.Reason}
+	}
+	return &resolve.Data{Success: true, HostIP: resp.HostIP}
 }

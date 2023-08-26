@@ -18,10 +18,11 @@ package topologycontroller
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/henderiw-nephio/wire-connector/controllers/cluster-controller/ctrlconfig"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
-	wirenode "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/node"
+	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/topology"
 	"github.com/nokia/k8s-ipam/pkg/meta"
 	"github.com/nokia/k8s-ipam/pkg/resource"
 	"github.com/pkg/errors"
@@ -53,7 +54,7 @@ type reconciler struct {
 	client.Client
 
 	clusterName string
-	topoCache   wire.Cache[struct{}]
+	topoCache   wire.Cache[wiretopology.Topology]
 }
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -79,23 +80,22 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	// update (add/update) node to cache
 	if cr.GetAnnotations()["wirer-key"] == "true" {
-		r.topoCache.Upsert(ctx, types.NamespacedName{Namespace: r.clusterName, Name: req.Name}, struct{}{})
+		// validate if namespace is not already used in another cluster
+		t, err := r.topoCache.Get(types.NamespacedName{Name: req.Name})
+		if err == nil {
+			if t.ClusterName != r.clusterName {
+				log.Error(fmt.Errorf("overlapping namespace"), "overlapping namespace", "cluster", t.ClusterName, "cluster", r.clusterName)
+				return ctrl.Result{}, nil
+			}
+		}
+
+		r.topoCache.Upsert(ctx, types.NamespacedName{Name: req.Name}, wiretopology.Topology{
+			Object:      wire.Object{IsReady: true},
+			ClusterName: r.clusterName,
+		})
 	} else {
-		r.topoCache.Delete(ctx, types.NamespacedName{Namespace: r.clusterName, Name: req.Name})
+		r.topoCache.Delete(ctx, types.NamespacedName{Name: req.Name})
 	}
 
 	return ctrl.Result{}, nil
-}
-
-// getNode retrieves specific data from the CR.
-func (r *reconciler) getNode(n *corev1.Node) wirenode.Node {
-	node := wirenode.Node{}
-
-	for _, addr := range n.Status.Addresses {
-		if addr.Type == corev1.NodeInternalIP {
-			node.IsReady = true
-			node.HostIP = addr.Address
-		}
-	}
-	return node
 }

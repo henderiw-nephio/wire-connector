@@ -29,6 +29,7 @@ import (
 	wirenode "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/node"
 	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/pod"
 	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/service"
+	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/topology"
 	"github.com/henderiw-nephio/wire-connector/pkg/xdp"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 )
@@ -46,6 +47,6 @@ type ControllerConfig struct {
 	NodeCache     wire.Cache[wirenode.Node]
 	ClusterCache  wire.Cache[wirecluster.Cluster]
 	ServiceCache  wire.Cache[wireservice.Service]
-	TopologyCache wire.Cache[struct{}]
+	TopologyCache wire.Cache[wiretopology.Topology]
 	Noderegistry  noder.NodeRegistry
 }
