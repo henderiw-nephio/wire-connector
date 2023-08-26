@@ -48,6 +48,8 @@ message Endpoint {
   string hostNodeName = 5;
   string hostIP = 6;
   string serviceEndpoint = 7;
+  string clusterName = 8;
+  bool localAction = 9;
 }
 
 message WireResponse {

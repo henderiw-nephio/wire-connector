@@ -121,6 +121,10 @@ func (r *WireReq) GetNSN() types.NamespacedName {
 	}
 }
 
+func (r *WireReq) HasLocalAction(epIdx int) bool {
+	return r.Endpoints[epIdx].LocalAction
+}
+
 func (r *WireReq) IsResolved(epIdx int) bool {
 	return r.Endpoints[epIdx].ServiceEndpoint != ""
 }
@@ -134,10 +138,11 @@ func (r *WireReq) Unresolve(epIdx int) {
 func (r *WireReq) Resolve(resolvedData []*resolve.Data) {
 	for epIdx, res := range resolvedData {
 		if res != nil {
-			//r.Endpoints[epIdx].NodeName = res.PodNodeName
 			r.Endpoints[epIdx].HostIP = res.HostIP
 			r.Endpoints[epIdx].HostNodeName = res.HostNodeName
 			r.Endpoints[epIdx].ServiceEndpoint = res.ServiceEndpoint
+			r.Endpoints[epIdx].LocalAction = res.LocalAction
+			r.Endpoints[epIdx].ClusterName = res.ClusterName
 		} else {
 			r.Unresolve(epIdx)
 		}
@@ -170,7 +175,7 @@ func (r *WireReq) CompareName(epIdx int, hostNodeName bool, name string) bool {
 func newWireResp(req *WireReq) *WireResp {
 	return &WireResp{
 		WireResponse: &wirepb.WireResponse{
-			WireKey: req.GetWireKey(),
+			WireKey:         req.GetWireKey(),
 			EndpointsStatus: []*wirepb.EndpointStatus{{Reason: ""}, {Reason: ""}},
 		},
 	}

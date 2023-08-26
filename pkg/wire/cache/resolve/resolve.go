@@ -17,10 +17,22 @@ limitations under the License.
 package resolve
 
 type Data struct {
-	Success         bool   // inidctaes if the resolution was successfull or not
-	Message         string // indicates why the resolution failed
-	PodNodeName     string // name of the pod
-	ServiceEndpoint string // ip address or dns name + port
-	HostIP          string // ip address
-	HostNodeName    string // name of the host node
+	// Success indicates if the resolution was successfull or not
+	Success         bool 
+	 // Message indicates why the resolution failed
+	Message         string
+	// LocalAction indicates if the wirer should act wiring this endpoint. 
+	// For an intercluster wire the local cluster only wires its local endpoint, the other end 
+	// provides the hostIP information for tunneling but no other information is required
+	LocalAction bool 
+	// PodNodeName defines name of the pod
+	PodNodeName     string 
+	// ServiceEndpoint defines  ip address or dns name + port
+	ServiceEndpoint string 
+	// HistIP defines the  ip address of the host
+	HostIP          string 
+	// HostNodeName defines the name of the host node
+	HostNodeName    string 
+	// ClusterName defines the name of the cluster on which this endpoint resides
+	ClusterName     string 
 }

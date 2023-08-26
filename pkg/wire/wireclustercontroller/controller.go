@@ -60,10 +60,10 @@ func New(ctx context.Context, cfg *Config) wire.InterClusterWirer {
 		clusterCache:  cfg.ClusterCache,
 		serviceCache:  cfg.ServiceCache,
 		topologyCache: cfg.TopologyCache,
-		wireCache:   NewWireCache(wire.NewCache[*Wire]()),
-		dispatcher:  dispatcher,
-		workerCache: workerCache,
-		l:           l,
+		wireCache:     NewWireCache(wire.NewCache[*Wire]()),
+		dispatcher:    dispatcher,
+		workerCache:   workerCache,
+		l:             l,
 	}
 	r.clusterCache.AddWatch(r.clusterCallback)
 	r.serviceCache.AddWatch(r.serviceCallback)
@@ -93,13 +93,9 @@ type wc struct {
 	clusterCache  wire.Cache[wirecluster.Cluster]
 	serviceCache  wire.Cache[wireservice.Service]
 	topologyCache wire.Cache[wiretopology.Topology]
-	//daemonCache wire.Cache[wiredaemon.Daemon]
-	//podCache    wire.Cache[wirepod.Pod]
-	//nodeCache   wire.Cache[wirenode.Node]
-	//nodeepCache NodeEpCache
-	wireCache   WireCache
-	workerCache wire.Cache[Worker]
-	dispatcher  Dispatcher
+	wireCache     WireCache
+	workerCache   wire.Cache[Worker]
+	dispatcher    Dispatcher
 
 	//geventCh chan event.GenericEvent
 
@@ -130,16 +126,18 @@ func (r *wc) resolveEndpoint(ctx context.Context, nsn types.NamespacedName) *res
 	if err != nil {
 		return &resolve.Data{Message: fmt.Sprintf("worker not found: %s", nsn.String())}
 	}
-	return w.Resolve(ctx, &resolverpb.ResolveRequest{NodeKey: &resolverpb.NodeKey{
+	resolvedData := w.Resolve(ctx, &resolverpb.ResolveRequest{NodeKey: &resolverpb.NodeKey{
 		Topology: nsn.Namespace,
 		NodeName: nsn.Name,
 	}})
+	resolvedData.ClusterName = t.ClusterName
+	return resolvedData
 }
 
 type CallbackCtx struct {
-	Message          string
-	Hold             bool
-	EvalHostNodeName bool
+	Message      string
+	Hold         bool
+	EvalTopology bool
 }
 
 // clusterCallback notifies the wire controller about the fact
@@ -192,10 +190,7 @@ func (r *wc) serviceCallback(ctx context.Context, a wire.Action, nsn types.Names
 		r.l.Info("expect Service", "got", reflect.TypeOf(d).Name())
 		return
 	}
-	var newd any
-	newd = nil
 	if d != nil && service.IsReady {
-		newd = service
 		address := fmt.Sprintf("%s:%s", service.GRPCAddress, service.GRPCPort)
 
 		// this is a safety
@@ -221,17 +216,17 @@ func (r *wc) serviceCallback(ctx context.Context, a wire.Action, nsn types.Names
 	} else {
 		c, err := r.workerCache.Get(nsn)
 		if err == nil {
-			// worker found
+			// worker found -> first stop and afterwards delete
 			c.Stop()
 			r.workerCache.Delete(ctx, nsn)
 		}
 	}
 	log.Info("serviceCallback ...call common callback...")
 
-	r.commonCallback(ctx, a, nsn, newd, &CallbackCtx{
-		Message:          "service/cluster failed",
-		Hold:             false, // to be checked what it means to the client if the grpc service restores
-		EvalHostNodeName: true,
+	r.commonCallback(ctx, a, nsn, d, &CallbackCtx{
+		Message:      "service/cluster failed",
+		Hold:         false, // to be checked what it means to the client if the grpc service restores
+		EvalTopology: false, // Here we evaluate the cluster
 	})
 	log.Info("serviceCallback ...end...")
 }
@@ -241,9 +236,9 @@ func (r *wc) topologyCallback(ctx context.Context, a wire.Action, nsn types.Name
 	log.Info("topologyCallback ...start...")
 
 	r.commonCallback(ctx, a, nsn, d, &CallbackCtx{
-		Message:          "pod failed",
-		Hold:             false,
-		EvalHostNodeName: false,
+		Message:      "topology/namespace failed",
+		Hold:         false,
+		EvalTopology: true, // Here we evaluate the cluster
 	})
 	log.Info("topologyCallback ...start...")
 }
@@ -259,7 +254,7 @@ func (r *wc) commonCallback(ctx context.Context, a wire.Action, nsn types.Namesp
 			w := *wire
 			for epIdx := range wire.WireReq.Endpoints {
 				epIdx := epIdx
-				if w.WireReq.IsResolved(epIdx) && w.WireReq.CompareName(epIdx, cbctx.EvalHostNodeName, nsn.Name) {
+				if w.WireReq.IsResolved(epIdx) && w.WireReq.CompareName(epIdx, cbctx.EvalTopology, nsn.Name) {
 					wg.Add(1)
 					go func() {
 						defer wg.Done()

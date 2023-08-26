@@ -94,7 +94,7 @@ func (r *Wire) Transition(newState state.State, eventCtx *state.EventCtx, genera
 			// should always resolve
 			workerNsn := types.NamespacedName{
 				Namespace: "default",
-				Name:      r.WireReq.GetHostNodeName(eventCtx.EpIdx),
+				Name:      r.WireReq.GetClusterName(eventCtx.EpIdx),
 			}
 
 			if err := r.dispatcher.Write(workerNsn, state.WorkerEvent{Action: ge, Req: r.WireReq, EventCtx: eventCtx}); err != nil {
@@ -136,8 +136,9 @@ func (r *WireReq) Resolve(resolvedData []*resolve.Data) {
 		if res != nil {
 			//r.Endpoints[epIdx].NodeName = res.PodNodeName
 			r.Endpoints[epIdx].HostIP = res.HostIP
-			r.Endpoints[epIdx].HostNodeName = res.HostNodeName
-			r.Endpoints[epIdx].ServiceEndpoint = res.ServiceEndpoint
+			r.Endpoints[epIdx].ClusterName = res.ClusterName
+			//r.Endpoints[epIdx].HostNodeName = res.HostNodeName
+			//r.Endpoints[epIdx].ServiceEndpoint = res.ServiceEndpoint
 		} else {
 			r.Unresolve(epIdx)
 		}
@@ -159,18 +160,22 @@ func (r *WireReq) GetHostNodeName(epIdx int) string {
 	return r.Endpoints[epIdx].HostNodeName
 }
 
-func (r *WireReq) CompareName(epIdx int, hostNodeName bool, name string) bool {
-	if hostNodeName {
-		return r.Endpoints[epIdx].HostNodeName == name
+func (r *WireReq) GetClusterName(epIdx int) string {
+	return r.Endpoints[epIdx].ClusterName
+}
+
+func (r *WireReq) CompareName(epIdx int, evalTopology bool, name string) bool {
+	if evalTopology {
+		return r.Endpoints[epIdx].Topology == name
 	} else {
-		return r.Endpoints[epIdx].NodeName == name
+		return r.Endpoints[epIdx].ClusterName == name
 	}
 }
 
 func newWireResp(req *WireReq) *WireResp {
 	return &WireResp{
 		WireResponse: &wirepb.WireResponse{
-			WireKey: req.GetWireKey(),
+			WireKey:         req.GetWireKey(),
 			EndpointsStatus: []*wirepb.EndpointStatus{{Reason: ""}, {Reason: ""}},
 		},
 	}

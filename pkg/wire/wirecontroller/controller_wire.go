@@ -101,7 +101,19 @@ func (r *wc) WireDelete(ctx context.Context, req *wirepb.WireRequest) (*wirepb.E
 func (r *wc) resolveWire(wreq *WireReq) []*resolve.Data {
 	resolvedData := make([]*resolve.Data, 2)
 	for epIdx := range wreq.Endpoints {
-		resolvedData[epIdx] = r.resolveEndpoint(wreq.GetEndpointNodeNSN(epIdx))
+		// we only need to resolve endpoints that are on this cluster
+		// local endpoints with dont have a clusterName defined or if the clusterName does not match
+		if wreq.Endpoints[epIdx].ClusterName == "" || wreq.Endpoints[epIdx].ClusterName == r.clusterName {
+			resolvedData[epIdx] = r.resolveEndpoint(wreq.GetEndpointNodeNSN(epIdx))
+			resolvedData[epIdx].LocalAction = true
+		} else {
+			resolvedData[epIdx] = &resolve.Data{
+				Success:     true,
+				LocalAction: false,
+				HostIP:      wreq.Endpoints[epIdx].HostIP, // we assume the HostIP is also set when the ClusterName is set
+				ClusterName: wreq.Endpoints[epIdx].ClusterName,
+			}
+		}
 	}
 	return resolvedData
 }
@@ -116,21 +128,27 @@ func (r *wc) wireCreate(wreq *WireReq, origin string) {
 	if resolvedData[0].Success && resolvedData[1].Success {
 		r.l.Info("wireCreate", "nsn", wreq.GetNSN(), "origin", origin, "resolution", "succeeded")
 		// resolution worked for both epA and epB
-		r.wireCache.HandleEvent(wreq.GetNSN(), state.CreateEvent, &state.EventCtx{
-			EpIdx: 0,
-		})
-		// both endpoints resolve to the same host -> through dependency we indicate
-		// this (the state machine handles the dependency)
-		if resolvedData[0].HostIP == resolvedData[1].HostIP {
+		if resolvedData[0].LocalAction {
 			r.wireCache.HandleEvent(wreq.GetNSN(), state.CreateEvent, &state.EventCtx{
-				EpIdx:    1,
-				SameHost: true,
-			})
-		} else {
-			r.wireCache.HandleEvent(wreq.GetNSN(), state.CreateEvent, &state.EventCtx{
-				EpIdx: 1,
+				EpIdx: 0,
 			})
 		}
+		// both endpoints resolve to the same host -> through dependency we indicate
+		// this (the state machine handles the dependency)
+		if resolvedData[1].LocalAction {
+			if resolvedData[0].HostIP == resolvedData[1].HostIP {
+
+				r.wireCache.HandleEvent(wreq.GetNSN(), state.CreateEvent, &state.EventCtx{
+					EpIdx:    1,
+					SameHost: true,
+				})
+			} else {
+				r.wireCache.HandleEvent(wreq.GetNSN(), state.CreateEvent, &state.EventCtx{
+					EpIdx: 1,
+				})
+			}
+		}
+
 	} else {
 		// handle event is done by the resolution with more specific info
 		r.l.Info("wireCreate", "nsn", wreq.GetNSN(), "origin", origin, "resolution", "failed")
@@ -158,12 +176,12 @@ func (r *wc) wireDelete(wreq *WireReq, origin string) {
 	resolvedData := r.resolveWire(wreq)
 	r.l.Info("wireDelete", "nsn", wreq.GetNSN(), "origin", origin, "resolvedData0", resolvedData[0], "resolvedData1", resolvedData[1])
 	r.wireCache.Resolve(wreq.GetNSN(), resolvedData)
-	if resolvedData[0].Success {
+	if resolvedData[0].Success && resolvedData[0].LocalAction {
 		r.wireCache.HandleEvent(wreq.GetNSN(), state.DeleteEvent, &state.EventCtx{
 			EpIdx: 0,
 		})
 	}
-	if resolvedData[1].Success {
+	if resolvedData[1].Success && resolvedData[1].LocalAction {
 		if resolvedData[0].Success && resolvedData[0].HostIP == resolvedData[1].HostIP {
 			// both endpoints resolve to the same host -> through dependency we indicate
 			// this (the state machine handles the dependency)

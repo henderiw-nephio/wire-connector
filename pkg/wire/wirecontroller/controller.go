@@ -38,6 +38,7 @@ import (
 )
 
 type Config struct {
+	ClusterName string
 	DaemonCache wire.Cache[wiredaemon.Daemon]
 	PodCache    wire.Cache[wirepod.Pod]
 	NodeCache   wire.Cache[wirenode.Node]
@@ -51,6 +52,7 @@ func New(ctx context.Context, cfg *Config) wire.InClusterWirer {
 	dispatcher := NewDispatcher(workerCache)
 
 	r := &wc{
+		clusterName: cfg.ClusterName,
 		daemonCache: cfg.DaemonCache,
 		podCache:    cfg.PodCache,
 		nodeCache:   cfg.NodeCache,
@@ -89,6 +91,7 @@ func New(ctx context.Context, cfg *Config) wire.InClusterWirer {
 }
 
 type wc struct {
+	clusterName string // need to find the proper way to retrieve this info
 	daemonCache wire.Cache[wiredaemon.Daemon]
 	podCache    wire.Cache[wirepod.Pod]
 	nodeCache   wire.Cache[wirenode.Node]
@@ -258,7 +261,7 @@ func (r *wc) commonCallback(ctx context.Context, a wire.Action, nsn types.Namesp
 			w := *wire
 			for epIdx := range wire.WireReq.Endpoints {
 				epIdx := epIdx
-				if w.WireReq.IsResolved(epIdx) && w.WireReq.CompareName(epIdx, cbctx.EvalHostNodeName, nsn.Name) {
+				if w.WireReq.IsResolved(epIdx) && w.WireReq.HasLocalAction(epIdx) && w.WireReq.CompareName(epIdx, cbctx.EvalHostNodeName, nsn.Name) {
 					wg.Add(1)
 					go func() {
 						defer wg.Done()
