@@ -14,25 +14,21 @@
  limitations under the License.
 */
 
-package leasecontroller
+package nodeinvcontroller
 
 import (
 	"context"
 	"fmt"
-	"os"
 	"reflect"
-	"time"
 
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
-	wiredaemon "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/daemon"
+	wirenode "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/node"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
-	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
 	"github.com/nokia/k8s-ipam/pkg/meta"
 	"github.com/nokia/k8s-ipam/pkg/resource"
 	"github.com/pkg/errors"
-	coordinationv1 "k8s.io/api/coordination/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -42,7 +38,7 @@ import (
 )
 
 func init() {
-	reconcilerinterface.Register("leasecontroller", &reconciler{})
+	reconcilerinterface.Register("nodeinvcontroller", &reconciler{})
 }
 
 const (
@@ -50,6 +46,15 @@ const (
 	errGetCr        = "cannot get resource"
 	errUpdateStatus = "cannot update status"
 )
+
+// New Reconciler -> used for intercluster controller
+func New(ctx context.Context, cfg *ctrlconfig.Config) reconcile.Reconciler {
+	return &reconciler{
+		Client:      cfg.Client,
+		nodeCache:   cfg.NodeCache,
+		clusterName: cfg.ClusterName,
+	}
+}
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c interface{}) (map[schema.GroupVersionKind]chan event.GenericEvent, error) {
@@ -61,26 +66,28 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 
 	// initialize reconciler
 	r.Client = mgr.GetClient()
-	r.daemonCache = cfg.DaemonCache
+	r.nodeCache = cfg.NodeCache
 
 	return nil,
 		ctrl.NewControllerManagedBy(mgr).
-			Named("LeaseController").
-			For(&coordinationv1.Lease{}).
+			Named("NodeController").
+			For(&corev1.Node{}).
 			Complete(r)
 }
 
-// reconciler reconciles a IPPrefix object
+// reconciler reconciles a KRM resource
 type reconciler struct {
 	client.Client
 
-	daemonCache wire.Cache[wiredaemon.Daemon]
+	clusterName string
+	nodeCache   wire.Cache[wirenode.Node]
 }
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := log.FromContext(ctx)
+	log := log.FromContext(ctx).WithValues("cluster", r.clusterName)
+	log.Info("reconcile node")
 
-	cr := &coordinationv1.Lease{}
+	cr := &corev1.Node{}
 	if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
 		// There's no need to requeue if we no longer exist. Otherwise we'll be
 		// requeued implicitly because we return an error.
@@ -88,55 +95,30 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			log.Error(err, errGetCr)
 			return ctrl.Result{}, errors.Wrap(resource.IgnoreNotFound(err), errGetCr)
 		}
-		r.daemonCache.Delete(ctx, req.NamespacedName)
+		r.nodeCache.Delete(ctx, req.NamespacedName)
 		return reconcile.Result{}, nil
 	}
 
 	if meta.WasDeleted(cr) {
-		// check if this pod was used for a link wire
-		// if so clean up the link wire
-		// delete the pod from the manager
-		r.daemonCache.Delete(ctx, req.NamespacedName)
+		r.nodeCache.Delete(ctx, req.NamespacedName)
 		return ctrl.Result{}, nil
 	}
 
-	// update (add/update) pod to inventory
-	if cr.Namespace == os.Getenv("POD_NAMESPACE") {
-		r.daemonCache.Upsert(ctx, req.NamespacedName, r.getDaemon(cr))
-	}
+	// update (add/update) node to cache
+	r.nodeCache.Upsert(ctx, req.NamespacedName, r.getNode(cr))
 
 	return ctrl.Result{}, nil
 }
 
-func (r *reconciler) getDaemon(l *coordinationv1.Lease) wiredaemon.Daemon {
-	d := wiredaemon.Daemon{}
+// getNode retrieves specific data from the CR.
+func (r *reconciler) getNode(n *corev1.Node) wirenode.Node {
+	node := wirenode.Node{}
 
-	now := metav1.NowMicro()
-
-	if l.Spec.RenewTime != nil {
-		expectedRenewTime := l.Spec.RenewTime.Add(time.Duration(*l.Spec.LeaseDurationSeconds) * time.Second)
-		if !expectedRenewTime.Before(now.Time) {
-			if len(l.Labels) != 0 {
-				nodeAddress, ok := l.Labels[invv1alpha1.NephioWireNodeAddress]
-				if !ok {
-					return d
-				}
-				grpcAddress, ok := l.Labels[invv1alpha1.NephioWireGRPCAddress]
-				if !ok {
-					return d
-				}
-				grpcPort, ok := l.Labels[invv1alpha1.NephioWireGRPCPort]
-				if !ok {
-					return d
-				}
-				d.IsReady = true
-				d.GRPCAddress = grpcAddress
-				d.HostIP = nodeAddress
-				d.GRPCPort = grpcPort
-				return d
-			}
-
+	for _, addr := range n.Status.Addresses {
+		if addr.Type == corev1.NodeInternalIP {
+			node.IsReady = true
+			node.HostIP = addr.Address
 		}
 	}
-	return d
+	return node
 }

@@ -19,6 +19,7 @@ package wirecontroller
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
@@ -94,7 +95,8 @@ func getWireReq(l *invv1alpha1.Link) *wirepb.WireRequest {
 			Namespace: l.Namespace,
 			Name:      l.Name,
 		},
-		Endpoints: make([]*wirepb.Endpoint, len(l.Spec.Endpoints), len(l.Spec.Endpoints)),
+		Intercluster: os.Getenv("WIRER_INTERCLUSTER") == "true",
+		Endpoints:    make([]*wirepb.Endpoint, len(l.Spec.Endpoints), len(l.Spec.Endpoints)),
 	}
 	for epIdx, ep := range l.Spec.Endpoints {
 		req.Endpoints[epIdx] = &wirepb.Endpoint{

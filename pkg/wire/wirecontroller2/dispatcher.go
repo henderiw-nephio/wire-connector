@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The Nephio Authors.
+Copyright 2022 Nokia.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,18 +14,33 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package ctrlconfig
+package wirecontroller
 
 import (
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
-	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/service"
-	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/topology"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"github.com/henderiw-nephio/wire-connector/pkg/wire/state"
+	"k8s.io/apimachinery/pkg/types"
 )
 
-type Config struct {
-	ClusterName   string
-	Client        client.Client
-	ServiceCache  wire.Cache[wireservice.Service]
-	TopologyCache wire.Cache[wiretopology.Topology]
+type Dispatcher interface {
+	Write(workerNsn types.NamespacedName, e state.WorkerEvent) error
+}
+
+func NewDispatcher(wc wire.Cache[Worker]) Dispatcher {
+	return &dispatcher{
+		workerCache: wc,
+	}
+}
+
+type dispatcher struct {
+	workerCache wire.Cache[Worker]
+}
+
+func (r *dispatcher) Write(workerNsn types.NamespacedName, e state.WorkerEvent) error {
+	worker, err := r.workerCache.Get(workerNsn)
+	if err != nil {
+		return err
+	}
+	worker.Write(e)
+	return nil
 }

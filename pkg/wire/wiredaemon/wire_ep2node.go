@@ -76,16 +76,28 @@ func (r *wep2node) Deploy(req *endpointpb.EndpointRequest) error {
 			isLocal: true,
 			nsPath:  r.nsPath,
 		}
+		// if we wire a server the veth pair is totally hostname based
+		if req.ServerType {
+			epA.nsPath = ""
+		}
 		epB := Endpoint{
 			ifName:  getVethName(getHashValue(getNsIfName(req.NodeKey.Topology, req.NodeKey.NodeName, ep.IfName))),
 			isLocal: true,
 			nsPath:  "", // this is explicit since this is the host namespace on which this req is send
 		}
 		// since a veth pair delates both ends we assume that if 1 ens exists the ep2node veth pait exists
-		if doesItfceExistsInNS(epA.ifName, epA.nsPath) || doesItfceExists(epB.ifName) {
-			r.l.Info("veth pair already exists", "epA", ep.IfName, "epB", epB.ifName)
-			continue
+		if req.ServerType {
+			if doesItfceExists(epA.ifName) || doesItfceExists(epB.ifName) {
+				r.l.Info("veth pair already exists", "epA", ep.IfName, "epB", epB.ifName)
+				continue
+			}
+		} else {
+			if doesItfceExistsInNS(epA.ifName, epA.nsPath) || doesItfceExists(epB.ifName) {
+				r.l.Info("veth pair already exists", "epA", ep.IfName, "epB", epB.ifName)
+				continue
+			}
 		}
+		
 		// the ep2node veth-pair does not exist -> create it
 
 		// get random names for veth sides as they will be created in root netns first
@@ -111,6 +123,10 @@ func (r *wep2node) Destroy(req *endpointpb.EndpointRequest) error {
 			ifName:  ep.IfName,
 			isLocal: true,
 			nsPath:  r.nsPath,
+		}
+		// if we wire a server the veth pair is totally hostname based
+		if req.ServerType {
+			epA.nsPath = ""
 		}
 		epB := Endpoint{
 			ifName:  getHashValue(getNsIfName(req.NodeKey.Topology, req.NodeKey.NodeName, ep.IfName)),

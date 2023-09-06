@@ -20,9 +20,14 @@ import (
 	"context"
 
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/endpointpb"
-	"github.com/henderiw-nephio/wire-connector/pkg/proto/resolverpb"
+	//"github.com/henderiw-nephio/wire-connector/pkg/proto/resolverpb"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
 )
+
+type Wirer interface {
+	Node2NodeWirer
+	Ep2NodeWirer
+}
 
 type DaemonWirer interface {
 	Node2NodeWirer
@@ -32,16 +37,18 @@ type DaemonWirer interface {
 type InClusterWirer interface {
 	Node2NodeWirer
 	Ep2NodeWirer
-	Resolver
+	//Resolver
 }
 
 type InterClusterWirer interface {
 	Node2NodeWirer
 }
 
+/*
 type Resolver interface {
 	Resolve(ctx context.Context, req *resolverpb.ResolveRequest) (*resolverpb.ResolveResponse, error)
 }
+*/
 
 type Node2NodeWirer interface {
 	WireGet(ctx context.Context, req *wirepb.WireRequest) (*wirepb.WireResponse, error)

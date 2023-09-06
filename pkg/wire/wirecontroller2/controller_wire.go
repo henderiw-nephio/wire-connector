@@ -29,8 +29,6 @@ import (
 	//"sigs.k8s.io/controller-runtime/pkg/event"
 )
 
-//type ResourceCallbackFn[T1 any] func(types.NamespacedName, T1)
-
 func (r *wc) validate(req *wirepb.WireRequest) error {
 	if r.wireCache == nil {
 		return fmt.Errorf("cache not initialized")

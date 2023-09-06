@@ -18,21 +18,30 @@ package servicecontroller
 
 import (
 	"context"
+	"fmt"
+	"reflect"
 
-	"github.com/henderiw-nephio/wire-connector/controllers/cluster-controller/ctrlconfig"
+	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
 	wirenode "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/node"
 	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/service"
+	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
 	"github.com/nokia/k8s-ipam/pkg/meta"
 	"github.com/nokia/k8s-ipam/pkg/resource"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
+
+func init() {
+	reconcilerinterface.Register("servicecontroller", &reconciler{})
+}
 
 const (
 	// error
@@ -49,6 +58,26 @@ func New(ctx context.Context, cfg *ctrlconfig.Config) reconcile.Reconciler {
 	}
 }
 
+// SetupWithManager sets up the controller with the Manager.
+func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c interface{}) (map[schema.GroupVersionKind]chan event.GenericEvent, error) {
+	// register scheme
+	cfg, ok := c.(*ctrlconfig.Config)
+	if !ok {
+		return nil, fmt.Errorf("cannot initialize, expecting controllerConfig, got: %s", reflect.TypeOf(c).Name())
+	}
+
+	// initialize reconciler
+	r.Client = mgr.GetClient()
+	r.serviceCache = cfg.ServiceCache
+	r.clusterName = cfg.ClusterName
+
+	return nil,
+		ctrl.NewControllerManagedBy(mgr).
+			Named("PodController").
+			For(&corev1.Pod{}).
+			Complete(r)
+}
+
 // reconciler reconciles a KRM resource
 type reconciler struct {
 	client.Client
@@ -59,7 +88,7 @@ type reconciler struct {
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx).WithValues("cluster", r.clusterName)
-	log.Info("reconcile cluster service")
+	log.Info("reconcile service")
 
 	cr := &corev1.Service{}
 	if err := r.Get(ctx, req.NamespacedName, cr); err != nil {

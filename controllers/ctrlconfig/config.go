@@ -31,13 +31,16 @@ import (
 	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/service"
 	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/topology"
 	"github.com/henderiw-nephio/wire-connector/pkg/xdp"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 )
 
-type ControllerConfig struct {
+type Config struct {
 	Poll  time.Duration
 	Copts controller.Options
 
+	Client        client.Client
+	ClusterName   string
 	PodManager    pod.Manager
 	NodeManager   node.Manager
 	CRI           cri.CRI

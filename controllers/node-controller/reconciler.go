@@ -47,10 +47,19 @@ const (
 	errUpdateStatus = "cannot update status"
 )
 
+// New Reconciler -> used for intercluster controller
+func New(ctx context.Context, cfg *ctrlconfig.Config) reconcile.Reconciler {
+	return &reconciler{
+		Client:      cfg.Client,
+		nodeCache:   cfg.NodeCache,
+		clusterName: cfg.ClusterName,
+	}
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c interface{}) (map[schema.GroupVersionKind]chan event.GenericEvent, error) {
 	// register scheme
-	cfg, ok := c.(*ctrlconfig.ControllerConfig)
+	cfg, ok := c.(*ctrlconfig.Config)
 	if !ok {
 		return nil, fmt.Errorf("cannot initialize, expecting controllerConfig, got: %s", reflect.TypeOf(c).Name())
 	}
@@ -70,11 +79,13 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 type reconciler struct {
 	client.Client
 
-	nodeCache wire.Cache[wirenode.Node]
+	clusterName string
+	nodeCache   wire.Cache[wirenode.Node]
 }
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := log.FromContext(ctx)
+	log := log.FromContext(ctx).WithValues("cluster", r.clusterName)
+	log.Info("reconcile node")
 
 	cr := &corev1.Node{}
 	if err := r.Get(ctx, req.NamespacedName, cr); err != nil {

@@ -38,6 +38,7 @@ message WireRequest {
   repeated Endpoint endpoints = 2;
   uint32 mtu = 3;
   uint32 vpnID = 4;
+  bool intercluster = 5;
 }
 
 message Endpoint {
@@ -48,7 +49,7 @@ message Endpoint {
   string hostNodeName = 5;
   string hostIP = 6;
   string serviceEndpoint = 7;
-  string clusterName = 8;
+  string clusterName = 8; // only used in intercluster controller to ease the lookup to the cluster worker
   bool localAction = 9;
 }
 

@@ -29,9 +29,9 @@ import (
 	"github.com/henderiw-nephio/network-node-operator/pkg/node"
 	"github.com/henderiw-nephio/network-node-operator/pkg/node/srlinux"
 	"github.com/henderiw-nephio/network-node-operator/pkg/node/xserver"
-	_ "github.com/henderiw-nephio/wire-connector/controllers/cluster-controller"
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/node-controller"
+	_ "github.com/henderiw-nephio/wire-connector/controllers/node-ep-controller"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/pod-controller"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/wire-controller"
 	"github.com/henderiw-nephio/wire-connector/pkg/grpcserver"
@@ -43,8 +43,11 @@ import (
 	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/pod"
 	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/service"
 	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/topology"
+	nodeepproxy "github.com/henderiw-nephio/wire-connector/pkg/wire/proxy/nodeep"
+	wirecontroller "github.com/henderiw-nephio/wire-connector/pkg/wire/wirecontroller2"
+
+	//resolverproxy "github.com/henderiw-nephio/wire-connector/pkg/wire/proxy/resolver"
 	wireproxy "github.com/henderiw-nephio/wire-connector/pkg/wire/proxy/wire"
-	"github.com/henderiw-nephio/wire-connector/pkg/wire/wireclustercontroller"
 	reconciler "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
 	"go.uber.org/zap/zapcore"
 	"golang.org/x/exp/slices"
@@ -98,17 +101,20 @@ func main() {
 	d := wire.NewCache[wiredaemon.Daemon]()
 	n := wire.NewCache[wirenode.Node]()
 
-	wcc := wireclustercontroller.New(ctx, &wireclustercontroller.Config{
+	wc := wirecontroller.New(ctx, &wirecontroller.Config{
+		ClusterCache:  c,
+		ServiceCache:  svc,
 		DaemonCache:   d,
 		PodCache:      pd,
 		NodeCache:     n,
-		ClusterCache:  c,
-		ServiceCache:  svc,
 		TopologyCache: t,
 	})
 
+	np := nodeepproxy.New(&nodeepproxy.Config{
+		Backend: wc,
+	})
 	wp := wireproxy.New(&wireproxy.Config{
-		Backend: wcc,
+		Backend: wc,
 	})
 	wh := healthhandler.New()
 
@@ -120,6 +126,10 @@ func main() {
 		grpcserver.WithWireCreateHandler(wp.WireCreate),
 		grpcserver.WithWireDeleteHandler(wp.WireDelete),
 		grpcserver.WithWireWatchHandler(wp.WireWatch),
+		grpcserver.WithEndpointGetHandler(np.EndpointGet),
+		grpcserver.WithEndpointCreateHandler(np.EndpointCreate),
+		grpcserver.WithEndpointDeleteHandler(np.EndpointDelete),
+		grpcserver.WithEndpointWatchHandler(np.EndpointWatch),
 		grpcserver.WithWatchHandler(wh.Watch),
 		grpcserver.WithCheckHandler(wh.Check),
 	)
@@ -135,11 +145,10 @@ func main() {
 
 	ctrlCfg := &ctrlconfig.Config{
 		PodCache:      pd,
+		TopologyCache: t,
 		DaemonCache:   d,
 		NodeCache:     n,
-		ClusterCache:  c,
-		ServiceCache:  svc,
-		TopologyCache: t,
+		Noderegistry:  registerSupportedNodeProviders(),
 	}
 
 	enabledReconcilers := parseReconcilers(enabledReconcilersString)
@@ -198,7 +207,6 @@ func main() {
 				for nsn, daemon := range d.List() {
 					setupLog.Info("daemon", "Name", nsn, "daemon", daemon)
 				}
-
 				time.Sleep(5 * time.Second)
 			}
 		}

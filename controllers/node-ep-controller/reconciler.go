@@ -68,7 +68,7 @@ const (
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c interface{}) (map[schema.GroupVersionKind]chan event.GenericEvent, error) {
-	cfg, ok := c.(*ctrlconfig.ControllerConfig)
+	cfg, ok := c.(*ctrlconfig.Config)
 	if !ok {
 		return nil, fmt.Errorf("cannot initialize, expecting controllerConfig, got: %s", reflect.TypeOf(c).Name())
 	}
@@ -125,7 +125,7 @@ type reconciler struct {
 	wireclient wclient.Client
 }
 
-func getEndpointReq(n *invv1alpha1.Node, nm *invv1alpha1.NodeModel) *endpointpb.EndpointRequest {
+func getEndpointReq(n *invv1alpha1.Node, nm *invv1alpha1.NodeModel, providerType node.ProviderType) *endpointpb.EndpointRequest {
 	eps := make([]*endpointpb.Endpoint, 0, len(nm.Spec.Interfaces))
 	for _, itfce := range nm.Spec.Interfaces {
 		eps = append(eps, &endpointpb.Endpoint{IfName: itfce.Name})
@@ -136,7 +136,8 @@ func getEndpointReq(n *invv1alpha1.Node, nm *invv1alpha1.NodeModel) *endpointpb.
 			Topology: n.Namespace,
 			NodeName: n.Name,
 		},
-		Endpoints: eps,
+		Endpoints:  eps,
+		ServerType: providerType == node.ProviderTypeServer,
 	}
 	return req
 }
@@ -154,7 +155,22 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return reconcile.Result{}, nil
 	}
 
-	epReq := getEndpointReq(cr, &invv1alpha1.NodeModel{})
+	// TODO handle change of the network model config
+	nm, providerType, err := r.getNodeModel(ctx, cr)
+	if err != nil {
+		// TODO The scenario to handle is update the system when a model is not resovable
+		if errd := r.resources.APIDelete(ctx, cr); errd != nil {
+			err = errors.Join(err, errd)
+			log.Error(err, "cannot populate and delete existingresources")
+			return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+		}
+		log.Error(err, "cannot populate resources")
+		cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
+		return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+	}
+
+	// the model is not yet known but we can validate if the node exists in the topology
+	epReq := getEndpointReq(cr, nm, providerType)
 	epResp, err := r.wireclient.EndpointGet(ctx, epReq)
 	if err != nil {
 		// we should not recive an error since this indicates aan issue with the communication
@@ -173,6 +189,8 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	// xdp entries are useless and will be overwritten to the real once
 	if meta.WasDeleted(cr) {
 		if exists {
+			// while the epReq is not fully initialized the deletion of the pod associated with the node will detroy
+			// the ep and veth pairs
 			if _, err := r.wireclient.EndpointDelete(ctx, epReq); err != nil {
 				log.Error(err, "cannot remove wire")
 				cr.SetConditions(resourcev1alpha1.WiringFailed("cannot remove wire"))
@@ -206,23 +224,8 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		invv1alpha1.NephioTopologyKey: cr.Namespace,
 	})
 
-	// TODO handle change of the network model config
-	nm, err := r.getNodeModel(ctx, cr)
-	if err != nil {
-		// TODO delete interfaces
-		if errd := r.resources.APIDelete(ctx, cr); errd != nil {
-			err = errors.Join(err, errd)
-			log.Error(err, "cannot populate and delete existingresources")
-			return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
-		}
-		log.Error(err, "cannot populate resources")
-		cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
-		return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
-	}
-
 	// if everything is ok we dont have to deploy things
 	if epResp.StatusCode != endpointpb.StatusCode_OK {
-		epReq = getEndpointReq(cr, nm)
 		_, err := r.wireclient.EndpointCreate(ctx, epReq)
 		if err != nil {
 			log.Error(err, "cannot create endpoint")
@@ -256,16 +259,16 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	return reconcile.Result{}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 }
 
-func (r *reconciler) getNodeModel(ctx context.Context, cr *invv1alpha1.Node) (*invv1alpha1.NodeModel, error) {
+func (r *reconciler) getNodeModel(ctx context.Context, cr *invv1alpha1.Node) (*invv1alpha1.NodeModel, node.ProviderType, error) {
 	// get the specific provider implementation of the network device
 	node, err := r.nodeRegistry.NewNodeOfProvider(cr.Spec.Provider, r.Client, r.scheme)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	// get the node config associated to the node
 	nc, err := node.GetNodeConfig(ctx, cr)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	cr.Status.UsedNodeConfigRef = &corev1.ObjectReference{
 		APIVersion: nc.APIVersion,
@@ -275,7 +278,11 @@ func (r *reconciler) getNodeModel(ctx context.Context, cr *invv1alpha1.Node) (*i
 	}
 	cr.Status.UsedNodeModelRef = node.GetNodeModelConfig(ctx, nc)
 	// get interfaces
-	return node.GetInterfaces(ctx, nc)
+	nm, err := node.GetNodeModel(ctx, nc)
+	if err != nil {
+		return nil, "", err
+	}
+	return nm, node.GetProviderType(ctx), nil
 }
 
 func buildEndpoint(cr *invv1alpha1.Node, itfce invv1alpha1.NodeModelInterface, epIdx int) *invv1alpha1.Endpoint {

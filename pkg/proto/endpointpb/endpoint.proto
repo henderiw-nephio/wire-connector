@@ -39,6 +39,7 @@ message EndpointRequest {
   string hostNodeName = 3;
   string hostIP = 4;
   string serviceEndpoint = 5;
+  bool serverType = 6;
 }
 
 message Endpoint {

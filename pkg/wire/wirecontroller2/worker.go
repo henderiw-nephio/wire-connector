@@ -14,19 +14,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package wireclustercontroller
+package wirecontroller
 
 import (
 	"context"
 
 	"github.com/go-logr/logr"
+	"github.com/henderiw-nephio/wire-connector/pkg/proto/endpointpb"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire/client"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire/state"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
-
-// TODO WORKER IS TO BE ADOPTED TO THE SPECIFIC IMPLEMENTATION
 
 type Worker interface {
 	Start(ctx context.Context) error
@@ -34,7 +33,7 @@ type Worker interface {
 	Write(e state.WorkerEvent)
 }
 
-func NewWorker(ctx context.Context, wireCache WireCache, cfg *client.Config) (Worker, error) {
+func NewWorker(ctx context.Context, wireCache WireCache, epCache NodeEpCache, cfg *client.Config) (Worker, error) {
 	l := ctrl.Log.WithName("worker").WithValues("address", cfg.Address)
 
 	c, err := client.New(cfg)
@@ -43,6 +42,7 @@ func NewWorker(ctx context.Context, wireCache WireCache, cfg *client.Config) (Wo
 	}
 	return &worker{
 		wireCache: wireCache,
+		epCache:   epCache,
 		ch:        make(chan state.WorkerEvent, 10),
 		client:    c,
 		l:         l,
@@ -51,10 +51,10 @@ func NewWorker(ctx context.Context, wireCache WireCache, cfg *client.Config) (Wo
 
 type worker struct {
 	wireCache WireCache
-	//epCache   NodeEpCache
-	ch     chan state.WorkerEvent
-	client client.Client
-	cancel context.CancelFunc
+	epCache   NodeEpCache
+	ch        chan state.WorkerEvent
+	client    client.Client
+	cancel    context.CancelFunc
 	//logger
 	l logr.Logger
 }
@@ -98,6 +98,24 @@ func (r *worker) Start(ctx context.Context) error {
 						r.wireCache.HandleEvent(nsn, state.CreatedEvent, &state.EventCtx{
 							EpIdx: e.EventCtx.EpIdx,
 						})
+					case *NodeEpReq:
+						nsn := req.GetNSN()
+						r.l.Info("create endpoint event", "nsn", nsn, "data", req.EndpointRequest)
+						resp, err := r.client.EndpointCreate(ctx, req.EndpointRequest)
+						r.l.Info("create endpoint event", "nsn", nsn, "resp", resp, "err", err)
+						if err != nil {
+							eventCtx := e.EventCtx
+							eventCtx.Message = err.Error()
+							r.epCache.HandleEvent(nsn, state.FailedEvent, eventCtx)
+							continue
+						}
+						if resp.StatusCode == endpointpb.StatusCode_NOK {
+							eventCtx := e.EventCtx
+							eventCtx.Message = resp.GetReason()
+							r.epCache.HandleEvent(nsn, state.FailedEvent, eventCtx)
+						}
+						// success
+						r.epCache.HandleEvent(nsn, state.CreatedEvent, &state.EventCtx{})
 					}
 				case state.WorkerActionDelete:
 					switch req := e.Req.(type) {
@@ -121,6 +139,24 @@ func (r *worker) Start(ctx context.Context) error {
 						r.wireCache.HandleEvent(nsn, state.DeletedEvent, &state.EventCtx{
 							EpIdx: e.EventCtx.EpIdx,
 						})
+					case *NodeEpReq:
+						nsn := req.GetNSN()
+						r.l.Info("delete endpoint event", "nsn", nsn, "data", req.EndpointRequest)
+						resp, err := r.client.EndpointCreate(ctx, req.EndpointRequest)
+						r.l.Info("delete endpoint event", "nsn", nsn, "resp", resp, "err", err)
+						if err != nil {
+							eventCtx := e.EventCtx
+							eventCtx.Message = err.Error()
+							r.epCache.HandleEvent(nsn, state.FailedEvent, eventCtx)
+							continue
+						}
+						if resp.StatusCode == endpointpb.StatusCode_NOK {
+							eventCtx := e.EventCtx
+							eventCtx.Message = resp.GetReason()
+							r.epCache.HandleEvent(nsn, state.FailedEvent, eventCtx)
+						}
+						// success
+						r.epCache.HandleEvent(nsn, state.DeletedEvent, &state.EventCtx{})
 					}
 				}
 			case <-ctx.Done():

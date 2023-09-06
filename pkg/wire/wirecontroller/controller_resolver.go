@@ -16,6 +16,7 @@ limitations under the License.
 
 package wirecontroller
 
+/*
 import (
 	"context"
 	"fmt"
@@ -67,3 +68,4 @@ func (r *wc) Resolve(ctx context.Context, req *resolverpb.ResolveRequest) (*reso
 		HostIP:     d.HostIP,
 	}, nil
 }
+*/

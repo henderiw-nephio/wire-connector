@@ -141,8 +141,8 @@ func (r *WireReq) Resolve(resolvedData []*resolve.Data) {
 			r.Endpoints[epIdx].HostIP = res.HostIP
 			r.Endpoints[epIdx].HostNodeName = res.HostNodeName
 			r.Endpoints[epIdx].ServiceEndpoint = res.ServiceEndpoint
-			r.Endpoints[epIdx].LocalAction = res.LocalAction
-			r.Endpoints[epIdx].ClusterName = res.ClusterName
+			r.Endpoints[epIdx].LocalAction = res.Action
+			//r.Endpoints[epIdx].ClusterName = res.ClusterName
 		} else {
 			r.Unresolve(epIdx)
 		}

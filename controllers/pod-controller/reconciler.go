@@ -24,7 +24,6 @@ import (
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
 	wiredaemon "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/daemon"
-	wirenode "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/node"
 	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/pod"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
 	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
@@ -51,10 +50,20 @@ const (
 	errUpdateStatus = "cannot update status"
 )
 
+// New Reconciler -> used for intercluster controller
+func New(ctx context.Context, cfg *ctrlconfig.Config) reconcile.Reconciler {
+	return &reconciler{
+		Client:      cfg.Client,
+		podCache:    cfg.PodCache,
+		daemonCache: cfg.DaemonCache,
+		clusterName: cfg.ClusterName,
+	}
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c interface{}) (map[schema.GroupVersionKind]chan event.GenericEvent, error) {
 	// register scheme
-	cfg, ok := c.(*ctrlconfig.ControllerConfig)
+	cfg, ok := c.(*ctrlconfig.Config)
 	if !ok {
 		return nil, fmt.Errorf("cannot initialize, expecting controllerConfig, got: %s", reflect.TypeOf(c).Name())
 	}
@@ -63,7 +72,6 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 	r.Client = mgr.GetClient()
 	r.podCache = cfg.PodCache
 	r.daemonCache = cfg.DaemonCache
-	r.nodeCache = cfg.NodeCache
 
 	return nil,
 		ctrl.NewControllerManagedBy(mgr).
@@ -76,13 +84,14 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 type reconciler struct {
 	client.Client
 
+	clusterName string
 	podCache    wire.Cache[wirepod.Pod]
 	daemonCache wire.Cache[wiredaemon.Daemon]
-	nodeCache   wire.Cache[wirenode.Node]
 }
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := log.FromContext(ctx)
+	log := log.FromContext(ctx).WithValues("cluster", r.clusterName)
+	log.Info("reconcile pod")
 
 	cr := &corev1.Pod{}
 	if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
@@ -114,7 +123,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 	if len(cr.Labels) != 0 &&
 		cr.Labels["fn.kptgen.dev/controller"] == "wire-connector-daemon" {
-			// TODO add namespace ???
+		// TODO -> TBD add namespace ???
 
 		hostNodeName, d := r.getLeaseInfo(cr)
 		if hostNodeName != "" {

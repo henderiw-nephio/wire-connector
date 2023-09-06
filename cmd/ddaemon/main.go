@@ -101,7 +101,7 @@ func main() {
 
 	podManager := pod.NewManager()
 	nodeManager := node.NewManager()
-	ctrlCfg := &ctrlconfig.ControllerConfig{
+	ctrlCfg := &ctrlconfig.Config{
 		PodManager:  podManager,
 		NodeManager: nodeManager,
 		CRI:         cri,

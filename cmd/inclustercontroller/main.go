@@ -40,8 +40,10 @@ import (
 	wiredaemon "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/daemon"
 	wirenode "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/node"
 	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/pod"
+	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/topology"
 	nodeepproxy "github.com/henderiw-nephio/wire-connector/pkg/wire/proxy/nodeep"
-	resolverproxy "github.com/henderiw-nephio/wire-connector/pkg/wire/proxy/resolver"
+
+	//resolverproxy "github.com/henderiw-nephio/wire-connector/pkg/wire/proxy/resolver"
 	wireproxy "github.com/henderiw-nephio/wire-connector/pkg/wire/proxy/wire"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire/wirecontroller"
 	reconciler "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
@@ -90,41 +92,54 @@ func main() {
 	setupLog.Info("setup controller")
 	ctx := ctrl.SetupSignalHandler()
 
+	/*
+		cm := corev1.ConfigMap{}
+		if err := mgr.GetClient().Get(ctx, types.NamespacedName{Namespace: "kube-system", Name: "cluster-info"}, &cm); err != nil {
+			if resource.IgnoreNotFound(err) != nil {
+
+			}
+		}
+	*/
+
+	t := wire.NewCache[wiretopology.Topology]()
 	pd := wire.NewCache[wirepod.Pod]()
 	d := wire.NewCache[wiredaemon.Daemon]()
 	n := wire.NewCache[wirenode.Node]()
 
 	wc := wirecontroller.New(ctx, &wirecontroller.Config{
-		DaemonCache: d,
-		PodCache:    pd,
-		NodeCache:   n,
+		DaemonCache:   d,
+		PodCache:      pd,
+		NodeCache:     n,
+		TopologyCache: t,
 	})
 
-	nodeepp := nodeepproxy.New(&nodeepproxy.Config{
+	np := nodeepproxy.New(&nodeepproxy.Config{
 		Backend: wc,
 	})
-	wirep := wireproxy.New(&wireproxy.Config{
+	wp := wireproxy.New(&wireproxy.Config{
 		Backend: wc,
 	})
 
-	resp := resolverproxy.New(&resolverproxy.Config{
-		Backend: wc,
-	})
+	/*
+		resp := resolverproxy.New(&resolverproxy.Config{
+			Backend: wc,
+		})
+	*/
 	wh := healthhandler.New()
 
 	s := grpcserver.New(grpcserver.Config{
 		Address:  ":" + strconv.Itoa(9999),
 		Insecure: true,
 	},
-		grpcserver.WithWireGetHandler(wirep.WireGet),
-		grpcserver.WithWireCreateHandler(wirep.WireCreate),
-		grpcserver.WithWireDeleteHandler(wirep.WireDelete),
-		grpcserver.WithWireWatchHandler(wirep.WireWatch),
-		grpcserver.WithEndpointGetHandler(nodeepp.EndpointGet),
-		grpcserver.WithEndpointCreateHandler(nodeepp.EndpointCreate),
-		grpcserver.WithEndpointDeleteHandler(nodeepp.EndpointDelete),
-		grpcserver.WithEndpointWatchHandler(nodeepp.EndpointWatch),
-		grpcserver.WithResolverHandler(resp.Resolve),
+		grpcserver.WithWireGetHandler(wp.WireGet),
+		grpcserver.WithWireCreateHandler(wp.WireCreate),
+		grpcserver.WithWireDeleteHandler(wp.WireDelete),
+		grpcserver.WithWireWatchHandler(wp.WireWatch),
+		grpcserver.WithEndpointGetHandler(np.EndpointGet),
+		grpcserver.WithEndpointCreateHandler(np.EndpointCreate),
+		grpcserver.WithEndpointDeleteHandler(np.EndpointDelete),
+		grpcserver.WithEndpointWatchHandler(np.EndpointWatch),
+		//grpcserver.WithResolverHandler(resp.Resolve),
 		grpcserver.WithWatchHandler(wh.Watch),
 		grpcserver.WithCheckHandler(wh.Check),
 	)
@@ -138,11 +153,12 @@ func main() {
 		}
 	}()
 
-	ctrlCfg := &ctrlconfig.ControllerConfig{
-		PodCache:     pd,
-		DaemonCache:  d,
-		NodeCache:    n,
-		Noderegistry: registerSupportedNodeProviders(),
+	ctrlCfg := &ctrlconfig.Config{
+		PodCache:      pd,
+		TopologyCache: t,
+		DaemonCache:   d,
+		NodeCache:     n,
+		Noderegistry:  registerSupportedNodeProviders(),
 	}
 
 	enabledReconcilers := parseReconcilers(enabledReconcilersString)

@@ -22,13 +22,17 @@ import (
 	"reflect"
 
 	clusterwatchcontroller "github.com/henderiw-nephio/wire-connector/controllers/cluster-controller/clusterwatch-controller"
-	clusterctrlconfig "github.com/henderiw-nephio/wire-connector/controllers/cluster-controller/ctrlconfig"
-	servicecontroller "github.com/henderiw-nephio/wire-connector/controllers/cluster-controller/service-controller"
-	topologycontroller "github.com/henderiw-nephio/wire-connector/controllers/cluster-controller/topology-controller"
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
+	nodecontroller "github.com/henderiw-nephio/wire-connector/controllers/node-controller"
+	podcontroller "github.com/henderiw-nephio/wire-connector/controllers/pod-controller"
+	servicecontroller "github.com/henderiw-nephio/wire-connector/controllers/service-controller"
+	topologycontroller "github.com/henderiw-nephio/wire-connector/controllers/topology-controller"
 	"github.com/henderiw-nephio/wire-connector/pkg/cluster"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
 	wirecluster "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/cluster"
+	wiredaemon "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/daemon"
+	wirenode "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/node"
+	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/pod"
 	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/service"
 	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/topology"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
@@ -60,7 +64,7 @@ const (
 // SetupWithManager sets up the controller with the Manager.
 func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c interface{}) (map[schema.GroupVersionKind]chan event.GenericEvent, error) {
 	// register scheme
-	cfg, ok := c.(*ctrlconfig.ControllerConfig)
+	cfg, ok := c.(*ctrlconfig.Config)
 	if !ok {
 		return nil, fmt.Errorf("cannot initialize, expecting controllerConfig, got: %s", reflect.TypeOf(c).Name())
 	}
@@ -70,6 +74,9 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 	r.clusterCache = cfg.ClusterCache
 	r.serviceCache = cfg.ServiceCache
 	r.topoCache = cfg.TopologyCache
+	r.podCache = cfg.PodCache
+	r.daemonCache = cfg.DaemonCache
+	r.nodeCache = cfg.NodeCache
 	r.mgr = mgr
 
 	return nil,
@@ -87,6 +94,9 @@ type reconciler struct {
 	clusterCache wire.Cache[wirecluster.Cluster]
 	serviceCache wire.Cache[wireservice.Service]
 	topoCache    wire.Cache[wiretopology.Topology]
+	podCache     wire.Cache[wirepod.Pod]
+	daemonCache  wire.Cache[wiredaemon.Daemon]
+	nodeCache    wire.Cache[wirenode.Node]
 }
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -121,11 +131,14 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 				log.Error(err, "cannot get cluster client")
 				return ctrl.Result{}, errors.Wrap(err, "cannot get cluster client")
 			}
-			cc := &clusterctrlconfig.Config{
+			cc := &ctrlconfig.Config{
 				ClusterName:   clusterClient.GetName(),
 				Client:        cl,
 				ServiceCache:  r.serviceCache,
 				TopologyCache: r.topoCache,
+				PodCache:      r.podCache,
+				NodeCache:     r.nodeCache,
+				DaemonCache:   r.daemonCache,
 			}
 
 			r.clusterCache.Upsert(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: clusterClient.GetName()}, wirecluster.Cluster{
@@ -138,6 +151,8 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 					Reconcilers: []clusterwatchcontroller.Reconciler{
 						{Object: &corev1.Namespace{}, Reconciler: topologycontroller.New(ctx, cc)},
 						{Object: &corev1.Service{}, Reconciler: servicecontroller.New(ctx, cc)},
+						{Object: &corev1.Pod{}, Reconciler: podcontroller.New(ctx, cc)},
+						{Object: &corev1.Node{}, Reconciler: nodecontroller.New(ctx, cc)},
 					},
 					RESTConfig: config,
 					RESTmapper: cl.RESTMapper(),

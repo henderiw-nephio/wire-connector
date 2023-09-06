@@ -29,6 +29,7 @@ import (
 	wirenode "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/node"
 	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/pod"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire/cache/resolve"
+	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/topology"
 
 	"github.com/henderiw-nephio/wire-connector/pkg/wire/client"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire/state"
@@ -38,11 +39,11 @@ import (
 )
 
 type Config struct {
-	ClusterName string
-	DaemonCache wire.Cache[wiredaemon.Daemon]
-	PodCache    wire.Cache[wirepod.Pod]
-	NodeCache   wire.Cache[wirenode.Node]
-	//EndpointCache wire.Cache[*wireep.Endpoint]
+	ClusterName   string
+	TopologyCache wire.Cache[wiretopology.Topology]
+	DaemonCache   wire.Cache[wiredaemon.Daemon]
+	PodCache      wire.Cache[wirepod.Pod]
+	NodeCache     wire.Cache[wirenode.Node]
 }
 
 func New(ctx context.Context, cfg *Config) wire.InClusterWirer {
@@ -52,15 +53,15 @@ func New(ctx context.Context, cfg *Config) wire.InClusterWirer {
 	dispatcher := NewDispatcher(workerCache)
 
 	r := &wc{
-		clusterName: cfg.ClusterName,
-		daemonCache: cfg.DaemonCache,
-		podCache:    cfg.PodCache,
-		nodeCache:   cfg.NodeCache,
-		nodeepCache: NewEpCache(wire.NewCache[*NodeEndpoint]()),
-		wireCache:   NewWireCache(wire.NewCache[*Wire]()),
-		dispatcher:  dispatcher,
-		workerCache: workerCache,
-		l:           l,
+		topologyCache: cfg.TopologyCache,
+		daemonCache:   cfg.DaemonCache,
+		podCache:      cfg.PodCache,
+		nodeCache:     cfg.NodeCache,
+		nodeepCache:   NewEpCache(wire.NewCache[*NodeEndpoint]()),
+		wireCache:     NewWireCache(wire.NewCache[*Wire]()),
+		dispatcher:    dispatcher,
+		workerCache:   workerCache,
+		l:             l,
 	}
 	r.daemonCache.AddWatch(r.daemonCallback)
 	r.podCache.AddWatch(r.podCallback)
@@ -91,14 +92,14 @@ func New(ctx context.Context, cfg *Config) wire.InClusterWirer {
 }
 
 type wc struct {
-	clusterName string // need to find the proper way to retrieve this info
-	daemonCache wire.Cache[wiredaemon.Daemon]
-	podCache    wire.Cache[wirepod.Pod]
-	nodeCache   wire.Cache[wirenode.Node]
-	nodeepCache NodeEpCache
-	wireCache   WireCache
-	workerCache wire.Cache[Worker]
-	dispatcher  Dispatcher
+	topologyCache wire.Cache[wiretopology.Topology]
+	daemonCache   wire.Cache[wiredaemon.Daemon]
+	podCache      wire.Cache[wirepod.Pod]
+	nodeCache     wire.Cache[wirenode.Node]
+	nodeepCache   NodeEpCache
+	wireCache     WireCache
+	workerCache   wire.Cache[Worker]
+	dispatcher    Dispatcher
 
 	//geventCh chan event.GenericEvent
 
@@ -109,7 +110,23 @@ type wc struct {
 // - check if the pod exists in the cache and if it is ready
 // -> if ready we get the nodeName the network pod is running on
 // - via the nodeName we can find the serviceendpoint in the daemon cache if the daemon is ready
-func (r *wc) resolveEndpoint(nsn types.NamespacedName) *resolve.Data {
+func (r *wc) resolveEndpoint(nsn types.NamespacedName, intercluster bool) *resolve.Data {
+	// find the topology -> provides the clusterName or validates the name exists within the cluster
+	t, err := r.topologyCache.Get(types.NamespacedName{Name: nsn.Namespace})
+	if err != nil {
+		// for intercluster wires we allow the resolution to topology resolution to fail
+		// since one ep can reside in the local cluster and the other ep can reside in a remote cluster
+		if !intercluster {
+			return &resolve.Data{
+				Success: true,
+				Action:  false,
+			}
+		}
+		return &resolve.Data{Message: fmt.Sprintf("topology not found: %s", nsn.String())}
+	}
+	if !t.IsReady {
+		return &resolve.Data{Message: fmt.Sprintf("topology not ready: %s", nsn.String())}
+	}
 	pod, err := r.podCache.Get(nsn)
 	if err != nil {
 		return &resolve.Data{Message: fmt.Sprintf("pod not found: %s", nsn.String())}
@@ -127,15 +144,18 @@ func (r *wc) resolveEndpoint(nsn types.NamespacedName) *resolve.Data {
 	if !d.IsReady {
 		return &resolve.Data{Message: fmt.Sprintf("wireDaemon not found: %s", daemonHostNodeNSN.String())}
 	}
+	// needed for incluster only
 	if d.GRPCAddress == "" || d.GRPCPort == "" {
 		return &resolve.Data{Message: fmt.Sprintf("wireDaemon no grpc address/port: %s", daemonHostNodeNSN.String())}
 	}
 	return &resolve.Data{
 		Success:         true,
+		Action:          true,
 		PodNodeName:     pod.HostNodeName,
 		ServiceEndpoint: fmt.Sprintf("%s:%s", d.GRPCAddress, d.GRPCPort),
 		HostIP:          d.HostIP,
 		HostNodeName:    pod.HostNodeName,
+		ClusterName:     t.ClusterName,
 	}
 }
 
@@ -297,9 +317,9 @@ func (r *wc) commonCallback(ctx context.Context, a wire.Action, nsn types.Namesp
 			go func() {
 				defer wg.Done()
 				if wire.DesiredAction == DesiredActionCreate {
-					r.wireCreate(wire.WireReq, "callback")
+					r.wireCreate(ctx, wire.WireReq, "callback")
 				} else {
-					r.wireDelete(wire.WireReq, "callback")
+					r.wireDelete(ctx, wire.WireReq, "callback")
 				}
 			}()
 		}

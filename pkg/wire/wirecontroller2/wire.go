@@ -14,10 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package wireclustercontroller
+package wirecontroller
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/go-logr/logr"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
@@ -94,7 +95,13 @@ func (r *Wire) Transition(newState state.State, eventCtx *state.EventCtx, genera
 			// should always resolve
 			workerNsn := types.NamespacedName{
 				Namespace: "default",
-				//Name:      r.WireReq.GetClusterName(eventCtx.EpIdx),
+				Name:      r.WireReq.GetHostNodeName(eventCtx.EpIdx),
+			}
+			if os.Getenv("WIRER_INTERCLUSTER") == "true" {
+				workerNsn = types.NamespacedName{
+					Namespace: "default",
+					Name:      r.WireReq.GetClusterName(eventCtx.EpIdx),
+				}
 			}
 
 			if err := r.dispatcher.Write(workerNsn, state.WorkerEvent{Action: ge, Req: r.WireReq, EventCtx: eventCtx}); err != nil {
@@ -121,6 +128,10 @@ func (r *WireReq) GetNSN() types.NamespacedName {
 	}
 }
 
+func (r *WireReq) HasLocalAction(epIdx int) bool {
+	return r.Endpoints[epIdx].LocalAction
+}
+
 func (r *WireReq) IsResolved(epIdx int) bool {
 	return r.Endpoints[epIdx].ServiceEndpoint != ""
 }
@@ -134,11 +145,11 @@ func (r *WireReq) Unresolve(epIdx int) {
 func (r *WireReq) Resolve(resolvedData []*resolve.Data) {
 	for epIdx, res := range resolvedData {
 		if res != nil {
-			//r.Endpoints[epIdx].NodeName = res.PodNodeName
 			r.Endpoints[epIdx].HostIP = res.HostIP
-			//r.Endpoints[epIdx].ClusterName = res.ClusterName
-			//r.Endpoints[epIdx].HostNodeName = res.HostNodeName
-			//r.Endpoints[epIdx].ServiceEndpoint = res.ServiceEndpoint
+			r.Endpoints[epIdx].HostNodeName = res.HostNodeName
+			r.Endpoints[epIdx].ServiceEndpoint = res.ServiceEndpoint
+			r.Endpoints[epIdx].LocalAction = res.Action
+			r.Endpoints[epIdx].ClusterName = res.ClusterName
 		} else {
 			r.Unresolve(epIdx)
 		}
@@ -160,11 +171,21 @@ func (r *WireReq) GetHostNodeName(epIdx int) string {
 	return r.Endpoints[epIdx].HostNodeName
 }
 
-func (r *WireReq) CompareName(epIdx int, evalTopology bool, name string) bool {
-	if evalTopology {
-		return r.Endpoints[epIdx].Topology == name
-	} else {
+func (r *WireReq) GetClusterName(epIdx int) string {
+	return r.Endpoints[epIdx].ClusterName
+}
+
+// TODO add the fn for the service lookup
+func (r *WireReq) CompareName(epIdx int, evaluate EvaluateName, name string) bool {
+	switch evaluate {
+	case EvaluateClusterName:
 		return r.Endpoints[epIdx].ClusterName == name
+	case EvaluateHostNodeName:
+		return r.Endpoints[epIdx].HostNodeName == name
+	case EvaluateNodeName:
+		return r.Endpoints[epIdx].NodeName == name
+	default:
+		return false
 	}
 }
 
