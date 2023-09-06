@@ -24,7 +24,7 @@ import (
 
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
 	"github.com/henderiw-nephio/wire-connector/pkg/link"
-	"github.com/henderiw-nephio/wire-connector/pkg/node"
+	"github.com/henderiw-nephio/wire-connector/pkg/nodemgr"
 	"github.com/henderiw-nephio/wire-connector/pkg/pod"
 	"github.com/henderiw-nephio/wire-connector/pkg/xdp"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
@@ -84,7 +84,7 @@ type reconciler struct {
 	client.Client
 	finalizer *resource.APIFinalizer
 
-	nodeManager node.Manager
+	nodeManager nodemgr.Manager
 	podManager  pod.Manager
 
 	xdp xdp.XDP

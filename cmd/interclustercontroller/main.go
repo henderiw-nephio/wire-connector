@@ -26,9 +26,9 @@ import (
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
-	"github.com/henderiw-nephio/network-node-operator/pkg/node"
-	"github.com/henderiw-nephio/network-node-operator/pkg/node/srlinux"
-	"github.com/henderiw-nephio/network-node-operator/pkg/node/xserver"
+	"github.com/henderiw-nephio/wire-connector/pkg/node"
+	"github.com/henderiw-nephio/wire-connector/pkg/node/srlinux"
+	"github.com/henderiw-nephio/wire-connector/pkg/node/xserver"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/cluster-controller"
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/node-cache-controller"

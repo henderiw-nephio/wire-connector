@@ -19,9 +19,9 @@ package ctrlconfig
 import (
 	"time"
 
-	noder "github.com/henderiw-nephio/network-node-operator/pkg/node"
+	noder "github.com/henderiw-nephio/wire-connector/pkg/node"
 	"github.com/henderiw-nephio/wire-connector/pkg/cri"
-	"github.com/henderiw-nephio/wire-connector/pkg/node"
+	"github.com/henderiw-nephio/wire-connector/pkg/nodemgr"
 	"github.com/henderiw-nephio/wire-connector/pkg/pod"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
 	wirecluster "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/cluster"
@@ -42,8 +42,8 @@ type Config struct {
 
 	Client        client.Client
 	ClusterName   string
-	PodManager    pod.Manager
-	NodeManager   node.Manager
+	PodManager    pod.Manager // used in distributed approach
+	NodeManager   nodemgr.Manager // used in distributed approach
 	CRI           cri.CRI
 	XDP           xdp.XDP
 	PodCache      wire.Cache[wirepod.Pod]
@@ -53,5 +53,5 @@ type Config struct {
 	ClusterCache  wire.Cache[wirecluster.Cluster]
 	ServiceCache  wire.Cache[wireservice.Service]
 	TopologyCache wire.Cache[wiretopology.Topology]
-	Noderegistry  noder.NodeRegistry
+	NodeRegistry  noder.NodeRegistry
 }

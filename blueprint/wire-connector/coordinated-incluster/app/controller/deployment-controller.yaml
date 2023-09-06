@@ -34,6 +34,11 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: status.podIP
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
         - name: "NODE_NAME"
           valueFrom:
             fieldRef:
@@ -44,6 +49,10 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: status.hostIP
+        - name: ENABLE_NAD
+          value: "false"
+        - name: ENABLE_NODEDEPLOYERCONTROLLER
+          value: "true"
         - name: RECONCILER_PODCACHECONTROLLER
           value: "true"
         - name: RECONCILER_NODECACHECONTROLLER
@@ -51,6 +60,8 @@ spec:
         - name: RECONCILER_WIRECONTROLLER
           value: "true"
         - name: RECONCILER_NODEEPCONTROLLER
+          value: "true"
+        - name: RECONCILER_NODENODEPOOLCONTROLLER
           value: "true"
         resources:
           requests:

@@ -24,7 +24,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/henderiw-nephio/network-node-operator/pkg/node"
+	"github.com/henderiw-nephio/wire-connector/pkg/node"
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/endpointpb"
 	wclient "github.com/henderiw-nephio/wire-connector/pkg/wire/client"
@@ -87,7 +87,7 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 			//invv1alpha1.TargetGroupVersionKind,
 		},
 	})
-	r.nodeRegistry = cfg.Noderegistry
+	r.nodeRegistry = cfg.NodeRegistry
 	r.scheme = mgr.GetScheme()
 
 	wireClient, err := wclient.New(&wclient.Config{

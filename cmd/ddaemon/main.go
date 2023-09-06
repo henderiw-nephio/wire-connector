@@ -30,7 +30,7 @@ import (
 	_ "github.com/henderiw-nephio/wire-connector/controllers/node"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/pod"
 	"github.com/henderiw-nephio/wire-connector/pkg/cri"
-	"github.com/henderiw-nephio/wire-connector/pkg/node"
+	"github.com/henderiw-nephio/wire-connector/pkg/nodemgr"
 	"github.com/henderiw-nephio/wire-connector/pkg/pod"
 	"github.com/henderiw-nephio/wire-connector/pkg/xdp"
 	reconciler "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
@@ -100,7 +100,7 @@ func main() {
 	}
 
 	podManager := pod.NewManager()
-	nodeManager := node.NewManager()
+	nodeManager := nodemgr.NewManager()
 	ctrlCfg := &ctrlconfig.Config{
 		PodManager:  podManager,
 		NodeManager: nodeManager,

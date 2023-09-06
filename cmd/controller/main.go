@@ -26,16 +26,18 @@ import (
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
-	"github.com/henderiw-nephio/network-node-operator/pkg/node"
-	"github.com/henderiw-nephio/network-node-operator/pkg/node/srlinux"
-	"github.com/henderiw-nephio/network-node-operator/pkg/node/xserver"
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
+	_ "github.com/henderiw-nephio/wire-connector/controllers/node-deployer"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/node-cache-controller"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/node-ep-controller"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/pod-cache-controller"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/wire-controller"
+	_ "github.com/henderiw-nephio/wire-connector/controllers/node-nodepool-controller"
 	"github.com/henderiw-nephio/wire-connector/pkg/grpcserver"
 	"github.com/henderiw-nephio/wire-connector/pkg/grpcserver/healthhandler"
+	"github.com/henderiw-nephio/wire-connector/pkg/node"
+	"github.com/henderiw-nephio/wire-connector/pkg/node/srlinux"
+	"github.com/henderiw-nephio/wire-connector/pkg/node/xserver"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
 	wirecluster "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/cluster"
 	wiredaemon "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/daemon"
@@ -151,7 +153,7 @@ func main() {
 		DaemonCache:   d,
 		NodeCache:     n,
 		NodePoolCache: npool,
-		Noderegistry:  registerSupportedNodeProviders(),
+		NodeRegistry:  registerSupportedNodeProviders(),
 	}
 
 	enabledReconcilers := parseReconcilers(enabledReconcilersString)

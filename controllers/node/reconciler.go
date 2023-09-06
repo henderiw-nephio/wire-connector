@@ -23,7 +23,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
-	"github.com/henderiw-nephio/wire-connector/pkg/node"
+	"github.com/henderiw-nephio/wire-connector/pkg/nodemgr"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
 	"github.com/nephio-project/nephio/controllers/pkg/resource"
 	"github.com/nokia/k8s-ipam/pkg/meta"
@@ -70,7 +70,7 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 type reconciler struct {
 	client.Client
 
-	nodeManager node.Manager
+	nodeManager nodemgr.Manager
 
 	l logr.Logger
 }
