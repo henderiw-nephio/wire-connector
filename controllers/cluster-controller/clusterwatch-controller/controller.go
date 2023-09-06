@@ -55,6 +55,13 @@ type Config struct {
 type Reconciler struct {
 	Object     client.Object
 	Reconciler reconcile.Reconciler
+	Owns       []client.Object
+	Watches    []Watch
+}
+
+type Watch struct {
+	Object       client.Object
+	EventHandler handler.EventHandler
 }
 
 type Controller interface {
@@ -127,6 +134,30 @@ func (r *ctlr) Start(ctx context.Context) error {
 		allPredicates := append([]predicate.Predicate{}, []predicate.Predicate{}...)
 		if err := ctrl.Watch(source.Kind(cache, reconciler.Object), hdler, allPredicates...); err != nil {
 			return fmt.Errorf("%s, err: %s", errCreateWatch, err)
+		}
+
+		// Own watches
+		for _, o := range reconciler.Owns {
+			allPredicates := append(allPredicates, []predicate.Predicate{}...)
+			if err := ctrl.Watch(
+				source.Kind(cache, o),
+				handler.EnqueueRequestForOwner(r.Scheme, r.RESTmapper, o),
+				allPredicates...,
+			); err != nil {
+				return fmt.Errorf("%s, err: %s", errCreateWatch, err)
+			}
+		}
+
+		// Watches
+		for _, watch := range reconciler.Watches {
+			allPredicates := append(allPredicates, []predicate.Predicate{}...)
+			if err := ctrl.Watch(
+				source.Kind(cache, watch.Object),
+				watch.EventHandler,
+				allPredicates...,
+			); err != nil {
+				return fmt.Errorf("%s, err: %s", errCreateWatch, err)
+			}
 		}
 
 		go func() {

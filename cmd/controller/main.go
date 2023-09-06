@@ -30,9 +30,9 @@ import (
 	"github.com/henderiw-nephio/network-node-operator/pkg/node/srlinux"
 	"github.com/henderiw-nephio/network-node-operator/pkg/node/xserver"
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
-	_ "github.com/henderiw-nephio/wire-connector/controllers/node-controller"
+	_ "github.com/henderiw-nephio/wire-connector/controllers/node-cache-controller"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/node-ep-controller"
-	_ "github.com/henderiw-nephio/wire-connector/controllers/pod-controller"
+	_ "github.com/henderiw-nephio/wire-connector/controllers/pod-cache-controller"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/wire-controller"
 	"github.com/henderiw-nephio/wire-connector/pkg/grpcserver"
 	"github.com/henderiw-nephio/wire-connector/pkg/grpcserver/healthhandler"
@@ -45,6 +45,7 @@ import (
 	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/topology"
 	nodeepproxy "github.com/henderiw-nephio/wire-connector/pkg/wire/proxy/nodeep"
 	wirecontroller "github.com/henderiw-nephio/wire-connector/pkg/wire/wirecontroller2"
+	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
 
 	//resolverproxy "github.com/henderiw-nephio/wire-connector/pkg/wire/proxy/resolver"
 	wireproxy "github.com/henderiw-nephio/wire-connector/pkg/wire/proxy/wire"
@@ -100,6 +101,7 @@ func main() {
 	pd := wire.NewCache[wirepod.Pod]()
 	d := wire.NewCache[wiredaemon.Daemon]()
 	n := wire.NewCache[wirenode.Node]()
+	npool := wire.NewCache[invv1alpha1.NodePool]()
 
 	wc := wirecontroller.New(ctx, &wirecontroller.Config{
 		ClusterCache:  c,
@@ -148,6 +150,7 @@ func main() {
 		TopologyCache: t,
 		DaemonCache:   d,
 		NodeCache:     n,
+		NodePoolCache: npool,
 		Noderegistry:  registerSupportedNodeProviders(),
 	}
 

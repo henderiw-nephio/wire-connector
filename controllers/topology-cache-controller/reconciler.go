@@ -14,7 +14,7 @@
  limitations under the License.
 */
 
-package servicecontroller
+package topologycachecontroller
 
 import (
 	"context"
@@ -23,8 +23,7 @@ import (
 
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
-	wirenode "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/node"
-	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/service"
+	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/topology"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
 	"github.com/nokia/k8s-ipam/pkg/meta"
 	"github.com/nokia/k8s-ipam/pkg/resource"
@@ -40,7 +39,7 @@ import (
 )
 
 func init() {
-	reconcilerinterface.Register("servicecontroller", &reconciler{})
+	reconcilerinterface.Register("topologycachecontroller", &reconciler{})
 }
 
 const (
@@ -52,9 +51,9 @@ const (
 // New Reconciler
 func New(ctx context.Context, cfg *ctrlconfig.Config) reconcile.Reconciler {
 	return &reconciler{
-		Client:       cfg.Client,
-		serviceCache: cfg.ServiceCache,
-		clusterName:  cfg.ClusterName,
+		Client:      cfg.Client,
+		topoCache:   cfg.TopologyCache,
+		clusterName: cfg.ClusterName,
 	}
 }
 
@@ -68,7 +67,7 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 
 	// initialize reconciler
 	r.Client = mgr.GetClient()
-	r.serviceCache = cfg.ServiceCache
+	r.topoCache = cfg.TopologyCache
 	r.clusterName = cfg.ClusterName
 
 	return nil,
@@ -82,15 +81,15 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 type reconciler struct {
 	client.Client
 
-	clusterName  string
-	serviceCache wire.Cache[wireservice.Service]
+	clusterName string
+	topoCache   wire.Cache[wiretopology.Topology]
 }
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx).WithValues("cluster", r.clusterName)
-	log.Info("reconcile service")
+	log.Info("reconcile topology/namespace")
 
-	cr := &corev1.Service{}
+	cr := &corev1.Namespace{}
 	if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
 		// There's no need to requeue if we no longer exist. Otherwise we'll be
 		// requeued implicitly because we return an error.
@@ -98,41 +97,33 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			log.Error(err, errGetCr)
 			return ctrl.Result{}, errors.Wrap(resource.IgnoreNotFound(err), errGetCr)
 		}
-		r.serviceCache.Delete(ctx, types.NamespacedName{Namespace: r.clusterName, Name: req.Name})
+		r.topoCache.Delete(ctx, types.NamespacedName{Namespace: r.clusterName, Name: req.Name})
 		return reconcile.Result{}, nil
 	}
 
 	if meta.WasDeleted(cr) {
-		r.serviceCache.Delete(ctx, types.NamespacedName{Namespace: r.clusterName, Name: req.Name})
+		r.topoCache.Delete(ctx, types.NamespacedName{Namespace: r.clusterName, Name: req.Name})
 		return ctrl.Result{}, nil
 	}
 
 	// update (add/update) node to cache
-	if cr.Name == "wirer-service" && len(cr.Spec.ExternalIPs) > 0 {
-		r.serviceCache.Upsert(ctx,
-			types.NamespacedName{Name: r.clusterName},
-			wireservice.Service{
-				Object:      wire.Object{IsReady: true},
-				GRPCAddress: cr.Spec.ExternalIPs[0],             // we pick the first IP
-				GRPCPort:    cr.Spec.Ports[0].TargetPort.StrVal, // we expect only 1 service to be exposed
-			},
-		)
+	if cr.GetAnnotations()["wirer-key"] == "true" {
+		// validate if namespace is not already used in another cluster
+		t, err := r.topoCache.Get(types.NamespacedName{Name: req.Name})
+		if err == nil {
+			if t.ClusterName != r.clusterName {
+				log.Error(fmt.Errorf("overlapping namespace"), "overlapping namespace", "cluster", t.ClusterName, "cluster", r.clusterName)
+				return ctrl.Result{}, nil
+			}
+		}
+
+		r.topoCache.Upsert(ctx, types.NamespacedName{Name: req.Name}, wiretopology.Topology{
+			Object:      wire.Object{IsReady: true},
+			ClusterName: r.clusterName,
+		})
 	} else {
-		r.serviceCache.Delete(ctx, types.NamespacedName{Name: r.clusterName})
+		r.topoCache.Delete(ctx, types.NamespacedName{Name: req.Name})
 	}
 
 	return ctrl.Result{}, nil
-}
-
-// getNode retrieves specific data from the CR.
-func (r *reconciler) getNode(n *corev1.Node) wirenode.Node {
-	node := wirenode.Node{}
-
-	for _, addr := range n.Status.Addresses {
-		if addr.Type == corev1.NodeInternalIP {
-			node.IsReady = true
-			node.HostIP = addr.Address
-		}
-	}
-	return node
 }

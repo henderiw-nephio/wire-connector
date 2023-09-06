@@ -14,7 +14,7 @@
  limitations under the License.
 */
 
-package topologycontroller
+package podcachecontroller
 
 import (
 	"context"
@@ -23,8 +23,10 @@ import (
 
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
-	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/topology"
+	wiredaemon "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/daemon"
+	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/pod"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
+	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
 	"github.com/nokia/k8s-ipam/pkg/meta"
 	"github.com/nokia/k8s-ipam/pkg/resource"
 	"github.com/pkg/errors"
@@ -39,7 +41,7 @@ import (
 )
 
 func init() {
-	reconcilerinterface.Register("topologycontroller", &reconciler{})
+	reconcilerinterface.Register("podcachecontroller", &reconciler{})
 }
 
 const (
@@ -48,11 +50,12 @@ const (
 	errUpdateStatus = "cannot update status"
 )
 
-// New Reconciler
+// New Reconciler -> used for intercluster controller
 func New(ctx context.Context, cfg *ctrlconfig.Config) reconcile.Reconciler {
 	return &reconciler{
 		Client:      cfg.Client,
-		topoCache:   cfg.TopologyCache,
+		podCache:    cfg.PodCache,
+		daemonCache: cfg.DaemonCache,
 		clusterName: cfg.ClusterName,
 	}
 }
@@ -67,8 +70,8 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 
 	// initialize reconciler
 	r.Client = mgr.GetClient()
-	r.topoCache = cfg.TopologyCache
-	r.clusterName = cfg.ClusterName
+	r.podCache = cfg.PodCache
+	r.daemonCache = cfg.DaemonCache
 
 	return nil,
 		ctrl.NewControllerManagedBy(mgr).
@@ -77,19 +80,20 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 			Complete(r)
 }
 
-// reconciler reconciles a KRM resource
+// reconciler reconciles a IPPrefix object
 type reconciler struct {
 	client.Client
 
 	clusterName string
-	topoCache   wire.Cache[wiretopology.Topology]
+	podCache    wire.Cache[wirepod.Pod]
+	daemonCache wire.Cache[wiredaemon.Daemon]
 }
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx).WithValues("cluster", r.clusterName)
-	log.Info("reconcile topology/namespace")
+	log.Info("reconcile pod")
 
-	cr := &corev1.Namespace{}
+	cr := &corev1.Pod{}
 	if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
 		// There's no need to requeue if we no longer exist. Otherwise we'll be
 		// requeued implicitly because we return an error.
@@ -97,33 +101,59 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			log.Error(err, errGetCr)
 			return ctrl.Result{}, errors.Wrap(resource.IgnoreNotFound(err), errGetCr)
 		}
-		r.topoCache.Delete(ctx, types.NamespacedName{Namespace: r.clusterName, Name: req.Name})
+		r.podCache.Delete(ctx, req.NamespacedName)
 		return reconcile.Result{}, nil
 	}
 
 	if meta.WasDeleted(cr) {
-		r.topoCache.Delete(ctx, types.NamespacedName{Namespace: r.clusterName, Name: req.Name})
+		// check if this pod was used for a link wire
+		// if so clean up the link wire
+		// delete the pod from the manager
+		r.podCache.Delete(ctx, req.NamespacedName)
 		return ctrl.Result{}, nil
 	}
 
-	// update (add/update) node to cache
-	if cr.GetAnnotations()["wirer-key"] == "true" {
-		// validate if namespace is not already used in another cluster
-		t, err := r.topoCache.Get(types.NamespacedName{Name: req.Name})
-		if err == nil {
-			if t.ClusterName != r.clusterName {
-				log.Error(fmt.Errorf("overlapping namespace"), "overlapping namespace", "cluster", t.ClusterName, "cluster", r.clusterName)
-				return ctrl.Result{}, nil
-			}
-		}
+	// annotations indicate if this pod is relevant for wiring
+	if len(cr.Annotations) != 0 &&
+		cr.Annotations[invv1alpha1.NephioWiringKey] == "true" { // this is a wiring node
+		// update (add/update) pod to inventory
 
-		r.topoCache.Upsert(ctx, types.NamespacedName{Name: req.Name}, wiretopology.Topology{
-			Object:      wire.Object{IsReady: true},
-			ClusterName: r.clusterName,
-		})
-	} else {
-		r.topoCache.Delete(ctx, types.NamespacedName{Name: req.Name})
+		r.podCache.Upsert(ctx, req.NamespacedName, r.getPod(cr))
+		return ctrl.Result{}, nil
 	}
+	if len(cr.Labels) != 0 &&
+		cr.Labels["fn.kptgen.dev/controller"] == "wire-connector-daemon" {
+		// TODO -> TBD add namespace ???
 
+		hostNodeName, d := r.getLeaseInfo(cr)
+		if hostNodeName != "" {
+			r.daemonCache.Upsert(ctx, types.NamespacedName{Namespace: "default", Name: hostNodeName}, d)
+			return ctrl.Result{}, nil
+		}
+	}
 	return ctrl.Result{}, nil
+}
+
+func (r *reconciler) getPod(p *corev1.Pod) wirepod.Pod {
+	pod := wirepod.Pod{}
+	if !wirepod.IsPodReady(p) {
+		return pod
+	}
+	pod.IsReady = true
+	pod.HostIP = p.Status.HostIP
+	pod.HostNodeName = p.Spec.NodeName
+	return pod
+
+}
+
+func (r *reconciler) getLeaseInfo(p *corev1.Pod) (string, wiredaemon.Daemon) {
+	d := wiredaemon.Daemon{}
+	if !wirepod.IsPodReady((p)) {
+		return p.Spec.NodeName, d
+	}
+	d.IsReady = true
+	d.HostIP = p.Status.HostIP
+	d.GRPCAddress = p.Status.PodIP
+	d.GRPCPort = "9999"
+	return p.Spec.NodeName, d
 }

@@ -1,4 +1,4 @@
 # app
 
 ## Description
-wire-connector app
+wirer app

@@ -44,9 +44,9 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: status.hostIP
-        - name: RECONCILER_PODCONTROLLER
+        - name: RECONCILER_PODCACHECONTROLLER
           value: "true"
-        - name: RECONCILER_NODECONTROLLER
+        - name: RECONCILER_NODECACHECONTROLLER
           value: "true"
         - name: RECONCILER_WIRECONTROLLER
           value: "true"

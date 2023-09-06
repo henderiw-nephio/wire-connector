@@ -14,7 +14,7 @@
  limitations under the License.
 */
 
-package podcontroller
+package nodepoolcontroller
 
 import (
 	"context"
@@ -23,16 +23,12 @@ import (
 
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
-	wiredaemon "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/daemon"
-	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/pod"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
 	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
 	"github.com/nokia/k8s-ipam/pkg/meta"
 	"github.com/nokia/k8s-ipam/pkg/resource"
 	"github.com/pkg/errors"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -41,7 +37,7 @@ import (
 )
 
 func init() {
-	reconcilerinterface.Register("podcontroller", &reconciler{})
+	reconcilerinterface.Register("nodepoolcachecontroller", &reconciler{})
 }
 
 const (
@@ -53,10 +49,9 @@ const (
 // New Reconciler -> used for intercluster controller
 func New(ctx context.Context, cfg *ctrlconfig.Config) reconcile.Reconciler {
 	return &reconciler{
-		Client:      cfg.Client,
-		podCache:    cfg.PodCache,
-		daemonCache: cfg.DaemonCache,
-		clusterName: cfg.ClusterName,
+		Client:        cfg.Client,
+		nodepoolCache: cfg.NodePoolCache,
+		clusterName:   cfg.ClusterName,
 	}
 }
 
@@ -68,32 +63,35 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 		return nil, fmt.Errorf("cannot initialize, expecting controllerConfig, got: %s", reflect.TypeOf(c).Name())
 	}
 
+	// register scheme
+	if err := invv1alpha1.AddToScheme(mgr.GetScheme()); err != nil {
+		return nil, err
+	}
+
 	// initialize reconciler
 	r.Client = mgr.GetClient()
-	r.podCache = cfg.PodCache
-	r.daemonCache = cfg.DaemonCache
+	r.nodepoolCache = cfg.NodePoolCache
 
 	return nil,
 		ctrl.NewControllerManagedBy(mgr).
-			Named("PodController").
-			For(&corev1.Pod{}).
+			Named("NodePoolController").
+			For(&invv1alpha1.NodePool{}).
 			Complete(r)
 }
 
-// reconciler reconciles a IPPrefix object
+// reconciler reconciles a KRM resource
 type reconciler struct {
 	client.Client
 
-	clusterName string
-	podCache    wire.Cache[wirepod.Pod]
-	daemonCache wire.Cache[wiredaemon.Daemon]
+	clusterName   string
+	nodepoolCache wire.Cache[invv1alpha1.NodePool]
 }
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx).WithValues("cluster", r.clusterName)
-	log.Info("reconcile pod")
+	log.Info("reconcile nodepool")
 
-	cr := &corev1.Pod{}
+	cr := &invv1alpha1.NodePool{}
 	if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
 		// There's no need to requeue if we no longer exist. Otherwise we'll be
 		// requeued implicitly because we return an error.
@@ -101,59 +99,18 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			log.Error(err, errGetCr)
 			return ctrl.Result{}, errors.Wrap(resource.IgnoreNotFound(err), errGetCr)
 		}
-		r.podCache.Delete(ctx, req.NamespacedName)
+		r.nodepoolCache.Delete(ctx, req.NamespacedName)
 		return reconcile.Result{}, nil
 	}
 
 	if meta.WasDeleted(cr) {
-		// check if this pod was used for a link wire
-		// if so clean up the link wire
-		// delete the pod from the manager
-		r.podCache.Delete(ctx, req.NamespacedName)
+		r.nodepoolCache.Delete(ctx, req.NamespacedName)
 		return ctrl.Result{}, nil
 	}
 
-	// annotations indicate if this pod is relevant for wiring
-	if len(cr.Annotations) != 0 &&
-		cr.Annotations[invv1alpha1.NephioWiringKey] == "true" { // this is a wiring node
-		// update (add/update) pod to inventory
+	// update (add/update) node to cache
+	newcr := cr.DeepCopy()
+	r.nodepoolCache.Upsert(ctx, req.NamespacedName, *newcr)
 
-		r.podCache.Upsert(ctx, req.NamespacedName, r.getPod(cr))
-		return ctrl.Result{}, nil
-	}
-	if len(cr.Labels) != 0 &&
-		cr.Labels["fn.kptgen.dev/controller"] == "wire-connector-daemon" {
-		// TODO -> TBD add namespace ???
-
-		hostNodeName, d := r.getLeaseInfo(cr)
-		if hostNodeName != "" {
-			r.daemonCache.Upsert(ctx, types.NamespacedName{Namespace: "default", Name: hostNodeName}, d)
-			return ctrl.Result{}, nil
-		}
-	}
 	return ctrl.Result{}, nil
-}
-
-func (r *reconciler) getPod(p *corev1.Pod) wirepod.Pod {
-	pod := wirepod.Pod{}
-	if !wirepod.IsPodReady(p) {
-		return pod
-	}
-	pod.IsReady = true
-	pod.HostIP = p.Status.HostIP
-	pod.HostNodeName = p.Spec.NodeName
-	return pod
-
-}
-
-func (r *reconciler) getLeaseInfo(p *corev1.Pod) (string, wiredaemon.Daemon) {
-	d := wiredaemon.Daemon{}
-	if !wirepod.IsPodReady((p)) {
-		return p.Spec.NodeName, d
-	}
-	d.IsReady = true
-	d.HostIP = p.Status.HostIP
-	d.GRPCAddress = p.Status.PodIP
-	d.GRPCPort = "9999"
-	return p.Spec.NodeName, d
 }

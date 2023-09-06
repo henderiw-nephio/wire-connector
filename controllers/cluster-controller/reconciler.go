@@ -23,10 +23,12 @@ import (
 
 	clusterwatchcontroller "github.com/henderiw-nephio/wire-connector/controllers/cluster-controller/clusterwatch-controller"
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
-	nodecontroller "github.com/henderiw-nephio/wire-connector/controllers/node-controller"
-	podcontroller "github.com/henderiw-nephio/wire-connector/controllers/pod-controller"
-	servicecontroller "github.com/henderiw-nephio/wire-connector/controllers/service-controller"
-	topologycontroller "github.com/henderiw-nephio/wire-connector/controllers/topology-controller"
+	nodenodepoolcontroller "github.com/henderiw-nephio/wire-connector/controllers/node-nodepool-controller"
+	nodepoolcachecontroller "github.com/henderiw-nephio/wire-connector/controllers/nodepool-cache-controller"
+	nodecachecontroller "github.com/henderiw-nephio/wire-connector/controllers/node-cache-controller"
+	podcachecontroller "github.com/henderiw-nephio/wire-connector/controllers/pod-cache-controller"
+	servicecachecontroller "github.com/henderiw-nephio/wire-connector/controllers/service-cache-controller"
+	topologycachecontroller "github.com/henderiw-nephio/wire-connector/controllers/topology-cache-controller"
 	"github.com/henderiw-nephio/wire-connector/pkg/cluster"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
 	wirecluster "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/cluster"
@@ -36,6 +38,7 @@ import (
 	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/service"
 	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/topology"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
+	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
 	"github.com/nokia/k8s-ipam/pkg/meta"
 	"github.com/nokia/k8s-ipam/pkg/resource"
 	"github.com/pkg/errors"
@@ -67,6 +70,10 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 	cfg, ok := c.(*ctrlconfig.Config)
 	if !ok {
 		return nil, fmt.Errorf("cannot initialize, expecting controllerConfig, got: %s", reflect.TypeOf(c).Name())
+	}
+
+	if err := invv1alpha1.AddToScheme(mgr.GetScheme()); err != nil {
+		return nil, err
 	}
 
 	// initialize reconciler
@@ -149,10 +156,17 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 				Controller: clusterwatchcontroller.New(r.mgr, &clusterwatchcontroller.Config{
 					Name: clusterClient.GetName(),
 					Reconcilers: []clusterwatchcontroller.Reconciler{
-						{Object: &corev1.Namespace{}, Reconciler: topologycontroller.New(ctx, cc)},
-						{Object: &corev1.Service{}, Reconciler: servicecontroller.New(ctx, cc)},
-						{Object: &corev1.Pod{}, Reconciler: podcontroller.New(ctx, cc)},
-						{Object: &corev1.Node{}, Reconciler: nodecontroller.New(ctx, cc)},
+						{Object: &corev1.Namespace{}, Reconciler: topologycachecontroller.New(ctx, cc)},
+						{Object: &corev1.Service{}, Reconciler: servicecachecontroller.New(ctx, cc)},
+						{Object: &corev1.Pod{}, Reconciler: podcachecontroller.New(ctx, cc)},
+						{Object: &corev1.Node{}, Reconciler: nodecachecontroller.New(ctx, cc)},
+						{Object: &invv1alpha1.NodePool{}, Reconciler: nodepoolcachecontroller.New(ctx, cc)},
+						{Object: &corev1.Node{}, Reconciler: nodenodepoolcontroller.New(ctx, cc),
+							Owns: []client.Object{&invv1alpha1.Node{}},
+							Watches: []clusterwatchcontroller.Watch{
+								{ Object: &invv1alpha1.NodePool{}, EventHandler: nodenodepoolcontroller.NewNodePoolEventHandler(cc)},
+							},
+						},
 					},
 					RESTConfig: config,
 					RESTmapper: cl.RESTMapper(),

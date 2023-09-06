@@ -31,6 +31,7 @@ import (
 	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/service"
 	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/topology"
 	"github.com/henderiw-nephio/wire-connector/pkg/xdp"
+	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 )
@@ -48,6 +49,7 @@ type Config struct {
 	PodCache      wire.Cache[wirepod.Pod]
 	DaemonCache   wire.Cache[wiredaemon.Daemon]
 	NodeCache     wire.Cache[wirenode.Node]
+	NodePoolCache wire.Cache[invv1alpha1.NodePool]
 	ClusterCache  wire.Cache[wirecluster.Cluster]
 	ServiceCache  wire.Cache[wireservice.Service]
 	TopologyCache wire.Cache[wiretopology.Topology]

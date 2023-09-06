@@ -14,7 +14,7 @@
  limitations under the License.
 */
 
-package nodeinvcontroller
+package nodecachecontroller
 
 import (
 	"context"
@@ -38,7 +38,7 @@ import (
 )
 
 func init() {
-	reconcilerinterface.Register("nodeinvcontroller", &reconciler{})
+	reconcilerinterface.Register("nodecachecontroller", &reconciler{})
 }
 
 const (

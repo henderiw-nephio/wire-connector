@@ -12,7 +12,7 @@ require (
 	github.com/henderiw-nephio/network-node-operator v0.0.0-20230905133041-75c23ebef5d2
 	github.com/itchyny/gojq v0.12.13
 	github.com/nephio-project/nephio/controllers/pkg v0.0.0-20230724195903-feb6c2f91cc3
-	github.com/nokia/k8s-ipam v0.0.4-0.20230823053138-e8c52ef782be
+	github.com/nokia/k8s-ipam v0.0.4-0.20230906045651-395db66e498f
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.9.0
 	github.com/spf13/cobra v1.7.0
@@ -26,7 +26,7 @@ require (
 	k8s.io/apimachinery v0.28.0-alpha.3
 	k8s.io/client-go v0.28.0-alpha.3
 	k8s.io/cri-api v0.27.3
-	k8s.io/kubernetes v1.28.1
+	k8s.io/kubernetes v1.27.1
 	k8s.io/utils v0.0.0-20230726121419-3b25d923346b
 	sigs.k8s.io/cluster-api v1.4.0-beta.2.0.20230527123250-e111168cdff3
 	sigs.k8s.io/controller-runtime v0.15.0
