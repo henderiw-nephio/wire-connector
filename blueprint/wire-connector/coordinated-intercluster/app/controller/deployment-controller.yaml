@@ -26,7 +26,7 @@ spec:
       serviceAccountName: wire-connector-controller
       containers:
       - name: wire-connector
-        image: europe-docker.pkg.dev/srlinux/eu.gcr.io/wire-connector-intercluster-controller:latest
+        image: europe-docker.pkg.dev/srlinux/eu.gcr.io/wire-connector-controller:latest
         command:
         - /manager
         env:
