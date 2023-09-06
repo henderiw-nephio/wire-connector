@@ -92,7 +92,7 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 
 	return nil,
 		ctrl.NewControllerManagedBy(mgr).
-			Named("NodeController").
+			Named("NodeNodePoolController").
 			For(&corev1.Node{}).
 			Owns(&invv1alpha1.Node{}).
 			Complete(r)
@@ -129,18 +129,18 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		// TODO delete resources
 		if err := r.resources.APIDelete(ctx, cr); err != nil {
 			log.Error(err, "cannot remove resources")
-			return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+			return reconcile.Result{Requeue: true}, err
 		}
 		if err := r.finalizer.RemoveFinalizer(ctx, cr); err != nil {
 			log.Error(err, "cannot remove finalizer")
-			return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+			return reconcile.Result{Requeue: true}, err
 		}
 		return ctrl.Result{}, nil
 	}
 
 	if err := r.finalizer.AddFinalizer(ctx, cr); err != nil {
 		log.Error(err, "cannot add finalizer")
-		return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+		return reconcile.Result{Requeue: true}, err
 	}
 
 	found:= false
@@ -153,7 +153,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			if err != nil {
 				// not found -> wait till nodepool is found
 				// we could optimize this and fetch the nodepool from the cache
-				return ctrl.Result{RequeueAfter: 2 * time.Second}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+				return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
 			}
 
 			r.resources.Init(client.MatchingLabels{})
@@ -183,14 +183,14 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 	if found {
 		if err := r.resources.APIApply(ctx, cr); err != nil {
-			return ctrl.Result{}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+			return ctrl.Result{}, err
 		}
 	} else {
 		if err := r.resources.APIDelete(ctx, cr); err != nil {
-			return ctrl.Result{}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+			return ctrl.Result{}, err
 		}
 	}
-	return ctrl.Result{}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+	return ctrl.Result{}, nil
 }
 
 // getNode retrieves specific data from the CR.

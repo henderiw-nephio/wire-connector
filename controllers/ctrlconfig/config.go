@@ -19,8 +19,8 @@ package ctrlconfig
 import (
 	"time"
 
-	noder "github.com/henderiw-nephio/wire-connector/pkg/node"
 	"github.com/henderiw-nephio/wire-connector/pkg/cri"
+	noder "github.com/henderiw-nephio/wire-connector/pkg/node"
 	"github.com/henderiw-nephio/wire-connector/pkg/nodemgr"
 	"github.com/henderiw-nephio/wire-connector/pkg/pod"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
@@ -32,6 +32,7 @@ import (
 	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/topology"
 	"github.com/henderiw-nephio/wire-connector/pkg/xdp"
 	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 )
@@ -41,8 +42,9 @@ type Config struct {
 	Copts controller.Options
 
 	Client        client.Client
+	Scheme        *runtime.Scheme
 	ClusterName   string
-	PodManager    pod.Manager // used in distributed approach
+	PodManager    pod.Manager     // used in distributed approach
 	NodeManager   nodemgr.Manager // used in distributed approach
 	CRI           cri.CRI
 	XDP           xdp.XDP

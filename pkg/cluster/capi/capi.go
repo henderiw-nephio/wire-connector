@@ -19,7 +19,6 @@ package capi
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"reflect"
 	"strings"
 
@@ -53,9 +52,11 @@ func (r *Capi) GetName() string {
 }
 
 func (r *Capi) GetRESTConfig(ctx context.Context) (*rest.Config, error) {
-	if !r.isCapiClusterReady(ctx) {
-		return nil, fmt.Errorf("not ready")
-	}
+	/*
+		if !r.isCapiClusterReady(ctx) {
+			return nil, fmt.Errorf("not ready")
+		}
+	*/
 	//provide a restconfig from the secret value
 	return clientcmd.RESTConfigFromKubeConfig(r.Secret.Data["value"])
 

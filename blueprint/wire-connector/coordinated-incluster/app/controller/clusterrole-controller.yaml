@@ -28,11 +28,20 @@ rules:
   - '*'
   resources:
   - pods
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - '*'
+  resources:
   - nodes
   verbs:
   - get
   - list
   - watch
+  - update
+  - patch
 - apiGroups:
   - inv.nephio.org
   resources:

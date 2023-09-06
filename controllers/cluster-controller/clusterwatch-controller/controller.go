@@ -104,7 +104,7 @@ func (r *ctlr) Start(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	r.cancel = cancel
 
-	cache, err := cache.New(r.RESTConfig, cache.Options{Scheme: r.Scheme, Mapper: r.RESTmapper})
+	cache, err := cache.New(r.RESTConfig, cache.Options{Scheme: r.mgr.GetScheme(), Mapper: r.RESTmapper})
 	if err != nil {
 		log.Error(err, errCreateCache)
 		return fmt.Errorf("%s err: %s", errCreateCache, err)

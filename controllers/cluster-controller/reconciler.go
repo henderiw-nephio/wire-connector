@@ -23,9 +23,9 @@ import (
 
 	clusterwatchcontroller "github.com/henderiw-nephio/wire-connector/controllers/cluster-controller/clusterwatch-controller"
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
-	nodenodepoolcontroller "github.com/henderiw-nephio/wire-connector/controllers/node-nodepool-controller"
-	nodepoolcachecontroller "github.com/henderiw-nephio/wire-connector/controllers/nodepool-cache-controller"
 	nodecachecontroller "github.com/henderiw-nephio/wire-connector/controllers/node-cache-controller"
+	//nodenodepoolcontroller "github.com/henderiw-nephio/wire-connector/controllers/node-nodepool-controller"
+	//nodepoolcachecontroller "github.com/henderiw-nephio/wire-connector/controllers/nodepool-cache-controller"
 	podcachecontroller "github.com/henderiw-nephio/wire-connector/controllers/pod-cache-controller"
 	servicecachecontroller "github.com/henderiw-nephio/wire-connector/controllers/service-cache-controller"
 	topologycachecontroller "github.com/henderiw-nephio/wire-connector/controllers/topology-cache-controller"
@@ -38,7 +38,7 @@ import (
 	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/service"
 	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/topology"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
-	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
+	//invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
 	"github.com/nokia/k8s-ipam/pkg/meta"
 	"github.com/nokia/k8s-ipam/pkg/resource"
 	"github.com/pkg/errors"
@@ -72,9 +72,11 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 		return nil, fmt.Errorf("cannot initialize, expecting controllerConfig, got: %s", reflect.TypeOf(c).Name())
 	}
 
+	/*
 	if err := invv1alpha1.AddToScheme(mgr.GetScheme()); err != nil {
 		return nil, err
 	}
+	*/
 
 	// initialize reconciler
 	r.Client = mgr.GetClient()
@@ -98,6 +100,7 @@ type reconciler struct {
 	client.Client
 	mgr manager.Manager
 
+	//scheme       *runtime.Scheme
 	clusterCache wire.Cache[wirecluster.Cluster]
 	serviceCache wire.Cache[wireservice.Service]
 	topoCache    wire.Cache[wiretopology.Topology]
@@ -108,6 +111,7 @@ type reconciler struct {
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
+	log.Info("reconcile")
 
 	cr := &corev1.Secret{}
 	if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
@@ -130,8 +134,10 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	if clusterClient != nil {
 		config, err := clusterClient.GetRESTConfig(ctx)
 		if err != nil {
+			log.Info("cluster client cannot get restconfig", "err", err)
 			r.clusterCache.Delete(ctx, req.NamespacedName)
 		} else {
+			log.Info("cluster ready")
 			// update (add/update) node to cache
 			cl, err := client.New(config, client.Options{})
 			if err != nil {
@@ -139,6 +145,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 				return ctrl.Result{}, errors.Wrap(err, "cannot get cluster client")
 			}
 			cc := &ctrlconfig.Config{
+				//Scheme:        r.scheme,
 				ClusterName:   clusterClient.GetName(),
 				Client:        cl,
 				ServiceCache:  r.serviceCache,
@@ -160,13 +167,15 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 						{Object: &corev1.Service{}, Reconciler: servicecachecontroller.New(ctx, cc)},
 						{Object: &corev1.Pod{}, Reconciler: podcachecontroller.New(ctx, cc)},
 						{Object: &corev1.Node{}, Reconciler: nodecachecontroller.New(ctx, cc)},
+						/*
 						{Object: &invv1alpha1.NodePool{}, Reconciler: nodepoolcachecontroller.New(ctx, cc)},
 						{Object: &corev1.Node{}, Reconciler: nodenodepoolcontroller.New(ctx, cc),
 							Owns: []client.Object{&invv1alpha1.Node{}},
 							Watches: []clusterwatchcontroller.Watch{
-								{ Object: &invv1alpha1.NodePool{}, EventHandler: nodenodepoolcontroller.NewNodePoolEventHandler(cc)},
+								{Object: &invv1alpha1.NodePool{}, EventHandler: nodenodepoolcontroller.NewNodePoolEventHandler(cc)},
 							},
 						},
+						*/
 					},
 					RESTConfig: config,
 					RESTmapper: cl.RESTMapper(),
@@ -175,6 +184,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			})
 		}
 	} else {
+
 		r.clusterCache.Delete(ctx, req.NamespacedName)
 	}
 	return ctrl.Result{}, nil

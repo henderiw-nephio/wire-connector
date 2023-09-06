@@ -31,12 +31,12 @@ type Cluster struct {
 }
 
 func (r Cluster) GetClusterClient(secret *corev1.Secret) ClusterClient {
-	switch string(secret.Type) {
-	case "cluster.x-k8s.io/secret":
-		if strings.Contains(secret.GetName(), "kubeconfig") {
-			return &capi.Capi{Client: r.Client, Secret: secret}
-		}
+	//switch string(secret.Type) {
+	//case "cluster.x-k8s.io/secret":
+	if strings.Contains(secret.GetName(), "kubeconfig") {
+		return &capi.Capi{Client: r.Client, Secret: secret}
 	}
+	//}
 	return nil
 }
 
