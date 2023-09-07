@@ -51,7 +51,7 @@ spec:
               fieldPath: status.hostIP
         - name: ENABLE_NAD
           value: "false"
-        - name: ENABLE_NODEDEPLOYERCONTROLLER
+        - name: RECONCILER_NODEDEPLOYERCONTROLLER
           value: "true"
         - name: RECONCILER_PODCACHECONTROLLER
           value: "true"

@@ -232,8 +232,8 @@ github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
 github.com/nephio-project/nephio/controllers/pkg v0.0.0-20230724195903-feb6c2f91cc3 h1:KyEiqXNeT/3Rbg4DxjsLXNsMB4oyOM1Z1z9nkEP3KNw=
 github.com/nephio-project/nephio/controllers/pkg v0.0.0-20230724195903-feb6c2f91cc3/go.mod h1:3ytQ+ZwtqSKKNV9ndpb4ShL/xDLwn8JuTBeldjdAN7I=
-github.com/nokia/k8s-ipam v0.0.4-0.20230907044445-a8ce82c336c6 h1:/CAp7tvp9GNfRERO+jNc4tjzJf21aNWaDRNI8++oEDk=
-github.com/nokia/k8s-ipam v0.0.4-0.20230907044445-a8ce82c336c6/go.mod h1:25EuJVW6OSxckHVaErTowmrsqnSI1XiA1izq8osB//w=
+github.com/nokia/k8s-ipam v0.0.4-0.20230907114717-c186faf0880b h1:8KcsXRybLXqjqCcKYrYXl7nxNMuL1iYNeD3OLmOwQMc=
+github.com/nokia/k8s-ipam v0.0.4-0.20230907114717-c186faf0880b/go.mod h1:66d2YYdV1jST7iQ1L0ygEBkgf0OpibWJ24boPKwfmC4=
 github.com/onsi/ginkgo v1.16.5 h1:8xi0RTUf59SOSfEtZMvwTvXYMzG4gV23XVHOZiXNtnE=
 github.com/onsi/ginkgo/v2 v2.9.5 h1:+6Hr4uxzP4XIUyAkg61dWBw8lb/gc4/X5luuxN/EC+Q=
 github.com/onsi/gomega v1.27.7 h1:fVih9JD6ogIiHUN6ePK7HJidyEDpWGVB5mzM7cWNXoU=

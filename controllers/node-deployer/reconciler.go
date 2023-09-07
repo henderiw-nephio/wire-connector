@@ -24,10 +24,10 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
 	"github.com/henderiw-nephio/wire-connector/pkg/node"
 	nadv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
+	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
 	"github.com/nephio-project/nephio/controllers/pkg/resource"
 	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
 	resourcev1alpha1 "github.com/nokia/k8s-ipam/apis/resource/common/v1alpha1"
@@ -64,26 +64,32 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 	if err := invv1alpha1.AddToScheme(mgr.GetScheme()); err != nil {
 		return nil, err
 	}
-	if err := nadv1.AddToScheme(mgr.GetScheme()); err != nil {
-		return nil, err
+
+	if os.Getenv("ENABLE_NAD") == "true" {
+		if err := nadv1.AddToScheme(mgr.GetScheme()); err != nil {
+			return nil, err
+		}
 	}
 
 	r.APIPatchingApplicator = resource.NewAPIPatchingApplicator(mgr.GetClient())
 	r.finalizer = resource.NewAPIFinalizer(mgr.GetClient(), finalizer)
 	r.scheme = mgr.GetScheme()
 	r.nodeRegistry = cfg.NodeRegistry
-	r.resources = resources.New(r.APIPatchingApplicator, resources.Config{
-		Owns: []schema.GroupVersionKind{
-			nadv1.SchemeGroupVersion.WithKind(reflect.TypeOf(nadv1.NetworkAttachmentDefinition{}).Name()),
-		},
-	})
 
+	if os.Getenv("ENABLE_NAD") == "true" {
+		return nil, ctrl.NewControllerManagedBy(mgr).
+			Named("NodeDeployerController").
+			For(&invv1alpha1.Node{}).
+			Owns(&corev1.Pod{}).
+			Owns(&nadv1.NetworkAttachmentDefinition{}).
+			Complete(r)
+	}
 	return nil, ctrl.NewControllerManagedBy(mgr).
 		Named("NodeDeployerController").
 		For(&invv1alpha1.Node{}).
 		Owns(&corev1.Pod{}).
-		Owns(&nadv1.NetworkAttachmentDefinition{}).
 		Complete(r)
+
 }
 
 // reconciler reconciles a srlinux node object
@@ -92,7 +98,7 @@ type reconciler struct {
 	scheme       *runtime.Scheme
 	finalizer    *resource.APIFinalizer
 	nodeRegistry node.NodeRegistry
-	resources    resources.Resources
+	//resources    resources.Resources
 
 	l logr.Logger
 }
@@ -100,6 +106,13 @@ type reconciler struct {
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	r.l = log.FromContext(ctx)
 	r.l.Info("reconcile", "req", req)
+
+	res := resources.New(r.APIPatchingApplicator, resources.Config{
+		OwnerRef: true,
+		Owns: []schema.GroupVersionKind{
+			nadv1.SchemeGroupVersion.WithKind(reflect.TypeOf(nadv1.NetworkAttachmentDefinition{}).Name()),
+		},
+	})
 
 	cr := &invv1alpha1.Node{}
 	if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
@@ -140,14 +153,17 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 	}
 
-	r.resources.Init(client.MatchingLabels{})
+	res.Init(client.MatchingLabels{})
 
 	if os.Getenv("ENABLE_NAD") == "true" {
 		for _, nad := range nads {
 			r.l.Info("nad info", "name", nad.GetName())
-			r.resources.AddNewResource(nad)
+			if err := res.AddNewResource(cr, nad); err != nil {
+				cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
+				return ctrl.Result{}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+			}
 		}
-		if err := r.resources.APIApply(ctx, cr); err != nil {
+		if err := res.APIApply(ctx, cr); err != nil {
 			cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
 			return ctrl.Result{}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 		}

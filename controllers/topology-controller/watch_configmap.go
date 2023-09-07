@@ -23,6 +23,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
+	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -33,7 +34,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
 )
 
 func NewConfigMapEventHandler(cfg *ctrlconfig.Config) handler.EventHandler {
@@ -89,11 +89,10 @@ func (r *cmEventHandler) add(ctx context.Context, obj runtime.Object, queue adde
 
 	// for any change in the configmaps in the network-system namespace
 	// we retrigger the topology reconcile
-	if cr.Namespace == os.Getenv("POD_NAMESPACE") && cr.Labels["app.kubernetes.io/name"] == os.Getenv("POD_NAMESPACE") {
+	if cr.Namespace == os.Getenv("POD_NAMESPACE") && cr.Labels[invv1alpha1.NephioTopologyKey] == os.Getenv("POD_NAMESPACE") {
 		for _, topo := range topos.Items {
 			queue.Add(reconcile.Request{NamespacedName: types.NamespacedName{
-				Namespace: topo.GetNamespace(),
-				Name:      topo.GetName(),
+				Name: topo.GetName(),
 			}})
 		}
 	}

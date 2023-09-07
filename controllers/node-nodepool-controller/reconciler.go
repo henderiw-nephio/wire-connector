@@ -36,7 +36,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -63,11 +62,6 @@ func New(ctx context.Context, cfg *ctrlconfig.Config) reconcile.Reconciler {
 		finalizer:             resource.NewAPIFinalizer(cfg.Client, finalizer),
 		nodePoolCache:         cfg.NodePoolCache,
 		clusterName:           cfg.ClusterName,
-		resources: resources.New(c, resources.Config{
-			Owns: []schema.GroupVersionKind{
-				invv1alpha1.NodeGroupVersionKind,
-			},
-		}),
 	}
 }
 
@@ -83,12 +77,6 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 	r.APIPatchingApplicator = resource.NewAPIPatchingApplicator(mgr.GetClient())
 	r.finalizer = resource.NewAPIFinalizer(mgr.GetClient(), finalizer)
 	r.nodePoolCache = cfg.NodePoolCache
-
-	r.resources = resources.New(r.APIPatchingApplicator, resources.Config{
-		Owns: []schema.GroupVersionKind{
-			invv1alpha1.NodeGroupVersionKind,
-		},
-	})
 
 	return nil,
 		ctrl.NewControllerManagedBy(mgr).
@@ -106,12 +94,17 @@ type reconciler struct {
 
 	clusterName   string
 	nodePoolCache wire.Cache[invv1alpha1.NodePool]
-	resources     resources.Resources
 }
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx).WithValues("cluster", r.clusterName)
 	log.Info("reconcile node")
+
+	res := resources.New(r.APIPatchingApplicator, resources.Config{
+		Owns: []schema.GroupVersionKind{
+			invv1alpha1.NodeGroupVersionKind,
+		},
+	})
 
 	cr := &corev1.Node{}
 	if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
@@ -124,11 +117,11 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return reconcile.Result{}, nil
 	}
 
-	r.resources.Init(client.MatchingLabels{})
+	res.Init(client.MatchingLabels{})
 
 	if meta.WasDeleted(cr) {
 		// TODO delete resources
-		if err := r.resources.APIDelete(ctx, cr); err != nil {
+		if err := res.APIDelete(ctx, cr); err != nil {
 			log.Error(err, "cannot remove resources")
 			return reconcile.Result{Requeue: true}, err
 		}
@@ -144,7 +137,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return reconcile.Result{Requeue: true}, err
 	}
 
-	found:= false
+	found := false
 	for labelKey, labelValue := range cr.GetLabels() {
 		if strings.Contains(labelKey, "nodepool") {
 			np, err := r.nodePoolCache.Get(types.NamespacedName{
@@ -157,15 +150,15 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 				return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
 			}
 
-			r.resources.Init(client.MatchingLabels{})
+			res.Init(client.MatchingLabels{})
 			for _, addr := range cr.Status.Addresses {
 				// there is only 1 internal ip
 				if addr.Type == corev1.NodeInternalIP {
-					r.resources.AddNewResource(invv1alpha1.BuildNode(
+					if err := res.AddNewResource(cr, invv1alpha1.BuildNode(
 						metav1.ObjectMeta{
-							Name:            cr.Name,
-							Namespace:       r.clusterName,
-							OwnerReferences: []metav1.OwnerReference{{APIVersion: cr.APIVersion, Kind: cr.Kind, Name: cr.Name, UID: cr.UID, Controller: pointer.Bool(true)}},
+							Name:      cr.Name,
+							Namespace: r.clusterName,
+							//OwnerReferences: []metav1.OwnerReference{{APIVersion: cr.APIVersion, Kind: cr.Kind, Name: cr.Name, UID: cr.UID, Controller: pointer.Bool(true)}},
 						},
 						invv1alpha1.NodeSpec{
 							Provider:          np.Spec.Provider,
@@ -175,7 +168,9 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 							UserDefinedLabels: np.Spec.UserDefinedLabels,
 						},
 						invv1alpha1.NodeStatus{},
-					).DeepCopy())
+					).DeepCopy()); err != nil {
+						return ctrl.Result{}, err
+					}
 					found = true
 					break
 				}
@@ -183,11 +178,11 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		}
 	}
 	if found {
-		if err := r.resources.APIApply(ctx, cr); err != nil {
+		if err := res.APIApply(ctx, cr); err != nil {
 			return ctrl.Result{}, err
 		}
 	} else {
-		if err := r.resources.APIDelete(ctx, cr); err != nil {
+		if err := res.APIDelete(ctx, cr); err != nil {
 			return ctrl.Result{}, err
 		}
 	}

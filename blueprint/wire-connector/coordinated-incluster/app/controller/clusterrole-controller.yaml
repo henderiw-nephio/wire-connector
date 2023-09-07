@@ -78,7 +78,13 @@ rules:
   - '*'
   resources:
   - configmaps
+  - namespaces
+  - pods
   verbs:
   - get
   - list
   - watch
+  - update
+  - patch
+  - create
+  - delete

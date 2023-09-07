@@ -11,7 +11,7 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/itchyny/gojq v0.12.13
 	github.com/nephio-project/nephio/controllers/pkg v0.0.0-20230724195903-feb6c2f91cc3
-	github.com/nokia/k8s-ipam v0.0.4-0.20230907044445-a8ce82c336c6
+	github.com/nokia/k8s-ipam v0.0.4-0.20230907114717-c186faf0880b
 	github.com/pkg/errors v0.9.1
 	github.com/scrapli/scrapligo v1.1.13-0.20230905184319-c884aaeecf34
 	github.com/sirupsen/logrus v1.9.0

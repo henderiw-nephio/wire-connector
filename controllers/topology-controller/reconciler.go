@@ -33,8 +33,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/pointer"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -64,12 +62,6 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 	r.APIPatchingApplicator = resource.NewAPIPatchingApplicator(mgr.GetClient())
 	r.finalizer = resource.NewAPIFinalizer(mgr.GetClient(), finalizer)
 
-	r.resources = resources.New(r.APIPatchingApplicator, resources.Config{
-		Owns: []schema.GroupVersionKind{
-			{Group: "", Version: "v1", Kind: reflect.TypeOf(corev1.ConfigMap{}).Name()},
-		},
-	})
-
 	return nil,
 		ctrl.NewControllerManagedBy(mgr).
 			Named("TopologyController").
@@ -84,12 +76,19 @@ type reconciler struct {
 	resource.APIPatchingApplicator
 	finalizer *resource.APIFinalizer
 
-	resources resources.Resources
 }
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 	log.Info("reconcile")
+
+	res := resources.New(r.APIPatchingApplicator, resources.Config{
+		Owns: []schema.GroupVersionKind{
+			{Group: "", Version: "v1", Kind: reflect.TypeOf(corev1.ConfigMap{}).Name()},
+			{Group: "", Version: "v1", Kind: reflect.TypeOf(corev1.Namespace{}).Name()},
+		},
+	})
+	res.Init(client.MatchingLabels{})
 
 	cr := &invv1alpha1.Topology{}
 	if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
@@ -101,6 +100,11 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	if meta.WasDeleted(cr) {
+		if err := res.APIDelete(ctx, cr); err != nil {
+			log.Error(err, "cannot delete resources")
+			cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
+			return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+		}
 		if err := r.finalizer.RemoveFinalizer(ctx, cr); err != nil {
 			log.Error(err, "cannot remove finalizer")
 			cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
@@ -116,7 +120,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 	}
 
-	r.resources.Init(client.MatchingLabels{})
+	
 
 	// for a default namespace we add a label to indicate this ns is used for network topologies
 	if cr.GetName() == "default" {
@@ -130,11 +134,15 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		}
 		ns.Labels[invv1alpha1.NephioTopologyKey] = cr.GetName()
 		if err := r.Apply(ctx, ns); err != nil {
+			log.Error(err, "cannot set label to namespace")
 			cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
 			return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 		}
 	} else {
-		r.resources.AddNewResource(buildNamespace(cr))
+		if err := res.AddNewResource(cr, buildNamespace(cr)); err != nil {
+			cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
+			return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+		}
 	}
 
 	// list all the configmaps with the topologyket set to network-system
@@ -148,13 +156,24 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
 		return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 	}
+	log.Info("namespace", "ns", os.Getenv("POD_NAMESPACE"))
 
 	for _, cm := range cms.Items {
-		newcm := *cm.DeepCopy()
-		newcm.Namespace = cr.GetNamespace()
-		newcm.Labels[invv1alpha1.NephioTopologyKey] = cr.GetNamespace()
-		newcm.OwnerReferences = []metav1.OwnerReference{{APIVersion: cr.APIVersion, Kind: cr.Kind, Name: cr.Name, UID: cr.UID, Controller: ptr.To(true)}}
-		r.resources.AddNewResource(&newcm)
+		log.Info("configmap", "name", cm.GetName(), "namespace", cm.GetNamespace())
+		if err := res.AddNewResource(cr, buildConfigMap(cr, &cm)); err != nil {
+			cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
+			return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+		}
+	}
+
+	for ref := range res.GetNewResources() {
+		log.Info("new resources", "ref", ref.String())
+	}
+
+	if err := res.APIApply(ctx, cr); err != nil {
+		cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
+		return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+
 	}
 
 	cr.SetConditions(resourcev1alpha1.Ready())
@@ -171,11 +190,26 @@ func buildNamespace(cr *invv1alpha1.Topology) *corev1.Namespace {
 			Kind:       reflect.TypeOf(corev1.Namespace{}).Name(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            cr.GetName(),
-			Labels:          labels,
-			OwnerReferences: []metav1.OwnerReference{{APIVersion: cr.APIVersion, Kind: cr.Kind, Name: cr.Name, UID: cr.UID, Controller: pointer.Bool(true)}},
+			Name:   cr.GetName(),
+			Labels: labels,
+			//OwnerReferences: []metav1.OwnerReference{{APIVersion: cr.APIVersion, Kind: cr.Kind, Name: cr.Name, UID: cr.UID, Controller: pointer.Bool(true)}},
 		},
 		Spec:   corev1.NamespaceSpec{},
 		Status: corev1.NamespaceStatus{},
+	}
+}
+
+func buildConfigMap(cr *invv1alpha1.Topology, cm *corev1.ConfigMap) *corev1.ConfigMap {
+	return &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       reflect.TypeOf(corev1.ConfigMap{}).Name(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cm.GetName(),
+			Namespace: cr.GetName(),
+			//OwnerReferences: []metav1.OwnerReference{{APIVersion: cr.APIVersion, Kind: cr.Kind, Name: cr.Name, UID: cr.UID, Controller: pointer.Bool(true)}},
+		},
+		Data: cm.Data,
 	}
 }

@@ -24,8 +24,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/henderiw-nephio/wire-connector/pkg/node"
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
+	"github.com/henderiw-nephio/wire-connector/pkg/node"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/endpointpb"
 	wclient "github.com/henderiw-nephio/wire-connector/pkg/wire/client"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
@@ -40,7 +40,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -81,12 +80,6 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 	// initialize reconciler
 	r.APIPatchingApplicator = resource.NewAPIPatchingApplicator(mgr.GetClient())
 	r.finalizer = resource.NewAPIFinalizer(mgr.GetClient(), finalizer)
-	r.resources = resources.New(r.APIPatchingApplicator, resources.Config{
-		Owns: []schema.GroupVersionKind{
-			invv1alpha1.EndpointGroupVersionKind,
-			//invv1alpha1.TargetGroupVersionKind,
-		},
-	})
 	r.nodeRegistry = cfg.NodeRegistry
 	r.scheme = mgr.GetScheme()
 
@@ -118,7 +111,7 @@ type reconciler struct {
 	resource.APIPatchingApplicator
 	finalizer *resource.APIFinalizer
 
-	resources    resources.Resources
+	//resources    resources.Resources
 	scheme       *runtime.Scheme
 	nodeRegistry node.NodeRegistry
 
@@ -146,6 +139,14 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	log := log.FromContext(ctx).WithValues("resource", "nodeep")
 	log.Info("reconcile")
 
+	res := resources.New(r.APIPatchingApplicator, resources.Config{
+		OwnerRef: true,
+		Owns: []schema.GroupVersionKind{
+			invv1alpha1.EndpointGroupVersionKind,
+			//invv1alpha1.TargetGroupVersionKind,
+		},
+	})
+
 	cr := &invv1alpha1.Node{}
 	if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
 		if !apierrors.IsNotFound(err) {
@@ -159,7 +160,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	nm, providerType, err := r.getNodeModel(ctx, cr)
 	if err != nil {
 		// TODO The scenario to handle is update the system when a model is not resovable
-		if errd := r.resources.APIDelete(ctx, cr); errd != nil {
+		if errd := res.APIDelete(ctx, cr); errd != nil {
 			err = errors.Join(err, errd)
 			log.Error(err, "cannot populate and delete existingresources")
 			return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
@@ -220,7 +221,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	// initialize the resource list + provide the topology key
-	r.resources.Init(client.MatchingLabels{
+	res.Init(client.MatchingLabels{
 		invv1alpha1.NephioTopologyKey: cr.Namespace,
 	})
 
@@ -239,12 +240,15 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	// build endpoints based on the node model
 	for epIdx, itfce := range nm.Spec.Interfaces {
-		r.resources.AddNewResource(buildEndpoint(cr, itfce, epIdx).DeepCopy())
+		if err := res.AddNewResource(cr, buildEndpoint(cr, itfce, epIdx).DeepCopy()); err != nil {
+			cr.SetConditions(resourcev1alpha1.Failed("cannot add resource"))
+			return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+		}
 	}
 
 	// apply the resources to the api (endpoints)
-	if err := r.resources.APIApply(ctx, cr); err != nil {
-		if errd := r.resources.APIDelete(ctx, cr); errd != nil {
+	if err := res.APIApply(ctx, cr); err != nil {
+		if errd := res.APIDelete(ctx, cr); errd != nil {
 			err = errors.Join(err, errd)
 			log.Error(err, "cannot populate and delete existingresources")
 			return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
@@ -305,10 +309,10 @@ func buildEndpoint(cr *invv1alpha1.Node, itfce invv1alpha1.NodeModelInterface, e
 
 	ep := invv1alpha1.BuildEndpoint(
 		metav1.ObjectMeta{
-			Name:            fmt.Sprintf("%s-%s", cr.GetName(), itfce.Name),
-			Namespace:       cr.GetNamespace(),
-			Labels:          labels,
-			OwnerReferences: []metav1.OwnerReference{{APIVersion: cr.APIVersion, Kind: cr.Kind, Name: cr.Name, UID: cr.UID, Controller: pointer.Bool(true)}},
+			Name:      fmt.Sprintf("%s-%s", cr.GetName(), itfce.Name),
+			Namespace: cr.GetNamespace(),
+			Labels:    labels,
+			//OwnerReferences: []metav1.OwnerReference{{APIVersion: cr.APIVersion, Kind: cr.Kind, Name: cr.Name, UID: cr.UID, Controller: pointer.Bool(true)}},
 		},
 		epSpec,
 		invv1alpha1.EndpointStatus{},
