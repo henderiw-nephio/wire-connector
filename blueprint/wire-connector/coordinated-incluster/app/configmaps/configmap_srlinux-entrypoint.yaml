@@ -9,8 +9,8 @@ kind: ConfigMap
 metadata:
   name: srlinux.nokia.com-k8s-entrypoint
   namespace: network-system
-  annotations:
-    nephio.org/network-system: true
+  labels:
+    inv.nephio.org/topology: network-system
 data:
   k8s-entrypoint.sh: |
     #!/bin/bash

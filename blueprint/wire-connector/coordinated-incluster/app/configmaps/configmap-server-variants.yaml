@@ -7,8 +7,8 @@ kind: ConfigMap
 metadata:
   name: x.server.com-variants
   namespace: network-system
-  annotations:
-    nephio.org/network-system: true
+  labels:
+    inv.nephio.org/topology: network-system
 data:
   server1: ""
   server2: ""

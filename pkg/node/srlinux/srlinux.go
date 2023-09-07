@@ -158,7 +158,7 @@ func (r *srl) GetNodeModelConfig(ctx context.Context, nc *invv1alpha1.NodeConfig
 		APIVersion: invv1alpha1.NodeKindAPIVersion,
 		Kind:       invv1alpha1.NodeModelKind,
 		Name:       fmt.Sprintf("%s-%s", NokiaSRLinuxProvider, nc.GetModel(defaultSrlinuxVariant)),
-		Namespace:  nc.GetNamespace(),
+		Namespace:  os.Getenv("POD_NAMESPACE"),
 	}
 }
 
@@ -166,7 +166,7 @@ func (r *srl) GetNodeModel(ctx context.Context, nc *invv1alpha1.NodeConfig) (*in
 	nm := &invv1alpha1.NodeModel{}
 	if err := r.Get(ctx, types.NamespacedName{
 		Name:      fmt.Sprintf("%s-%s", NokiaSRLinuxProvider, nc.GetModel(defaultSrlinuxVariant)),
-		Namespace: nc.GetNamespace(),
+		Namespace: os.Getenv("POD_NAMESPACE"),
 	}, nm); err != nil {
 		return nil, err
 	}
@@ -257,7 +257,7 @@ func (r *srl) SetInitialConfig(ctx context.Context, cr *invv1alpha1.Node, ips []
 	secret := &corev1.Secret{}
 	// we assume right now the default secret name is equal to the provider
 	// this provider username and password
-	if err := r.Get(ctx, types.NamespacedName{Namespace: cr.GetNamespace(), Name: NokiaSRLinuxProvider}, secret); err != nil {
+	if err := r.Get(ctx, types.NamespacedName{Namespace: os.Getenv("POD_NAMESPACE"), Name: NokiaSRLinuxProvider}, secret); err != nil {
 		return err
 	}
 
@@ -380,10 +380,9 @@ func (r *srl) SetInitialConfig(ctx context.Context, cr *invv1alpha1.Node, ips []
 }
 
 func (r *srl) getNodeConfig(ctx context.Context, cr *invv1alpha1.Node) (*invv1alpha1.NodeConfig, error) {
-
 	if cr.Spec.NodeConfig != nil && cr.Spec.NodeConfig.Name != "" {
 		nc := &invv1alpha1.NodeConfig{}
-		if err := r.Get(ctx, types.NamespacedName{Name: cr.Spec.NodeConfig.Name, Namespace: cr.GetNamespace()}, nc); err != nil {
+		if err := r.Get(ctx, types.NamespacedName{Name: cr.Spec.NodeConfig.Name, Namespace: os.Getenv("POD_NAMESPACE")}, nc); err != nil {
 			return nil, err
 		}
 		return nc, nil
@@ -395,7 +394,7 @@ func (r *srl) getNodeConfig(ctx context.Context, cr *invv1alpha1.Node) (*invv1al
 	// if still not found we return an empty nodeConfig, which populates the defaults
 
 	opts := []client.ListOption{
-		client.InNamespace(cr.GetNamespace()),
+		client.InNamespace(os.Getenv("POD_NAMESPACE")),
 	}
 	ncl := &invv1alpha1.NodeConfigList{}
 	if err := r.List(ctx, ncl, opts...); err != nil {
@@ -425,7 +424,7 @@ func (r *srl) getNodeConfig(ctx context.Context, cr *invv1alpha1.Node) (*invv1al
 
 func (r *srl) checkVariants(ctx context.Context, cr *invv1alpha1.Node, model string) error {
 	variants := &corev1.ConfigMap{}
-	if err := r.Get(ctx, types.NamespacedName{Name: variantsCfgMapName, Namespace: cr.GetNamespace()}, variants); err != nil {
+	if err := r.Get(ctx, types.NamespacedName{Name: variantsCfgMapName, Namespace: os.Getenv("POD_NAMESPACE")}, variants); err != nil {
 		return err
 	}
 	if _, ok := variants.Data[model]; !ok {

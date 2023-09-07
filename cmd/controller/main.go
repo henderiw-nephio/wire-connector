@@ -35,6 +35,7 @@ import (
 	_ "github.com/henderiw-nephio/wire-connector/controllers/pod-cache-controller"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/nodepool-cache-controller"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/wire-controller"
+	_ "github.com/henderiw-nephio/wire-connector/controllers/topology-controller"
 	"github.com/henderiw-nephio/wire-connector/pkg/grpcserver"
 	"github.com/henderiw-nephio/wire-connector/pkg/grpcserver/healthhandler"
 	"github.com/henderiw-nephio/wire-connector/pkg/node"
@@ -198,7 +199,7 @@ func main() {
 			default:
 				setupLog.Info("clusters...")
 				for nsn, cluster := range c.List() {
-					setupLog.Info("cluster", "nsn", nsn, "cluster", cluster)
+					setupLog.Info("cluster", "nsn", nsn, "cluster", cluster.IsReady)
 				}
 				setupLog.Info("services...")
 				for nsn, service := range svc.List() {

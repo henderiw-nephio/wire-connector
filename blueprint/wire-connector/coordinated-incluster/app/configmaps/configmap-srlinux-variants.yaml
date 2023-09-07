@@ -7,8 +7,8 @@ kind: ConfigMap
 metadata:
   name: srlinux.nokia.com-variants
   namespace: network-system
-  annotations:
-    nephio.org/network-system: true
+  labels:
+    inv.nephio.org/topology: network-system
 data:
   ixrd1: |
     # ixrd1

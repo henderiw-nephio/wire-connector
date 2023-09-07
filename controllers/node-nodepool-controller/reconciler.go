@@ -95,6 +95,7 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 			Named("NodeNodePoolController").
 			For(&corev1.Node{}).
 			Owns(&invv1alpha1.Node{}).
+			Watches(&invv1alpha1.NodePool{}, &nodePoolEventHandler{client: mgr.GetClient()}).
 			Complete(r)
 }
 

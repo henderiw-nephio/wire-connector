@@ -3,6 +3,7 @@ package xserver
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/henderiw-nephio/wire-connector/pkg/node"
 	nadv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
@@ -58,7 +59,7 @@ func (r *server) GetNodeModelConfig(ctx context.Context, nc *invv1alpha1.NodeCon
 		APIVersion: invv1alpha1.NodeKindAPIVersion,
 		Kind:       invv1alpha1.NodeModelKind,
 		Name:       fmt.Sprintf("%s-%s", ServerProvider, nc.GetModel(defaultServerVariant)),
-		Namespace:  nc.GetNamespace(),
+		Namespace:  os.Getenv("POD_NAMESPACE"),
 	}
 }
 
@@ -66,7 +67,7 @@ func (r *server) GetNodeModel(ctx context.Context, nc *invv1alpha1.NodeConfig) (
 	nm := &invv1alpha1.NodeModel{}
 	if err := r.Get(ctx, types.NamespacedName{
 		Name:      fmt.Sprintf("%s-%s", ServerProvider, nc.GetModel(defaultServerVariant)),
-		Namespace: nc.GetNamespace(),
+		Namespace: os.Getenv("POD_NAMESPACE"),
 	}, nm); err != nil {
 		return nil, err
 	}
@@ -92,7 +93,7 @@ func (r *server) SetInitialConfig(ctx context.Context, cr *invv1alpha1.Node, ips
 func (r *server) getNodeConfig(ctx context.Context, cr *invv1alpha1.Node) (*invv1alpha1.NodeConfig, error) {
 	if cr.Spec.NodeConfig != nil && cr.Spec.NodeConfig.Name != "" {
 		nc := &invv1alpha1.NodeConfig{}
-		if err := r.Get(ctx, types.NamespacedName{Name: cr.Spec.NodeConfig.Name, Namespace: cr.GetNamespace()}, nc); err != nil {
+		if err := r.Get(ctx, types.NamespacedName{Name: cr.Spec.NodeConfig.Name, Namespace: os.Getenv("POD_NAMESPACE")}, nc); err != nil {
 			return nil, err
 		}
 		return nc, nil
@@ -104,7 +105,7 @@ func (r *server) getNodeConfig(ctx context.Context, cr *invv1alpha1.Node) (*invv
 	// if still not found we return an empty nodeConfig, which populates the defaults
 
 	opts := []client.ListOption{
-		client.InNamespace(cr.GetNamespace()),
+		client.InNamespace(os.Getenv("POD_NAMESPACE")),
 	}
 	ncl := &invv1alpha1.NodeConfigList{}
 	if err := r.List(ctx, ncl, opts...); err != nil {
@@ -134,7 +135,7 @@ func (r *server) getNodeConfig(ctx context.Context, cr *invv1alpha1.Node) (*invv
 
 func (r *server) checkVariants(ctx context.Context, cr *invv1alpha1.Node, model string) error {
 	variants := &corev1.ConfigMap{}
-	if err := r.Get(ctx, types.NamespacedName{Name: variantsCfgMapName, Namespace: cr.GetNamespace()}, variants); err != nil {
+	if err := r.Get(ctx, types.NamespacedName{Name: variantsCfgMapName, Namespace: os.Getenv("POD_NAMESPACE")}, variants); err != nil {
 		return err
 	}
 	if _, ok := variants.Data[model]; !ok {

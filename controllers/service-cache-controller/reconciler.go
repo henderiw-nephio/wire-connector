@@ -19,7 +19,10 @@ package servicecachecontroller
 import (
 	"context"
 	"fmt"
+	"os"
 	"reflect"
+	"strconv"
+	"time"
 
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
@@ -107,20 +110,23 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, nil
 	}
 
-	// update (add/update) node to cache
-	if cr.Name == "wirer-service" && len(cr.Spec.ExternalIPs) > 0 {
-		r.serviceCache.Upsert(ctx,
-			types.NamespacedName{Name: r.clusterName},
-			wireservice.Service{
-				Object:      wire.Object{IsReady: true},
-				GRPCAddress: cr.Spec.ExternalIPs[0],             // we pick the first IP
-				GRPCPort:    cr.Spec.Ports[0].TargetPort.StrVal, // we expect only 1 service to be exposed
-			},
-		)
-	} else {
-		r.serviceCache.Delete(ctx, types.NamespacedName{Name: r.clusterName})
+	if cr.Name != "wirer-service" || cr.Namespace != os.Getenv("POD_NAMESPACE") {
+		return ctrl.Result{}, nil
 	}
-
+	log.Info("wirer-service", "spec", cr.Spec, "status", cr.Status)
+	// the service is interested for us
+	if len(cr.Status.LoadBalancer.Ingress) == 0 {
+		r.serviceCache.Delete(ctx, types.NamespacedName{Name: r.clusterName})
+		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
+	}
+	r.serviceCache.Upsert(ctx,
+		types.NamespacedName{Name: r.clusterName},
+		wireservice.Service{
+			Object:      wire.Object{IsReady: true},
+			GRPCAddress: cr.Status.LoadBalancer.Ingress[0].IP,     // we pick the first IP
+			GRPCPort:    strconv.Itoa(int(cr.Spec.Ports[0].Port)), // we expect only 1 service to be exposed
+		},
+	)
 	return ctrl.Result{}, nil
 }
 

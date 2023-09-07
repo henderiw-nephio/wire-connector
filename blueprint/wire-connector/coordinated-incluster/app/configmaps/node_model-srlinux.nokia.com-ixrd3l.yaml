@@ -3,8 +3,8 @@ kind: NodeModel
 metadata:
   name: srlinux.nokia.com-ixrd3l
   namespace: network-system
-  annotations:
-    nephio.org/network-system: true
+  labels:
+    inv.nephio.org/topology: network-system
 spec:
   provider: srlinux.nokia.com
   interfaces:

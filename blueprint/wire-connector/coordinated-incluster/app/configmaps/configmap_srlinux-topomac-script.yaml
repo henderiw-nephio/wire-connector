@@ -7,8 +7,8 @@ kind: ConfigMap
 metadata:
   name: srlinux.nokia.com-topomac-script
   namespace: network-system
-  annotations:
-    nephio.org/network-system: true
+  labels:
+    inv.nephio.org/topology: network-system
 data:
   topomac.sh: |
     #!/bin/bash

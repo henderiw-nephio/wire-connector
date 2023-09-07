@@ -51,7 +51,7 @@ const (
 // that the cluster is no longer available
 // used only for intercluster wirer controllers
 func (r *wc) clusterCallback(ctx context.Context, a wire.Action, nsn types.NamespacedName, d any) {
-	log := log.FromContext(ctx).WithValues("nsn", nsn, "data", d)
+	log := log.FromContext(ctx).WithValues("nsn", nsn)
 	log.Info("clusterCallback ...start...")
 
 	if a == wire.UpsertAction {
