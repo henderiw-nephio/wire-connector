@@ -53,6 +53,8 @@ rules:
   - endpoints/status
   - targets
   - targets/status
+  - topologies
+  - topologies/status
   verbs:
   - get
   - list
