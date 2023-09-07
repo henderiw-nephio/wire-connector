@@ -119,7 +119,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	r.resources.Init(client.MatchingLabels{})
 
 	// for a default namespace we add a label to indicate this ns is used for network topologies
-	if cr.GetNamespace() == "default" {
+	if cr.GetName() == "default" {
 		ns := &corev1.Namespace{}
 		if err := r.Get(ctx, types.NamespacedName{Name: "default"}, ns); err != nil {
 			cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
@@ -128,7 +128,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		if len(ns.Labels) == 0 {
 			ns.Labels = map[string]string{}
 		}
-		ns.Labels[invv1alpha1.NephioTopologyKey] = cr.GetNamespace()
+		ns.Labels[invv1alpha1.NephioTopologyKey] = cr.GetName()
 		if err := r.Apply(ctx, ns); err != nil {
 			cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
 			return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
