@@ -273,7 +273,7 @@ func (r *srl) SetInitialConfig(ctx context.Context, cr *invv1alpha1.Node, ips []
 	}
 
 	li, _ := logging.NewInstance(
-		logging.WithLevel(logging.Debug),
+		logging.WithLevel(logging.Critical),
 		logging.WithLogger(log.Print),
 	)
 
@@ -286,7 +286,10 @@ func (r *srl) SetInitialConfig(ctx context.Context, cr *invv1alpha1.Node, ips []
 		options.WithAuthUsername(string(secret.Data[defaultSecretUserNameKey])),
 		options.WithAuthPassword(string(secret.Data[defaultSecretPasswordKey])),
 		options.WithLogger(li),
-		options.WithChannelLog(&channelLog),
+		options.WithTransportType("system"),
+        options.WithSSHConfigFileSystem(),
+        options.WithChannelLog(&channelLog),
+        options.WithTimeoutOps(5*time.Second),
 		options.WithTermWidth(1000),
 	)
 	if err != nil {
@@ -296,13 +299,52 @@ func (r *srl) SetInitialConfig(ctx context.Context, cr *invv1alpha1.Node, ips []
 	if err != nil {
 		return err
 	}
-	d.Channel.TimeoutOps = 5 * time.Second
+	//d.Channel.TimeoutOps = 5 * time.Second
 	err = d.Open()
 	if err != nil {
 		return err
 	}
 	defer d.Close()
 
+	/*
+	configs := []string{
+        fmt.Sprintf("set / system tls server-profile %s", certData.ProfileName),
+		fmt.Sprintf("set / system tls server-profile %s authenticate-client false", certData.ProfileName),
+		fmt.Sprintf("set / system tls server-profile %s key \"%s\"", certData.ProfileName, certData.Key),
+		fmt.Sprintf("set / system tls server-profile %s certificate \"%s\"", certData.ProfileName, certData.Cert),
+		fmt.Sprintf("set / system tls server-profile %s trust-anchor \"%s\"", certData.ProfileName, certData.CA),
+		"set / system lldp admin state enable",
+		"set / system gnmi-server admin-state enable",
+		"set / system gnmi-server rate-limit 65000",
+		"set / system gnmi-server trace-options [ common request response ]",
+		"set / system gnmi-server network-instance mgmt admin-state enable",
+		fmt.Sprintf("set / system gnmi-server network-instance mgmt tls-profile %s", certData.ProfileName),
+		"set / system gnmi-server network-instance mgmt unix-socket admin-state enable",
+		"set / system gribi-server admin-state enable",
+		"set / system gribi-server network-instance mgmt admin-state enable",
+		fmt.Sprintf("set / system gribi-server network-instance mgmt tls-profile %s", certData.ProfileName),
+		"set / system json-rpc-server admin-state enable",
+		"set / system json-rpc-server network-instance mgmt http admin-state enable",
+		"set / system json-rpc-server network-instance mgmt https admin-state enable",
+		fmt.Sprintf("set / system json-rpc-server network-instance mgmt https tls-profile %s", certData.ProfileName),
+		"set / system p4rt-server admin-state enable",
+		"set / system p4rt-server network-instance mgmt admin-state enable",
+		fmt.Sprintf("set / system p4rt-server network-instance mgmt tls-profile %s", certData.ProfileName),
+		"commit save",
+    }
+
+    resp, err := d.SendConfigs(configs, opoptions.WithFuzzyMatchInput())
+    if err != nil {
+        return err
+    } else {
+        fmt.Println("Failed?: ", resp.Failed)
+    }
+
+    cb := make([]byte, channelLog.Len())
+    _, _ = channelLog.Read(cb)
+    fmt.Printf("Channel log output:\n%s", cb)
+	*/
+	
 	commands := []string{
 		fmt.Sprintf("set / system tls server-profile %s", certData.ProfileName),
 		fmt.Sprintf("set / system tls server-profile %s authenticate-client false", certData.ProfileName),
@@ -351,6 +393,7 @@ func (r *srl) SetInitialConfig(ctx context.Context, cr *invv1alpha1.Node, ips []
 	if err != nil {
 		return err
 	}
+	
 
 	/*
 		_, err = d.SendConfig(fmt.Sprintf("set / system banner login-banner \"%s\"", banner),
@@ -361,6 +404,7 @@ func (r *srl) SetInitialConfig(ctx context.Context, cr *invv1alpha1.Node, ips []
 		}
 	*/
 
+	
 	_, err = d.SendConfig("commit save")
 
 	prompt, err := d.GetPrompt()

@@ -43,6 +43,18 @@ rules:
   - update
   - patch
 - apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  - create
+  - delete
+- apiGroups:
   - inv.nephio.org
   resources:
   - links
@@ -55,6 +67,8 @@ rules:
   - targets/status
   - topologies
   - topologies/status
+  - logicalendpoints
+  - logicalendpoints/status
   verbs:
   - get
   - list
@@ -75,6 +89,23 @@ rules:
   - list
   - watch
 - apiGroups:
+  - topo.nephio.org
+  resources:
+  - interconnects
+  - interconnects/status
+  - logicalinterconnects
+  - logicalinterconnects/status
+  - rawtopologies
+  - rawtopologies/status
+  verbs:
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  - create
+  - delete
+- apiGroups:
   - '*'
   resources:
   - configmaps
@@ -88,3 +119,11 @@ rules:
   - patch
   - create
   - delete
+- apiGroups:
+  - '*'
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch

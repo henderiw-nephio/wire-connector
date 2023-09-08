@@ -143,7 +143,7 @@ func (r *wc) serviceCallback(ctx context.Context, a wire.Action, nsn types.Names
 // daemonCallback notifies the wire controller about the fact
 // that the daemon status changed and should reconcile the object
 func (r *wc) daemonCallback(ctx context.Context, a wire.Action, nsn types.NamespacedName, d any) {
-	r.l.Info("daemonCallback ...start...", "nsn", nsn, "data", d)
+	r.l.Info("daemonCallback ...start...", "nsn", nsn, "action", a, "data", d)
 	daemon, ok := d.(wiredaemon.Daemon)
 	if !ok {
 		r.l.Info("expect Daemon", "got", reflect.TypeOf(d).Name())
@@ -154,6 +154,8 @@ func (r *wc) daemonCallback(ctx context.Context, a wire.Action, nsn types.Namesp
 	if a == wire.UpsertAction && daemon.IsReady {
 		newd = daemon
 		address := fmt.Sprintf("%s:%s", daemon.GRPCAddress, daemon.GRPCPort)
+
+		r.l.Info("daemonCallback upsert", "nsn", nsn, "action", a, "data", d)
 
 		// this is a safety
 		oldw, err := r.workerCache.Get(nsn)
@@ -184,7 +186,7 @@ func (r *wc) daemonCallback(ctx context.Context, a wire.Action, nsn types.Namesp
 			r.workerCache.Delete(ctx, nsn)
 		}
 	}
-	r.l.Info("daemonCallback ...call common callback...", "nsn", nsn, "data", d)
+	r.l.Info("daemonCallback ...call common callback...", "nsn", nsn, "action", a, "data", d)
 
 	r.commonCallback(ctx, a, nsn, newd, &CallbackCtx{
 		Message:  "daemon failed",
@@ -218,7 +220,7 @@ func (r *wc) nodeCallback(ctx context.Context, a wire.Action, nsn types.Namespac
 
 func (r *wc) commonCallback(ctx context.Context, a wire.Action, nsn types.NamespacedName, d any, cbctx *CallbackCtx) {
 	//log := log.FromContext(ctx)
-	r.l.Info("commonCallback ...start...", "nsn", nsn, "data", d)
+	r.l.Info("commonCallback ...start...", "nsn", nsn, "action", a, "data", d)
 	var wg sync.WaitGroup
 	if a == wire.DeleteAction {
 		// delete
@@ -281,7 +283,7 @@ func (r *wc) commonCallback(ctx context.Context, a wire.Action, nsn types.Namesp
 		}
 	}
 	wg.Wait()
-	r.l.Info("commonCallback ...end...", "nsn", nsn, "data", d)
+	r.l.Info("commonCallback ...end...", "nsn", nsn, "action", a, "data", d)
 }
 
 /* generic event update

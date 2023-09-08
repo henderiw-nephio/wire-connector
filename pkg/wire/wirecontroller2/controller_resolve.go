@@ -18,7 +18,6 @@ package wirecontroller
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/henderiw-nephio/wire-connector/pkg/wire/cache/resolve"
 	"k8s.io/apimachinery/pkg/types"
@@ -35,7 +34,7 @@ func (r *wc) resolveEndpoint(nsn types.NamespacedName, intercluster bool) *resol
 	if err != nil {
 		// for intercluster wires we allow the resolution to topology resolution to fail
 		// since one ep can reside in the local cluster and the other ep can reside in a remote cluster
-		if !intercluster {
+		if intercluster {
 			return &resolve.Data{
 				Success: true,
 				Action:  false,
@@ -74,12 +73,12 @@ func (r *wc) resolveEndpoint(nsn types.NamespacedName, intercluster bool) *resol
 	if !d.IsReady {
 		return &resolve.Data{Message: fmt.Sprintf("wireDaemon not found: %s", daemonHostNodeNSN.String())}
 	}
-	// needed for incluster only
-	if os.Getenv("WIRER_INTERCLUSTER") == "true" {
-		if d.GRPCAddress == "" || d.GRPCPort == "" {
-			return &resolve.Data{Message: fmt.Sprintf("wireDaemon no grpc address/port: %s", daemonHostNodeNSN.String())}
-		}
+	// needed for incluster only -> seems we need it for both
+	//if os.Getenv("WIRER_INTERCLUSTER") == "true"
+	if d.GRPCAddress == "" || d.GRPCPort == "" {
+		return &resolve.Data{Message: fmt.Sprintf("wireDaemon no grpc address/port: %s", daemonHostNodeNSN.String())}
 	}
+	//}
 
 	return &resolve.Data{
 		Success:         true,

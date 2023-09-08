@@ -93,6 +93,10 @@ func New(ctx context.Context, cfg *Config) wire.Wirer {
 				for nsn, o := range r.nodeepCache.List() {
 					r.l.Info("nodeep", "nsn", nsn, "nodeep resp", o.NodeEpResp, "nodeep status", o.NodeEpResp.StatusCode)
 				}
+				r.l.Info("worker...")
+				for nsn, o := range r.workerCache.List() {
+					r.l.Info("worker", "nsn", nsn, "addess", o.GetConfig().Address)
+				}
 				time.Sleep(5 * time.Second)
 			}
 		}

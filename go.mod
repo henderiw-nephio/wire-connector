@@ -11,9 +11,9 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/itchyny/gojq v0.12.13
 	github.com/nephio-project/nephio/controllers/pkg v0.0.0-20230724195903-feb6c2f91cc3
-	github.com/nokia/k8s-ipam v0.0.4-0.20230907114717-c186faf0880b
+	github.com/nokia/k8s-ipam v0.0.4-0.20230907150948-fa2a31d37509
 	github.com/pkg/errors v0.9.1
-	github.com/scrapli/scrapligo v1.1.13-0.20230905184319-c884aaeecf34
+	github.com/scrapli/scrapligo v1.1.13-0.20230907020628-34c35689c60c
 	github.com/sirupsen/logrus v1.9.0
 	github.com/spf13/cobra v1.7.0
 	github.com/stretchr/testify v1.8.4
@@ -33,10 +33,7 @@ require (
 	sigs.k8s.io/controller-runtime v0.15.0
 )
 
-require (
-	github.com/lithammer/fuzzysearch v1.1.8 // indirect
-	github.com/pmezard/go-difflib v1.0.0 // indirect
-)
+require github.com/pmezard/go-difflib v1.0.0 // indirect
 
 require (
 	github.com/Microsoft/go-winio v0.6.0 // indirect

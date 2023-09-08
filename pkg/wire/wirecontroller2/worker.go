@@ -31,6 +31,7 @@ type Worker interface {
 	Start(ctx context.Context) error
 	Stop()
 	Write(e state.WorkerEvent)
+	GetConfig() *client.Config
 }
 
 func NewWorker(ctx context.Context, wireCache WireCache, epCache NodeEpCache, cfg *client.Config) (Worker, error) {
@@ -41,6 +42,7 @@ func NewWorker(ctx context.Context, wireCache WireCache, epCache NodeEpCache, cf
 		return nil, err
 	}
 	return &worker{
+		cfg:       cfg,
 		wireCache: wireCache,
 		epCache:   epCache,
 		ch:        make(chan state.WorkerEvent, 10),
@@ -50,6 +52,7 @@ func NewWorker(ctx context.Context, wireCache WireCache, epCache NodeEpCache, cf
 }
 
 type worker struct {
+	cfg       *client.Config
 	wireCache WireCache
 	epCache   NodeEpCache
 	ch        chan state.WorkerEvent
@@ -57,6 +60,10 @@ type worker struct {
 	cancel    context.CancelFunc
 	//logger
 	l logr.Logger
+}
+
+func (r *worker) GetConfig() *client.Config {
+	return r.cfg
 }
 
 func (r *worker) Start(ctx context.Context) error {

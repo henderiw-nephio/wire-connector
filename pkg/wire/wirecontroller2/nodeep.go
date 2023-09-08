@@ -76,7 +76,7 @@ func (r *NodeEndpoint) Transition(newState state.State, eventCtx *state.EventCtx
 	r.NodeEpResp.UpdateStatus(newState, eventCtx)
 
 	for _, ge := range generatedEvents {
-		r.l.Info("transition generated event", "ge", ge)
+		r.l.Info("transition generated event", "ge", ge, "resolved", r.NodeEpReq.IsResolved())
 		if r.NodeEpReq.IsResolved() {
 			// should always resolve
 			workerNsn := types.NamespacedName{

@@ -65,7 +65,13 @@ spec:
           value: "true"
         - name: RECONCILER_NODEPOOCACHECONTROLLER
           value: "true"
+        - name: RECONCILER_TOPOLOGYCACHECONTROLLER
+          value: "true"
         - name: RECONCILER_TOPOLOGYCONTROLLER
+          value: "true"
+        - name: RECONCILER_LOGICALINTERCONNECTCONTROLLER
+          value: "true"
+        - name: RECONCILER_LINKCONTROLLER
           value: "true"
         resources:
           requests:

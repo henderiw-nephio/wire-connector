@@ -52,7 +52,7 @@ func init() {
 }
 
 const (
-	finalizer = "wire.nephio.org/finalizer"
+	finalizer = "nodeep.wirer.nephio.org/finalizer"
 	// error
 	errGetCr        = "cannot get resource"
 	errUpdateStatus = "cannot update status"
@@ -118,7 +118,17 @@ type reconciler struct {
 	wireclient wclient.Client
 }
 
-func getEndpointReq(n *invv1alpha1.Node, nm *invv1alpha1.NodeModel, providerType node.ProviderType) *endpointpb.EndpointRequest {
+func getDeleteEndpointReq(cr *invv1alpha1.Node) *endpointpb.EndpointRequest {
+	req := &endpointpb.EndpointRequest{
+		NodeKey: &endpointpb.NodeKey{
+			Topology: cr.Namespace,
+			NodeName: cr.Name,
+		},
+	}
+	return req
+}
+
+func getEndpointReq(cr *invv1alpha1.Node, nm *invv1alpha1.NodeModel, providerType node.ProviderType) *endpointpb.EndpointRequest {
 	eps := make([]*endpointpb.Endpoint, 0, len(nm.Spec.Interfaces))
 	for _, itfce := range nm.Spec.Interfaces {
 		eps = append(eps, &endpointpb.Endpoint{IfName: itfce.Name})
@@ -126,8 +136,8 @@ func getEndpointReq(n *invv1alpha1.Node, nm *invv1alpha1.NodeModel, providerType
 
 	req := &endpointpb.EndpointRequest{
 		NodeKey: &endpointpb.NodeKey{
-			Topology: n.Namespace,
-			NodeName: n.Name,
+			Topology: cr.Namespace,
+			NodeName: cr.Name,
 		},
 		Endpoints:  eps,
 		ServerType: providerType == node.ProviderTypeServer,
@@ -156,17 +166,50 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return reconcile.Result{}, nil
 	}
 
+	// we assume for now that the cleanup of the endpoints on the node happens automatically
+	// if the pod is deleted, the veth pairs will be cleaned up
+	// xdp entries are useless and will be overwritten to the real once
+	if meta.WasDeleted(cr) {
+		if cr.GetCondition(resourcev1alpha1.ConditionTypeEPReady).Status == metav1.ConditionTrue {
+			// while the epReq is not fully initialized the deletion of the pod associated with the node will detroy
+			// the ep and veth pairs
+			if _, err := r.wireclient.EndpointDelete(ctx, getDeleteEndpointReq(cr)); err != nil {
+				log.Error(err, "cannot remove wire")
+				cr.SetConditions(resourcev1alpha1.EPFailed("cannot remove endpoint from controller"))
+				return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+			}
+			// TODO -> for now we poll, to be changed to event driven
+			cr.SetConditions(resourcev1alpha1.EPUnknown())
+			return reconcile.Result{RequeueAfter: 1 * time.Second}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+		}
+
+		if err := r.finalizer.RemoveFinalizer(ctx, cr); err != nil {
+			log.Error(err, "cannot remove finalizer")
+			cr.SetConditions(resourcev1alpha1.EPFailed(err.Error()))
+			return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+		}
+		log.Info("Successfully deleted resource")
+		return reconcile.Result{Requeue: false}, nil
+	}
+
+	// check if the node is ready for further processing -> the ready condition tells if the node is deployed
+	// and configured
+	if cr.GetCondition(resourcev1alpha1.ConditionTypeReady).Status != metav1.ConditionTrue {
+		cr.SetConditions(resourcev1alpha1.EPNotReady("node deployment not ready"))
+		return reconcile.Result{}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+	}
+
 	// TODO handle change of the network model config
 	nm, providerType, err := r.getNodeModel(ctx, cr)
 	if err != nil {
 		// TODO The scenario to handle is update the system when a model is not resovable
 		if errd := res.APIDelete(ctx, cr); errd != nil {
 			err = errors.Join(err, errd)
-			log.Error(err, "cannot populate and delete existingresources")
+			cr.SetConditions(resourcev1alpha1.EPFailed("cannot delete resources"))
 			return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 		}
 		log.Error(err, "cannot populate resources")
-		cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
+		cr.SetConditions(resourcev1alpha1.EPFailed("cannot get node model"))
 		return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 	}
 
@@ -176,7 +219,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	if err != nil {
 		// we should not recive an error since this indicates aan issue with the communication
 		log.Error(err, "cannot get endpoint")
-		cr.SetConditions(resourcev1alpha1.Failed("cannot get endpoint"))
+		cr.SetConditions(resourcev1alpha1.EPFailed("cannot get endpoint from controller"))
 		return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 	}
 	exists := true
@@ -185,38 +228,12 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 	log.Info("endpoint get", "nodeKey", epResp.NodeKey.String(), "exists", exists, "status", epResp.StatusCode.String())
 
-	// we assume for now that the cleanup of the endpoints on the node happens automatically
-	// if the pod is deleted, the veth pairs will be cleaned up
-	// xdp entries are useless and will be overwritten to the real once
-	if meta.WasDeleted(cr) {
-		if exists {
-			// while the epReq is not fully initialized the deletion of the pod associated with the node will detroy
-			// the ep and veth pairs
-			if _, err := r.wireclient.EndpointDelete(ctx, epReq); err != nil {
-				log.Error(err, "cannot remove wire")
-				cr.SetConditions(resourcev1alpha1.WiringFailed("cannot remove wire"))
-				return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
-			}
-			// TODO -> for now we poll, to be changed to event driven
-			cr.SetConditions(resourcev1alpha1.WiringUknown())
-			return reconcile.Result{RequeueAfter: 1 * time.Second}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
-		}
-
-		if err := r.finalizer.RemoveFinalizer(ctx, cr); err != nil {
-			log.Error(err, "cannot remove finalizer")
-			cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
-			return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
-		}
-		log.Info("Successfully deleted resource")
-		return reconcile.Result{Requeue: false}, nil
-	}
-
 	if err := r.finalizer.AddFinalizer(ctx, cr); err != nil {
 		// If this is the first time we encounter this issue we'll be requeued
 		// implicitly when we update our status with the new error condition. If
 		// not, we requeue explicitly, which will trigger backoff.
 		log.Error(err, "cannot add finalizer")
-		cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
+		cr.SetConditions(resourcev1alpha1.EPFailed(err.Error()))
 		return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 	}
 
@@ -230,7 +247,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		_, err := r.wireclient.EndpointCreate(ctx, epReq)
 		if err != nil {
 			log.Error(err, "cannot create endpoint")
-			cr.SetConditions(resourcev1alpha1.Failed("cannot create endpoint"))
+			cr.SetConditions(resourcev1alpha1.EPFailed("cannot create endpoint"))
 			return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 		}
 		log.Info("deploying...")
@@ -251,15 +268,16 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		if errd := res.APIDelete(ctx, cr); errd != nil {
 			err = errors.Join(err, errd)
 			log.Error(err, "cannot populate and delete existingresources")
+			cr.SetConditions(resourcev1alpha1.EPFailed(err.Error()))
 			return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 		}
 		log.Error(err, "cannot populate resources")
-		cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
+		cr.SetConditions(resourcev1alpha1.EPFailed(err.Error()))
 		return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 	}
 
 	log.Info("deployed...")
-	cr.SetConditions(resourcev1alpha1.Ready())
+	cr.SetConditions(resourcev1alpha1.EPReady())
 	return reconcile.Result{}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 }
 

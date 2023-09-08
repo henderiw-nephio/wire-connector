@@ -48,7 +48,7 @@ func init() {
 }
 
 const (
-	finalizer = "nodedeployer.nephio.com/finalizer"
+	finalizer = "nodedeployer.wirer.nephio.org/finalizer"
 	// errors
 	errGetCr        = "cannot get cr"
 	errUpdateStatus = "cannot update status"

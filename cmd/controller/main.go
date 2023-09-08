@@ -22,6 +22,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -35,6 +36,8 @@ import (
 	_ "github.com/henderiw-nephio/wire-connector/controllers/pod-cache-controller"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/topology-controller"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/wire-controller"
+	_ "github.com/henderiw-nephio/wire-connector/controllers/logicalinterconnect-controller"
+	_ "github.com/henderiw-nephio/wire-connector/controllers/link-controller"
 	"github.com/henderiw-nephio/wire-connector/pkg/grpcserver"
 	"github.com/henderiw-nephio/wire-connector/pkg/grpcserver/healthhandler"
 	"github.com/henderiw-nephio/wire-connector/pkg/node"
@@ -190,38 +193,36 @@ func main() {
 		os.Exit(1)
 	}
 
-	/*
-		go func() {
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-					setupLog.Info("clusters...")
-					for nsn, cluster := range c.List() {
-						setupLog.Info("cluster", "nsn", nsn, "cluster", cluster.IsReady)
-					}
-					setupLog.Info("services...")
-					for nsn, service := range svc.List() {
-						setupLog.Info("service", "nsn", nsn, "service", service)
-					}
-					setupLog.Info("topologies...")
-					for nsn, topology := range t.List() {
-						setupLog.Info("topology", "nsn", nsn, "topology", topology)
-					}
-					setupLog.Info("pods...")
-					for nsn, pod := range pd.List() {
-						setupLog.Info("pod", "Name", nsn, "pod", pod)
-					}
-					setupLog.Info("daemons...")
-					for nsn, daemon := range d.List() {
-						setupLog.Info("daemon", "Name", nsn, "daemon", daemon)
-					}
-					time.Sleep(5 * time.Second)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				setupLog.Info("clusters...")
+				for nsn, cluster := range c.List() {
+					setupLog.Info("cluster", "nsn", nsn, "cluster", cluster.IsReady)
 				}
+				setupLog.Info("services...")
+				for nsn, service := range svc.List() {
+					setupLog.Info("service", "nsn", nsn, "service", service)
+				}
+				setupLog.Info("topologies...")
+				for nsn, topology := range t.List() {
+					setupLog.Info("topology", "nsn", nsn, "topology", topology)
+				}
+				setupLog.Info("pods...")
+				for nsn, pod := range pd.List() {
+					setupLog.Info("pod", "Name", nsn, "pod", pod)
+				}
+				setupLog.Info("daemons...")
+				for nsn, daemon := range d.List() {
+					setupLog.Info("daemon", "Name", nsn, "daemon", daemon)
+				}
+				time.Sleep(5 * time.Second)
 			}
-		}()
-	*/
+		}
+	}()
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctx); err != nil {

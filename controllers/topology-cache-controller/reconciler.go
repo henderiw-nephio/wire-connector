@@ -25,6 +25,7 @@ import (
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
 	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/topology"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
+	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
 	"github.com/nokia/k8s-ipam/pkg/meta"
 	"github.com/nokia/k8s-ipam/pkg/resource"
 	"github.com/pkg/errors"
@@ -72,8 +73,8 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 
 	return nil,
 		ctrl.NewControllerManagedBy(mgr).
-			Named("PodController").
-			For(&corev1.Pod{}).
+			Named("TopologyCacheController").
+			For(&corev1.Namespace{}).
 			Complete(r)
 }
 
@@ -107,9 +108,9 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	// update (add/update) node to cache
-	if cr.GetAnnotations()["wirer-key"] == "true" {
+	if cr.GetLabels()[invv1alpha1.NephioTopologyKey] == cr.GetName() {
 		// validate if namespace is not already used in another cluster
-		t, err := r.topoCache.Get(types.NamespacedName{Name: req.Name})
+		t, err := r.topoCache.Get(types.NamespacedName{Namespace: r.clusterName, Name: req.Name})
 		if err == nil {
 			if t.ClusterName != r.clusterName {
 				log.Error(fmt.Errorf("overlapping namespace"), "overlapping namespace", "cluster", t.ClusterName, "cluster", r.clusterName)
@@ -117,7 +118,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			}
 		}
 
-		r.topoCache.Upsert(ctx, types.NamespacedName{Name: req.Name}, wiretopology.Topology{
+		r.topoCache.Upsert(ctx, types.NamespacedName{Namespace: r.clusterName, Name: req.Name}, wiretopology.Topology{
 			Object:      wire.Object{IsReady: true},
 			ClusterName: r.clusterName,
 		})
