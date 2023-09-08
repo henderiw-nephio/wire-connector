@@ -45,7 +45,38 @@ func getTunnelName(name string) string {
 	return fmt.Sprintf("%s%s", tunnelPrefix, name)
 }
 
-func createVethPair() (netlink.Link, netlink.Link, error) {
+func createVethPair(epA, epB Endpoint) (netlink.Link, netlink.Link, error) {
+	ifNameA := epA.ifName
+	if epA.nsPath != "" {
+		ifNameA = getVethName(genIfName())
+	}
+	ifNameB := epB.ifName
+
+	log.Infof("createVethIfacePair, itfce A: %s, B: %s", ifNameA, ifNameB)
+
+	vethA := &netlink.Veth{
+		LinkAttrs: netlink.LinkAttrs{
+			Name:  ifNameA,
+			Flags: net.FlagUp,
+		},
+		PeerName: ifNameB,
+	}
+
+	// add the link
+	if err := netlink.LinkAdd(vethA); err != nil {
+		return nil, nil, err
+	}
+
+	// retrieve netlink.Link for the peer interface
+	vethB, err := netlink.LinkByName(ifNameB)
+	if err != nil {
+		return nil, nil, err
+	}
+	return vethA, vethB, nil
+}
+
+/*
+func createVethPair(epA, epB Endpoint) (netlink.Link, netlink.Link, error) {
 	ifNameRandA := getVethName(genIfName())
 	ifNameRandB := getVethName(genIfName())
 
@@ -71,6 +102,7 @@ func createVethPair() (netlink.Link, netlink.Link, error) {
 	}
 	return vethA, vethB, nil
 }
+*/
 
 func createTunnel(tunName, localIP, remoteIP string, vni int) (netlink.Link, error) {
 
@@ -191,10 +223,21 @@ func getPeerVethIndexFrimIfInNS(nsPath, ifName string) (int, bool) {
 
 func setIfNameAndUp(ifName string, veth netlink.Link) error {
 	if err := netlink.LinkSetName(veth, ifName); err != nil {
+		log.Infof("setIfNameAndUp LinkSetName veth %v ifName %s err %s", veth, ifName, err.Error())
 		return err
 	}
 	// set the link uo
 	if err := netlink.LinkSetUp(veth); err != nil {
+		log.Infof("setIfNameAndUp LinkSetUp err %s", err.Error())
+		return err
+	}
+	return nil
+}
+
+func setItfceUp(veth netlink.Link) error {
+	// set the link uo
+	if err := netlink.LinkSetUp(veth); err != nil {
+		log.Infof("setIfNameAndUp LinkSetUp err %s", err.Error())
 		return err
 	}
 	return nil

@@ -18,13 +18,10 @@ package nodenodepoolcontroller
 
 import (
 	"context"
-	"fmt"
-	"reflect"
 	"strings"
 	"time"
 
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
-	"github.com/henderiw-nephio/wire-connector/pkg/wire"
 	wirenode "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/node"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
 	"github.com/nephio-project/nephio/controllers/pkg/resource"
@@ -48,7 +45,7 @@ func init() {
 }
 
 const (
-	finalizer = "wire.nephio.org/finalizer"
+	finalizer = "nodenodepool.wirer.nephio.org/finalizer"
 	// error
 	errGetCr        = "cannot get resource"
 	errUpdateStatus = "cannot update status"
@@ -60,23 +57,15 @@ func New(ctx context.Context, cfg *ctrlconfig.Config) reconcile.Reconciler {
 	return &reconciler{
 		APIPatchingApplicator: c,
 		finalizer:             resource.NewAPIFinalizer(cfg.Client, finalizer),
-		nodePoolCache:         cfg.NodePoolCache,
 		clusterName:           cfg.ClusterName,
 	}
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c interface{}) (map[schema.GroupVersionKind]chan event.GenericEvent, error) {
-	// register scheme
-	cfg, ok := c.(*ctrlconfig.Config)
-	if !ok {
-		return nil, fmt.Errorf("cannot initialize, expecting controllerConfig, got: %s", reflect.TypeOf(c).Name())
-	}
-
 	// initialize reconciler
 	r.APIPatchingApplicator = resource.NewAPIPatchingApplicator(mgr.GetClient())
 	r.finalizer = resource.NewAPIFinalizer(mgr.GetClient(), finalizer)
-	r.nodePoolCache = cfg.NodePoolCache
 
 	return nil,
 		ctrl.NewControllerManagedBy(mgr).
@@ -92,8 +81,7 @@ type reconciler struct {
 	resource.APIPatchingApplicator
 	finalizer *resource.APIFinalizer
 
-	clusterName   string
-	nodePoolCache wire.Cache[invv1alpha1.NodePool]
+	clusterName string
 }
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -140,24 +128,43 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	found := false
 	for labelKey, labelValue := range cr.GetLabels() {
 		if strings.Contains(labelKey, "nodepool") {
-			np, err := r.nodePoolCache.Get(types.NamespacedName{
-				Namespace: r.clusterName,
-				Name:      labelValue,
-			})
-			if err != nil {
+			np := &invv1alpha1.NodePool{}
+			if err := r.Get(ctx, types.NamespacedName{Namespace: "default", Name: labelValue}, np); err != nil {
+				if resource.IgnoreNotFound(err) != nil {
+					return ctrl.Result{}, err
+				}
+				// not found
 				// not found -> wait till nodepool is found
+				// delete resources
+				if err := res.APIDelete(ctx, cr); err != nil {
+					return ctrl.Result{}, err
+				}
 				// we could optimize this and fetch the nodepool from the cache
 				return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
+			}
+
+			if meta.WasDeleted(np) {
+				log.Info("nodepool delete timestamp")
+				// not found -> wait till nodepool is found
+				// delete resources
+				if err := res.APIDelete(ctx, cr); err != nil {
+					return ctrl.Result{}, err
+				}
 			}
 
 			res.Init(client.MatchingLabels{})
 			for _, addr := range cr.Status.Addresses {
 				// there is only 1 internal ip
 				if addr.Type == corev1.NodeInternalIP {
+					namespace := r.clusterName
+					if namespace == "" {
+						namespace = "default"
+					}
+
 					if err := res.AddNewResource(cr, invv1alpha1.BuildNode(
 						metav1.ObjectMeta{
 							Name:      cr.Name,
-							Namespace: r.clusterName,
+							Namespace: namespace,
 							//OwnerReferences: []metav1.OwnerReference{{APIVersion: cr.APIVersion, Kind: cr.Kind, Name: cr.Name, UID: cr.UID, Controller: pointer.Bool(true)}},
 						},
 						invv1alpha1.NodeSpec{
@@ -177,6 +184,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			}
 		}
 	}
+	log.Info("nodepool", "found", found)
 	if found {
 		if err := res.APIApply(ctx, cr); err != nil {
 			return ctrl.Result{}, err

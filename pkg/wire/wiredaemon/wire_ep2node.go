@@ -70,22 +70,23 @@ func (r *wep2node) IsReady() bool {
 // or a remote tunnel for which a veth pair gets cross connected with BPF XDP
 func (r *wep2node) Deploy(req *endpointpb.EndpointRequest) error {
 	for _, ep := range req.Endpoints {
-		// check veth pair existance
-		epA := Endpoint{
-			ifName:  ep.IfName,
-			isLocal: true,
-			nsPath:  r.nsPath,
-		}
+		epA := NewEndpoint(&EndpointConfig{
+			IfName: ep.IfName,
+			IsLocal: true,
+			NsPath: r.nsPath,// for serverType this will be set to "" since the ep is on the host
+		})
 		// if we wire a server the veth pair is totally hostname based
-		if req.ServerType {
-			epA.nsPath = ""
-		}
-		epB := Endpoint{
-			ifName:  getVethName(getHashValue(getNsIfName(req.NodeKey.Topology, req.NodeKey.NodeName, ep.IfName))),
-			isLocal: true,
-			nsPath:  "", // this is explicit since this is the host namespace on which this req is send
-		}
-		// since a veth pair delates both ends we assume that if 1 ens exists the ep2node veth pait exists
+		//if req.ServerType {
+		//	epA.nsPath = ""
+		//}
+		epB := NewEndpoint(&EndpointConfig{
+			IfName:  getVethName(getHashValue(getNsIfName(req.NodeKey.Topology, req.NodeKey.NodeName, ep.IfName))),
+			IsLocal: true,
+			NsPath:  "", // this is explicit since this is the host namespace on which this req is send
+		})
+
+		r.l.Info("ep2node deploy", "epA", epA.ifName, "epB", epB.ifName)
+		// since a veth pair deletes both ends we assume that if 1 ens exists the ep2node veth pait exists
 		if req.ServerType {
 			if doesItfceExists(epA.ifName) || doesItfceExists(epB.ifName) {
 				r.l.Info("veth pair already exists", "epA", ep.IfName, "epB", epB.ifName)
@@ -102,14 +103,17 @@ func (r *wep2node) Deploy(req *endpointpb.EndpointRequest) error {
 
 		// get random names for veth sides as they will be created in root netns first
 		var err error
-		epA.veth, epB.veth, err = createVethPair()
+		epA.veth, epB.veth, err = createVethPair(epA, epB)
 		if err != nil {
+			r.l.Info("veth create error", "err", err)
 			return err
 		}
 		if err := epA.DeployEp2Node(); err != nil {
+			r.l.Info("deployep2Node epA error", "err", err)
 			return err
 		}
 		if err := epB.DeployEp2Node(); err != nil {
+			r.l.Info("deployep2Node epB error", "err", err)
 			return err
 		}
 	}
@@ -118,20 +122,18 @@ func (r *wep2node) Deploy(req *endpointpb.EndpointRequest) error {
 
 func (r *wep2node) Destroy(req *endpointpb.EndpointRequest) error {
 	for _, ep := range req.Endpoints {
-		// get random names for veth sides as they will be created in root netns first
-		epA := Endpoint{
-			ifName:  ep.IfName,
-			isLocal: true,
-			nsPath:  r.nsPath,
-		}
-		// if we wire a server the veth pair is totally hostname based
-		if req.ServerType {
-			epA.nsPath = ""
-		}
-		epB := Endpoint{
-			ifName:  getHashValue(getNsIfName(req.NodeKey.Topology, req.NodeKey.NodeName, ep.IfName)),
-			isLocal: true,
-		}
+		epA := NewEndpoint(&EndpointConfig{
+			IfName: ep.IfName,
+			IsLocal: true,
+			NsPath: r.nsPath,// for serverType this will be set to "" since the ep is on the host
+		})
+
+		epB := NewEndpoint(&EndpointConfig{
+			IfName:  getVethName(getHashValue(getNsIfName(req.NodeKey.Topology, req.NodeKey.NodeName, ep.IfName))),
+			IsLocal: true,
+			NsPath:  "", // this is explicit since this is the host namespace on which this req is send
+		})
+
 		if err := epA.DestroyEp2Node(); err != nil {
 			return err
 		}

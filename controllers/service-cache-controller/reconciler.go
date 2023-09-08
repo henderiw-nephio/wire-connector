@@ -76,7 +76,7 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 
 	return nil,
 		ctrl.NewControllerManagedBy(mgr).
-			Named("PodController").
+			Named("ServiceCacheController").
 			For(&corev1.Pod{}).
 			Complete(r)
 }

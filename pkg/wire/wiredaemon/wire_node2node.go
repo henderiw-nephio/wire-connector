@@ -58,8 +58,8 @@ func NewWireNode2Node(ctx context.Context, req *wirepb.WireRequest, cfg *WireNod
 type w struct {
 	podCache wire.Cache[wirepod.Pod]
 
-	endpointA *Endpoint
-	endpointB *Endpoint
+	endpointA Endpoint
+	endpointB Endpoint
 
 	mtu int
 
@@ -71,7 +71,7 @@ type w struct {
 
 // getEndpoint returns an endpoint which provides context wrt
 // IsLocal and IsReady, if isLocal the nsPath is returned if found
-func (r *w) getEndpoint(ctx context.Context, req *wirepb.WireRequest, epIdx int) *Endpoint {
+func (r *w) getEndpoint(ctx context.Context, req *wirepb.WireRequest, epIdx int) Endpoint {
 	epReq := req.Endpoints[epIdx]
 	r.l.Info("getEndpoint", "epReq", epReq)
 	epCfg := &EndpointConfig{

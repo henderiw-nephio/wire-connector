@@ -61,9 +61,9 @@ spec:
           value: "true"
         - name: RECONCILER_NODEEPCONTROLLER
           value: "true"
-        - name: RECONCILER_NODENODEPOOCONTROLLER
+        - name: RECONCILER_NODENODEPOOLCONTROLLER
           value: "true"
-        - name: RECONCILER_NODEPOOCACHECONTROLLER
+        - name: RECONCILER_NODEPOOLCACHECONTROLLER
           value: "true"
         - name: RECONCILER_TOPOLOGYCACHECONTROLLER
           value: "true"

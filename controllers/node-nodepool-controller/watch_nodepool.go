@@ -74,12 +74,8 @@ func (r *nodePoolEventHandler) add(ctx context.Context, obj runtime.Object, queu
 	if !ok {
 		return
 	}
-	r.l = log.FromContext(ctx)
-	r.l.Info("event",
-		"gvk", fmt.Sprintf("%s.%s",
-			obj.GetObjectKind().GroupVersionKind().GroupVersion().String(),
-			obj.GetObjectKind().GroupVersionKind().Kind),
-		"name", cr.GetName())
+	r.l = log.FromContext(ctx).WithValues("gvk", fmt.Sprintf("%s.%s", cr.APIVersion, cr.Kind), "name", cr.GetName())
+	r.l.Info("event")
 
 	nodes := &corev1.NodeList{}
 	if err := r.client.List(ctx, nodes, []client.ListOption{}...); err != nil {
@@ -89,7 +85,8 @@ func (r *nodePoolEventHandler) add(ctx context.Context, obj runtime.Object, queu
 
 	for _, node := range nodes.Items {
 		// only enqueue if the nodepool matches
-		for labelKey, labelValue := range cr.GetLabels() {
+		r.l.Info("event", "node labels", node.GetLabels())
+		for labelKey, labelValue := range node.GetLabels() {
 			if strings.Contains(labelKey, "nodepool") {
 				if labelValue == cr.Name {
 					queue.Add(reconcile.Request{NamespacedName: types.NamespacedName{

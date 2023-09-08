@@ -28,6 +28,8 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "github.com/henderiw-nephio/wire-connector/controllers/cluster-controller"
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
+	_ "github.com/henderiw-nephio/wire-connector/controllers/link-controller"
+	_ "github.com/henderiw-nephio/wire-connector/controllers/logicalinterconnect-controller"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/node-cache-controller"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/node-deployer"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/node-ep-controller"
@@ -36,8 +38,6 @@ import (
 	_ "github.com/henderiw-nephio/wire-connector/controllers/pod-cache-controller"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/topology-controller"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/wire-controller"
-	_ "github.com/henderiw-nephio/wire-connector/controllers/logicalinterconnect-controller"
-	_ "github.com/henderiw-nephio/wire-connector/controllers/link-controller"
 	"github.com/henderiw-nephio/wire-connector/pkg/grpcserver"
 	"github.com/henderiw-nephio/wire-connector/pkg/grpcserver/healthhandler"
 	"github.com/henderiw-nephio/wire-connector/pkg/node"
@@ -211,6 +211,12 @@ func main() {
 				for nsn, topology := range t.List() {
 					setupLog.Info("topology", "nsn", nsn, "topology", topology)
 				}
+				/*
+					setupLog.Info("nodes...")
+					for nsn, node := range n.List() {
+						setupLog.Info("node", "Name", nsn, "node", node)
+					}
+				*/
 				setupLog.Info("pods...")
 				for nsn, pod := range pd.List() {
 					setupLog.Info("pod", "Name", nsn, "pod", pod)
@@ -218,6 +224,10 @@ func main() {
 				setupLog.Info("daemons...")
 				for nsn, daemon := range d.List() {
 					setupLog.Info("daemon", "Name", nsn, "daemon", daemon)
+				}
+				setupLog.Info("nodepools...")
+				for nsn, nodepool := range npool.List() {
+					setupLog.Info("nodepool", "Name", nsn, "nodepool", nodepool)
 				}
 				time.Sleep(5 * time.Second)
 			}

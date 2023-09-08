@@ -29,6 +29,7 @@ import (
 	"github.com/nokia/k8s-ipam/pkg/resource"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -74,7 +75,7 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 
 	return nil,
 		ctrl.NewControllerManagedBy(mgr).
-			Named("NodePoolController").
+			Named("NodePoolCacheController").
 			For(&invv1alpha1.NodePool{}).
 			Complete(r)
 }
@@ -99,18 +100,18 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			log.Error(err, errGetCr)
 			return ctrl.Result{}, errors.Wrap(resource.IgnoreNotFound(err), errGetCr)
 		}
-		r.nodepoolCache.Delete(ctx, req.NamespacedName)
+		r.nodepoolCache.Delete(ctx, types.NamespacedName{Namespace: r.clusterName, Name: cr.GetName()})
 		return reconcile.Result{}, nil
 	}
 
 	if meta.WasDeleted(cr) {
-		r.nodepoolCache.Delete(ctx, req.NamespacedName)
+		r.nodepoolCache.Delete(ctx, types.NamespacedName{Namespace: r.clusterName, Name: cr.GetName()})
 		return ctrl.Result{}, nil
 	}
 
 	// update (add/update) node to cache
 	newcr := cr.DeepCopy()
-	r.nodepoolCache.Upsert(ctx, req.NamespacedName, *newcr)
+	r.nodepoolCache.Upsert(ctx, types.NamespacedName{Namespace: r.clusterName, Name: cr.GetName()}, *newcr)
 
 	return ctrl.Result{}, nil
 }

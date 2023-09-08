@@ -14,6 +14,7 @@ type Node interface {
 	GetPodSpec(ctx context.Context, cr *invv1alpha1.Node, nc *invv1alpha1.NodeConfig, nads []*nadv1.NetworkAttachmentDefinition) (*corev1.Pod, error)
 	GetNetworkAttachmentDefinitions(ctx context.Context, cr *invv1alpha1.Node, nc *invv1alpha1.NodeConfig) ([]*nadv1.NetworkAttachmentDefinition, error)
 	SetInitialConfig(ctx context.Context, cr *invv1alpha1.Node, ips []corev1.PodIP) error
+	ToBeDeployed(ctx context.Context) bool
 	// node configuration
 	GetNodeConfig(ctx context.Context, cr *invv1alpha1.Node) (*invv1alpha1.NodeConfig, error)
 	GetNodeModelConfig(ctx context.Context, nc *invv1alpha1.NodeConfig) *corev1.ObjectReference

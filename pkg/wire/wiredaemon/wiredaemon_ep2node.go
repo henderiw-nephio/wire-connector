@@ -32,14 +32,19 @@ func (r *daemon) EndpointGet(ctx context.Context, req *endpointpb.EndpointReques
 }
 
 func (r *daemon) EndpointUpSert(ctx context.Context, req *endpointpb.EndpointRequest) (*endpointpb.EmptyResponse, error) {
-	r.l.Info("upsert...")
+	r.l.Info("ep2node upsert...", "server", req.ServerType)
 
 	// this validates the container exists and returns a valid nsPath if it exists
 	// if the nsPath does not exist the container is not ready and we return a NOK response
-	nsPath, err := r.getContainerNsPath(ctx, types.NamespacedName{Namespace: req.NodeKey.Topology, Name: req.NodeKey.NodeName})
-	if err != nil {
-		return &endpointpb.EmptyResponse{StatusCode: endpointpb.StatusCode_NOK, Reason: fmt.Sprintf("container not ready, err: %s", err.Error())}, nil
+	nsPath := ""
+	if !req.ServerType {
+		var err error
+		nsPath, err = r.getContainerNsPath(ctx, types.NamespacedName{Namespace: req.NodeKey.Topology, Name: req.NodeKey.NodeName})
+		if err != nil {
+			return &endpointpb.EmptyResponse{StatusCode: endpointpb.StatusCode_NOK, Reason: fmt.Sprintf("container not ready, err: %s", err.Error())}, nil
+		}
 	}
+
 	// container is ready
 	w := NewWireEp2Node(ctx, nsPath, &WireEp2NodeConfig{CRI: r.cri})
 	if err := w.Deploy(req); err != nil {
@@ -49,11 +54,17 @@ func (r *daemon) EndpointUpSert(ctx context.Context, req *endpointpb.EndpointReq
 }
 
 func (r *daemon) EndpointDelete(ctx context.Context, req *endpointpb.EndpointRequest) (*endpointpb.EmptyResponse, error) {
+	r.l.Info("ep2node delete...", "server", req.ServerType)
 	// this validates the container exists and returns a valid nsPath if it exists
-	nsPath, err := r.getContainerNsPath(ctx, types.NamespacedName{Namespace: req.NodeKey.Topology, Name: req.NodeKey.NodeName})
-	if err != nil {
-		return &endpointpb.EmptyResponse{StatusCode: endpointpb.StatusCode_NOK, Reason: fmt.Sprintf("container not ready, err: %s", err.Error())}, nil
+	nsPath := ""
+	if !req.ServerType {
+		var err error
+		nsPath, err = r.getContainerNsPath(ctx, types.NamespacedName{Namespace: req.NodeKey.Topology, Name: req.NodeKey.NodeName})
+		if err != nil {
+			return &endpointpb.EmptyResponse{StatusCode: endpointpb.StatusCode_NOK, Reason: fmt.Sprintf("container not ready, err: %s", err.Error())}, nil
+		}
 	}
+
 	// after this check we determine we are ready to wire
 	w := NewWireEp2Node(ctx, nsPath, &WireEp2NodeConfig{CRI: r.cri})
 	if err := w.Destroy(req); err != nil {

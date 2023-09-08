@@ -68,7 +68,7 @@ func (r *daemon) getContainerNsPath(ctx context.Context, nodeNSN types.Namespace
 		info, err := r.cri.GetContainerInfo(ctx, c.GetId())
 		if err != nil {
 			r.l.Error(err, "cannot get container info", "name", containerName, "id", c.GetId())
-			continue
+			return "", err
 		}
 		r.l.Info("container", "name", containerName, "name", fmt.Sprintf("%s=%s", nodeNSN.Name, info.PodName), "namespace", fmt.Sprintf("%s=%s", nodeNSN.Namespace, info.Namespace))
 		if info.PodName == nodeNSN.Name && info.Namespace == nodeNSN.Namespace {

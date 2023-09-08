@@ -61,6 +61,8 @@ rules:
   - links/status
   - nodes
   - nodes/status
+  - nodepools
+  - nodepools/status
   - endpoints
   - endpoints/status
   - targets

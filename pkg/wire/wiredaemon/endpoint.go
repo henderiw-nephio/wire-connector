@@ -34,9 +34,9 @@ type EndpointConfig struct {
 	HostIP  string
 }
 
-func NewEndpoint(cfg *EndpointConfig) *Endpoint {
+func NewEndpoint(cfg *EndpointConfig) Endpoint {
 	l := ctrl.Log.WithName("endpoint")
-	return &Endpoint{
+	return Endpoint{
 		ifName: cfg.IfName,
 		//isReady: cfg.IsReady,
 		isLocal: cfg.IsLocal,
@@ -62,11 +62,11 @@ type Endpoint struct {
 	l logr.Logger
 }
 
-func (r *Endpoint) SetMAC(mac net.HardwareAddr) {
+func (r Endpoint) SetMAC(mac net.HardwareAddr) {
 	r.mac = mac
 }
 
-func (r *Endpoint) DeployEp2Node() error {
+func (r Endpoint) DeployEp2Node() error {
 	r.l.Info("deploy ep2node endpoint", "ifName", r.ifName, "nsPath", r.nsPath)
 	if r.nsPath != "" {
 		// if this does not exist we add the interface
@@ -81,16 +81,25 @@ func (r *Endpoint) DeployEp2Node() error {
 			}
 		}
 	} else {
+		r.l.Info("deploy ep2node endpoint", "ifName", r.ifName, "nsPath", r.nsPath)
+		if doesItfceExists(r.ifName) {
+			if err := setItfceUp(r.veth); err != nil {
+				return err
+			}
+		}
+		/*
 		if !doesItfceExists(r.ifName) {
+			r.l.Info("deploy ep2node endpoint", "ifName", r.ifName, "nsPath", r.nsPath)
 			if err := setIfNameAndUp(r.ifName, r.veth); err != nil {
 				return err
 			}
 		}
+		*/
 	}
 	return nil
 }
 
-func (r *Endpoint) DestroyEp2Node() error {
+func (r Endpoint) DestroyEp2Node() error {
 	r.l.Info("destroy ep2node endpoint", "ifName", r.ifName, "nsPath", r.nsPath)
 	if r.nsPath != "" {
 		// if this does not exist we add the interface
@@ -106,7 +115,7 @@ func (r *Endpoint) DestroyEp2Node() error {
 	return nil
 }
 
-func (r *Endpoint) DeployNode2Node(peerEp *Endpoint) error {
+func (r Endpoint) DeployNode2Node(peerEp Endpoint) error {
 	r.l.Info("deploy wire endpoint", "ifName", r.ifName, "nsPath", r.nsPath)
 	if r.isLocal {
 		// a local interface endpoint should exist
@@ -128,7 +137,7 @@ func (r *Endpoint) DeployNode2Node(peerEp *Endpoint) error {
 // Destroy destroys the endpoint
 // for local endpoints it deletes the veth itfce from the container ns
 // for remote endpoints it deletes the tun interface and xdp
-func (r *Endpoint) DestroyNode2Node() error {
+func (r Endpoint) DestroyNode2Node() error {
 	r.l.Info("destroy wire endpoint", "ifName", r.ifName, "local", r.isLocal)
 	// we only need to destroy non local ep of a wire since the other end is managed by node2ep
 	if !r.isLocal {

@@ -36,6 +36,10 @@ type server struct {
 	scheme *runtime.Scheme
 }
 
+func (r *server) ToBeDeployed(ctx context.Context) bool {
+	return false
+}
+
 func (r *server) GetProviderType(ctx context.Context) node.ProviderType {
 	return node.ProviderTypeServer
 }

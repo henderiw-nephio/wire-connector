@@ -141,6 +141,13 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 	}
 
+	// some providers dont need to be deployed so we can finish here
+	// example server -> deployed as part of the cluster (bare metal or VM or container (kind cluster))
+	if !node.ToBeDeployed(ctx) {
+		cr.SetConditions(resourcev1alpha1.Ready())
+		return ctrl.Result{}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+	}
+
 	nc, err := node.GetNodeConfig(ctx, cr)
 	if err != nil {
 		cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
