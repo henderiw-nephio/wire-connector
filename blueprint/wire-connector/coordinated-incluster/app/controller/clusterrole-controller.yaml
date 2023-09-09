@@ -129,3 +129,16 @@ rules:
   - get
   - list
   - watch
+- apiGroups:
+  - vxlan.resource.nephio.org
+  resources:
+  - vxlanindexes
+  - vxlanindexes/status
+  verbs:
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  - create
+  - delete

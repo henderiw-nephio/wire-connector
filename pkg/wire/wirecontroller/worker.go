@@ -31,6 +31,7 @@ type Worker interface {
 	Start(ctx context.Context) error
 	Stop()
 	Write(e state.WorkerEvent)
+	GetConfig() *client.Config
 }
 
 func NewWorker(ctx context.Context, wireCache WireCache, epCache NodeEpCache, cfg *client.Config) (Worker, error) {
@@ -41,6 +42,7 @@ func NewWorker(ctx context.Context, wireCache WireCache, epCache NodeEpCache, cf
 		return nil, err
 	}
 	return &worker{
+		cfg:       cfg,
 		wireCache: wireCache,
 		epCache:   epCache,
 		ch:        make(chan state.WorkerEvent, 10),
@@ -50,6 +52,7 @@ func NewWorker(ctx context.Context, wireCache WireCache, epCache NodeEpCache, cf
 }
 
 type worker struct {
+	cfg       *client.Config
 	wireCache WireCache
 	epCache   NodeEpCache
 	ch        chan state.WorkerEvent
@@ -57,6 +60,10 @@ type worker struct {
 	cancel    context.CancelFunc
 	//logger
 	l logr.Logger
+}
+
+func (r *worker) GetConfig() *client.Config {
+	return r.cfg
 }
 
 func (r *worker) Start(ctx context.Context) error {
@@ -86,16 +93,16 @@ func (r *worker) Start(ctx context.Context) error {
 						if err != nil {
 							eventCtx := e.EventCtx
 							eventCtx.Message = err.Error()
-							r.wireCache.HandleEvent(nsn, state.FailedEvent, eventCtx)
+							r.wireCache.HandleEvent(ctx, nsn, state.FailedEvent, eventCtx)
 							continue
 						}
 						if resp.StatusCode == wirepb.StatusCode_NOK {
 							eventCtx := e.EventCtx
 							eventCtx.Message = resp.GetReason()
-							r.wireCache.HandleEvent(nsn, state.FailedEvent, eventCtx)
+							r.wireCache.HandleEvent(ctx, nsn, state.FailedEvent, eventCtx)
 						}
 						// success
-						r.wireCache.HandleEvent(nsn, state.CreatedEvent, &state.EventCtx{
+						r.wireCache.HandleEvent(ctx, nsn, state.CreatedEvent, &state.EventCtx{
 							EpIdx: e.EventCtx.EpIdx,
 						})
 					case *NodeEpReq:
@@ -106,16 +113,16 @@ func (r *worker) Start(ctx context.Context) error {
 						if err != nil {
 							eventCtx := e.EventCtx
 							eventCtx.Message = err.Error()
-							r.epCache.HandleEvent(nsn, state.FailedEvent, eventCtx)
+							r.epCache.HandleEvent(ctx, nsn, state.FailedEvent, eventCtx)
 							continue
 						}
 						if resp.StatusCode == endpointpb.StatusCode_NOK {
 							eventCtx := e.EventCtx
 							eventCtx.Message = resp.GetReason()
-							r.epCache.HandleEvent(nsn, state.FailedEvent, eventCtx)
+							r.epCache.HandleEvent(ctx, nsn, state.FailedEvent, eventCtx)
 						}
 						// success
-						r.epCache.HandleEvent(nsn, state.CreatedEvent, &state.EventCtx{})
+						r.epCache.HandleEvent(ctx, nsn, state.CreatedEvent, &state.EventCtx{})
 					}
 				case state.WorkerActionDelete:
 					switch req := e.Req.(type) {
@@ -127,16 +134,16 @@ func (r *worker) Start(ctx context.Context) error {
 						if err != nil {
 							eventCtx := e.EventCtx
 							eventCtx.Message = err.Error()
-							r.wireCache.HandleEvent(nsn, state.FailedEvent, eventCtx)
+							r.wireCache.HandleEvent(ctx, nsn, state.FailedEvent, eventCtx)
 							continue
 						}
 						if resp.StatusCode == wirepb.StatusCode_NOK {
 							eventCtx := e.EventCtx
 							eventCtx.Message = resp.GetReason()
-							r.wireCache.HandleEvent(nsn, state.FailedEvent, eventCtx)
+							r.wireCache.HandleEvent(ctx, nsn, state.FailedEvent, eventCtx)
 						}
 						// success
-						r.wireCache.HandleEvent(nsn, state.DeletedEvent, &state.EventCtx{
+						r.wireCache.HandleEvent(ctx, nsn, state.DeletedEvent, &state.EventCtx{
 							EpIdx: e.EventCtx.EpIdx,
 						})
 					case *NodeEpReq:
@@ -147,16 +154,16 @@ func (r *worker) Start(ctx context.Context) error {
 						if err != nil {
 							eventCtx := e.EventCtx
 							eventCtx.Message = err.Error()
-							r.epCache.HandleEvent(nsn, state.FailedEvent, eventCtx)
+							r.epCache.HandleEvent(ctx, nsn, state.FailedEvent, eventCtx)
 							continue
 						}
 						if resp.StatusCode == endpointpb.StatusCode_NOK {
 							eventCtx := e.EventCtx
 							eventCtx.Message = resp.GetReason()
-							r.epCache.HandleEvent(nsn, state.FailedEvent, eventCtx)
+							r.epCache.HandleEvent(ctx, nsn, state.FailedEvent, eventCtx)
 						}
 						// success
-						r.epCache.HandleEvent(nsn, state.DeletedEvent, &state.EventCtx{})
+						r.epCache.HandleEvent(ctx, nsn, state.DeletedEvent, &state.EventCtx{})
 					}
 				}
 			case <-ctx.Done():

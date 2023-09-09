@@ -357,16 +357,16 @@ func (r *srl) SetInitialConfig(ctx context.Context, cr *invv1alpha1.Node, ips []
 		"set / system gnmi-server network-instance mgmt admin-state enable",
 		fmt.Sprintf("set / system gnmi-server network-instance mgmt tls-profile %s", certData.ProfileName),
 		"set / system gnmi-server network-instance mgmt unix-socket admin-state enable",
-		"set / system gribi-server admin-state enable",
-		"set / system gribi-server network-instance mgmt admin-state enable",
-		fmt.Sprintf("set / system gribi-server network-instance mgmt tls-profile %s", certData.ProfileName),
+		//"set / system gribi-server admin-state enable",
+		//"set / system gribi-server network-instance mgmt admin-state enable",
+		//fmt.Sprintf("set / system gribi-server network-instance mgmt tls-profile %s", certData.ProfileName),
 		"set / system json-rpc-server admin-state enable",
 		"set / system json-rpc-server network-instance mgmt http admin-state enable",
 		"set / system json-rpc-server network-instance mgmt https admin-state enable",
 		fmt.Sprintf("set / system json-rpc-server network-instance mgmt https tls-profile %s", certData.ProfileName),
-		"set / system p4rt-server admin-state enable",
-		"set / system p4rt-server network-instance mgmt admin-state enable",
-		fmt.Sprintf("set / system p4rt-server network-instance mgmt tls-profile %s", certData.ProfileName),
+		//"set / system p4rt-server admin-state enable",
+		//"set / system p4rt-server network-instance mgmt admin-state enable",
+		//fmt.Sprintf("set / system p4rt-server network-instance mgmt tls-profile %s", certData.ProfileName),
 	}
 
 	_, err = d.SendConfigs(commands, opoptions.WithFuzzyMatchInput())

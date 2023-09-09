@@ -56,7 +56,7 @@ func (r *wc) EndpointUpSert(ctx context.Context, req *endpointpb.EndpointRequest
 		r.l.Info("node-epa upsert cache", "nsn", epreq.GetNSN())
 		r.nodeepCache.Upsert(ctx, epreq.GetNSN(), NewNodeEndpoint(r.dispatcher, epreq))
 	}
-	r.nodeepCreate(epreq, "api")
+	r.nodeepCreate(ctx, epreq, "api")
 	r.l.Info("node-epa creating...", "nsn", epreq.GetNSN())
 	return &endpointpb.EmptyResponse{}, nil
 }
@@ -70,13 +70,13 @@ func (r *wc) EndpointDelete(ctx context.Context, req *endpointpb.EndpointRequest
 	epreq := &NodeEpReq{EndpointRequest: req}
 	if _, err := r.nodeepCache.Get(epreq.GetNSN()); err == nil {
 		r.l.Info("node-epa delete", "nsn", epreq.GetNSN())
-		r.nodeepDelete(epreq, "api")
+		r.nodeepDelete(ctx, epreq, "api")
 	}
 	r.l.Info("node-epa deleting...", "nsn", epreq.GetNSN())
 	return &endpointpb.EmptyResponse{}, nil
 }
 
-func (r *wc) nodeepCreate(req *NodeEpReq, origin string) {
+func (r *wc) nodeepCreate(ctx context.Context, req *NodeEpReq, origin string) {
 	nsn := req.GetNSN()
 	log := r.l.WithValues("fn", "nodeepCreate", "nsn", nsn, "origin", origin)
 	log.Info("nodeepCreate ...start...")
@@ -87,14 +87,14 @@ func (r *wc) nodeepCreate(req *NodeEpReq, origin string) {
 	if resolvedData.Success {
 		log.Info("nodeepCreate resolution succeeded")
 		// resolution worked for both epA and epB
-		r.nodeepCache.HandleEvent(nsn, state.CreateEvent, &state.EventCtx{})
+		r.nodeepCache.HandleEvent(ctx, nsn, state.CreateEvent, &state.EventCtx{})
 
 	} else {
 		// handle event is done by the resolution with more specific info
 		log.Info("nodeepCreate resolution failed")
 		// from a callback we try to only deal
 		if origin != "callback" {
-			r.nodeepCache.HandleEvent(nsn, state.ResolutionFailedEvent, &state.EventCtx{
+			r.nodeepCache.HandleEvent(ctx, nsn, state.ResolutionFailedEvent, &state.EventCtx{
 				Message: resolvedData.Message,
 			})
 		}
@@ -102,7 +102,7 @@ func (r *wc) nodeepCreate(req *NodeEpReq, origin string) {
 	log.Info("nodeepCreate ...end...")
 }
 
-func (r *wc) nodeepDelete(req *NodeEpReq, origin string) {
+func (r *wc) nodeepDelete(ctx context.Context, req *NodeEpReq, origin string) {
 	nsn := req.GetNSN()
 	log := r.l.WithValues("fn", "nodeepDelete", "nsn", nsn, "origin", origin)
 	log.Info("nodeepDelete ...start...")
@@ -112,7 +112,7 @@ func (r *wc) nodeepDelete(req *NodeEpReq, origin string) {
 	r.nodeepCache.Resolve(nsn, resolvedData)
 	if resolvedData.Success {
 		log.Info("resolution succeeded")
-		r.nodeepCache.HandleEvent(nsn, state.DeleteEvent, &state.EventCtx{})
+		r.nodeepCache.HandleEvent(ctx, nsn, state.DeleteEvent, &state.EventCtx{})
 	}
 	log.Info("nodeepDelete ...end...")
 }

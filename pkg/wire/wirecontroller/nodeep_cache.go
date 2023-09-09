@@ -35,7 +35,7 @@ type NodeEpCache interface {
 	List() map[types.NamespacedName]*NodeEndpoint
 	Resolve(nsn types.NamespacedName, resolvedData *resolve.Data)
 	UnResolve(nsn types.NamespacedName)
-	HandleEvent(types.NamespacedName, state.Event, *state.EventCtx) error
+	HandleEvent(context.Context, types.NamespacedName, state.Event, *state.EventCtx) error
 }
 
 func NewEpCache(c wire.Cache[*NodeEndpoint]) NodeEpCache {
@@ -86,7 +86,7 @@ func (r *nodeepCache) UnResolve(nsn types.NamespacedName) {
 	}
 }
 
-func (r *nodeepCache) HandleEvent(nsn types.NamespacedName, event state.Event, eventCtx *state.EventCtx) error {
+func (r *nodeepCache) HandleEvent(ctx context.Context, nsn types.NamespacedName, event state.Event, eventCtx *state.EventCtx) error {
 	ep, err := r.c.Get(nsn)
 	if err != nil {
 		return fmt.Errorf("cannot handleEvent, nsn not found %s", nsn.String())
@@ -98,9 +98,9 @@ func (r *nodeepCache) HandleEvent(nsn types.NamespacedName, event state.Event, e
 
 	// update the wire status
 	if ep.State.String() == "Deleted" {
-		r.c.Delete(context.Background(), nsn)
+		r.c.Delete(ctx, nsn)
 	} else {
-		r.Upsert(context.Background(), nsn, ep)
+		r.Upsert(ctx, nsn, ep)
 	}
 	return nil
 }

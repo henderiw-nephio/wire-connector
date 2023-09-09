@@ -100,7 +100,6 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 			Named("NodeEndpointController").
 			For(&invv1alpha1.Node{}).
 			Owns(&invv1alpha1.Endpoint{}).
-			Owns(&invv1alpha1.Target{}).
 			Watches(&invv1alpha1.NodeConfig{}, &nodeConfigEventHandler{client: mgr.GetClient()}).
 			Watches(&invv1alpha1.NodeModel{}, &nodeModelEventHandler{client: mgr.GetClient()}).
 			Complete(r)
@@ -153,7 +152,6 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		OwnerRef: true,
 		Owns: []schema.GroupVersionKind{
 			invv1alpha1.EndpointGroupVersionKind,
-			//invv1alpha1.TargetGroupVersionKind,
 		},
 	})
 

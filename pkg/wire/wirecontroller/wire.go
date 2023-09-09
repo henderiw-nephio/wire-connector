@@ -18,6 +18,7 @@ package wirecontroller
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/go-logr/logr"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
@@ -96,6 +97,12 @@ func (r *Wire) Transition(newState state.State, eventCtx *state.EventCtx, genera
 				Namespace: "default",
 				Name:      r.WireReq.GetHostNodeName(eventCtx.EpIdx),
 			}
+			if os.Getenv("WIRER_INTERCLUSTER") == "true" {
+				workerNsn = types.NamespacedName{
+					Namespace: "default",
+					Name:      r.WireReq.GetClusterName(eventCtx.EpIdx),
+				}
+			}
 
 			if err := r.dispatcher.Write(workerNsn, state.WorkerEvent{Action: ge, Req: r.WireReq, EventCtx: eventCtx}); err != nil {
 				// should never happen, as it means the worker does not exist
@@ -142,7 +149,7 @@ func (r *WireReq) Resolve(resolvedData []*resolve.Data) {
 			r.Endpoints[epIdx].HostNodeName = res.HostNodeName
 			r.Endpoints[epIdx].ServiceEndpoint = res.ServiceEndpoint
 			r.Endpoints[epIdx].LocalAction = res.Action
-			//r.Endpoints[epIdx].ClusterName = res.ClusterName
+			r.Endpoints[epIdx].ClusterName = res.ClusterName
 		} else {
 			r.Unresolve(epIdx)
 		}
@@ -164,11 +171,21 @@ func (r *WireReq) GetHostNodeName(epIdx int) string {
 	return r.Endpoints[epIdx].HostNodeName
 }
 
-func (r *WireReq) CompareName(epIdx int, hostNodeName bool, name string) bool {
-	if hostNodeName {
+func (r *WireReq) GetClusterName(epIdx int) string {
+	return r.Endpoints[epIdx].ClusterName
+}
+
+// TODO add the fn for the service lookup
+func (r *WireReq) CompareName(epIdx int, evaluate EvaluateName, name string) bool {
+	switch evaluate {
+	case EvaluateClusterName:
+		return r.Endpoints[epIdx].ClusterName == name
+	case EvaluateHostNodeName:
 		return r.Endpoints[epIdx].HostNodeName == name
-	} else {
+	case EvaluateNodeName:
 		return r.Endpoints[epIdx].NodeName == name
+	default:
+		return false
 	}
 }
 

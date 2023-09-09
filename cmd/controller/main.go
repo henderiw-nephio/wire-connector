@@ -34,10 +34,10 @@ import (
 	_ "github.com/henderiw-nephio/wire-connector/controllers/node-deployer"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/node-ep-controller"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/node-nodepool-controller"
-	_ "github.com/henderiw-nephio/wire-connector/controllers/nodepool-cache-controller"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/pod-cache-controller"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/topology-controller"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/wire-controller"
+	_ "github.com/henderiw-nephio/wire-connector/controllers/vxlanindex-controller"
 	"github.com/henderiw-nephio/wire-connector/pkg/grpcserver"
 	"github.com/henderiw-nephio/wire-connector/pkg/grpcserver/healthhandler"
 	"github.com/henderiw-nephio/wire-connector/pkg/node"
@@ -50,9 +50,9 @@ import (
 	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/pod"
 	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/service"
 	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/topology"
+	vxlanclient "github.com/henderiw-nephio/wire-connector/pkg/wire/vxlan/client"
 	nodeepproxy "github.com/henderiw-nephio/wire-connector/pkg/wire/proxy/nodeep"
-	wirecontroller "github.com/henderiw-nephio/wire-connector/pkg/wire/wirecontroller2"
-	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
+	wirecontroller "github.com/henderiw-nephio/wire-connector/pkg/wire/wirecontroller"
 
 	//resolverproxy "github.com/henderiw-nephio/wire-connector/pkg/wire/proxy/resolver"
 	wireproxy "github.com/henderiw-nephio/wire-connector/pkg/wire/proxy/wire"
@@ -99,8 +99,18 @@ func main() {
 		os.Exit(1)
 	}
 
+	vxlanClient, err := vxlanclient.New(mgr.GetClient())
+	if err != nil {
+		setupLog.Error(err, "unable to start manager")
+		os.Exit(1)
+	}
 	setupLog.Info("setup controller")
 	ctx := ctrl.SetupSignalHandler()
+
+	if err != nil {
+		setupLog.Error(err, "unable to create vxlan be")
+		os.Exit(1)
+	}
 
 	c := wire.NewCache[wirecluster.Cluster]()
 	svc := wire.NewCache[wireservice.Service]()
@@ -108,9 +118,9 @@ func main() {
 	pd := wire.NewCache[wirepod.Pod]()
 	d := wire.NewCache[wiredaemon.Daemon]()
 	n := wire.NewCache[wirenode.Node]()
-	npool := wire.NewCache[invv1alpha1.NodePool]()
 
-	wc := wirecontroller.New(ctx, &wirecontroller.Config{
+	wc, err := wirecontroller.New(ctx, &wirecontroller.Config{
+		VXLANClient: vxlanClient,
 		ClusterCache:  c,
 		ServiceCache:  svc,
 		DaemonCache:   d,
@@ -118,6 +128,10 @@ func main() {
 		NodeCache:     n,
 		TopologyCache: t,
 	})
+	if err != nil {
+		setupLog.Error(err, "unable to start manager")
+		os.Exit(1)
+	}
 
 	np := nodeepproxy.New(&nodeepproxy.Config{
 		Backend: wc,
@@ -153,13 +167,13 @@ func main() {
 	}()
 
 	ctrlCfg := &ctrlconfig.Config{
+		VXLANClient: vxlanClient,
 		ClusterCache:  c,
 		ServiceCache:  svc,
 		PodCache:      pd,
 		TopologyCache: t,
 		DaemonCache:   d,
 		NodeCache:     n,
-		NodePoolCache: npool,
 		NodeRegistry:  registerSupportedNodeProviders(),
 	}
 
@@ -224,10 +238,6 @@ func main() {
 				setupLog.Info("daemons...")
 				for nsn, daemon := range d.List() {
 					setupLog.Info("daemon", "Name", nsn, "daemon", daemon)
-				}
-				setupLog.Info("nodepools...")
-				for nsn, nodepool := range npool.List() {
-					setupLog.Info("nodepool", "Name", nsn, "nodepool", nodepool)
 				}
 				time.Sleep(5 * time.Second)
 			}

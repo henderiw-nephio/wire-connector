@@ -29,8 +29,6 @@ import (
 	//"sigs.k8s.io/controller-runtime/pkg/event"
 )
 
-//type ResourceCallbackFn[T1 any] func(types.NamespacedName, T1)
-
 func (r *wc) validate(req *wirepb.WireRequest) error {
 	if r.wireCache == nil {
 		return fmt.Errorf("cache not initialized")
@@ -62,7 +60,6 @@ func (r *wc) WireGet(ctx context.Context, req *wirepb.WireRequest) (*wirepb.Wire
 }
 
 func (r *wc) WireUpSert(ctx context.Context, req *wirepb.WireRequest) (*wirepb.EmptyResponse, error) {
-	// TODO allocate VPN
 	r.l.Info("upsert...")
 	if err := r.validate(req); err != nil {
 		return &wirepb.EmptyResponse{}, status.Error(codes.InvalidArgument, "Invalid argument provided nil object")
@@ -70,9 +67,14 @@ func (r *wc) WireUpSert(ctx context.Context, req *wirepb.WireRequest) (*wirepb.E
 	wreq := &WireReq{WireRequest: req}
 	r.l.Info("upsert", "nsn", wreq.GetNSN())
 	if _, err := r.wireCache.Get(wreq.GetNSN()); err != nil {
-		// not found -> create a new link
+		// allocate vxlanID
+		vxlanID, err := r.vxlanclient.Claim(ctx, req)
+		if err != nil {
+			r.l.Info("vxlan claim failed", "nsn", wreq.GetNSN(), "err", err.Error())
+			return &wirepb.EmptyResponse{StatusCode: wirepb.StatusCode_NOK, Reason: err.Error()}, nil
+		}
 		r.l.Info("upsert cache", "nsn", wreq.GetNSN())
-		r.wireCache.Upsert(ctx, wreq.GetNSN(), NewWire(r.dispatcher, wreq, 200))
+		r.wireCache.Upsert(ctx, wreq.GetNSN(), NewWire(r.dispatcher, wreq, *vxlanID))
 	} else {
 		r.l.Info("upsert cache", "nsn", wreq.GetNSN(), "desired action", DesiredActionCreate)
 		r.wireCache.SetDesiredAction(wreq.GetNSN(), DesiredActionCreate)
@@ -130,7 +132,7 @@ func (r *wc) wireCreate(ctx context.Context, wreq *WireReq, origin string) {
 		r.l.Info("wireCreate", "nsn", wreq.GetNSN(), "origin", origin, "resolution", "succeeded")
 		// resolution worked for both epA and epB
 		if resolvedData[0].Action {
-			r.wireCache.HandleEvent(wreq.GetNSN(), state.CreateEvent, &state.EventCtx{
+			r.wireCache.HandleEvent(ctx, wreq.GetNSN(), state.CreateEvent, &state.EventCtx{
 				EpIdx: 0,
 			})
 		}
@@ -139,12 +141,12 @@ func (r *wc) wireCreate(ctx context.Context, wreq *WireReq, origin string) {
 		if resolvedData[1].Action {
 			if resolvedData[0].HostIP == resolvedData[1].HostIP {
 
-				r.wireCache.HandleEvent(wreq.GetNSN(), state.CreateEvent, &state.EventCtx{
+				r.wireCache.HandleEvent(ctx, wreq.GetNSN(), state.CreateEvent, &state.EventCtx{
 					EpIdx:    1,
 					SameHost: true,
 				})
 			} else {
-				r.wireCache.HandleEvent(wreq.GetNSN(), state.CreateEvent, &state.EventCtx{
+				r.wireCache.HandleEvent(ctx, wreq.GetNSN(), state.CreateEvent, &state.EventCtx{
 					EpIdx: 1,
 				})
 			}
@@ -154,12 +156,12 @@ func (r *wc) wireCreate(ctx context.Context, wreq *WireReq, origin string) {
 		r.l.Info("wireCreate", "nsn", wreq.GetNSN(), "origin", origin, "resolution", "failed")
 		// from a callback we try to only deal
 		if origin != "callback" {
-			r.wireCache.HandleEvent(wreq.GetNSN(), state.ResolutionFailedEvent, &state.EventCtx{
+			r.wireCache.HandleEvent(ctx, wreq.GetNSN(), state.ResolutionFailedEvent, &state.EventCtx{
 				EpIdx:   0,
 				Message: resolvedData[0].Message,
 				Hold:    true,
 			})
-			r.wireCache.HandleEvent(wreq.GetNSN(), state.ResolutionFailedEvent, &state.EventCtx{
+			r.wireCache.HandleEvent(ctx, wreq.GetNSN(), state.ResolutionFailedEvent, &state.EventCtx{
 				EpIdx:   1,
 				Message: resolvedData[0].Message,
 				Hold:    true,
@@ -177,7 +179,7 @@ func (r *wc) wireDelete(ctx context.Context, wreq *WireReq, origin string) {
 	r.l.Info("wireDelete", "nsn", wreq.GetNSN(), "origin", origin, "resolvedData0", resolvedData[0], "resolvedData1", resolvedData[1])
 	r.wireCache.Resolve(wreq.GetNSN(), resolvedData)
 	if resolvedData[0].Success && resolvedData[0].Action {
-		r.wireCache.HandleEvent(wreq.GetNSN(), state.DeleteEvent, &state.EventCtx{
+		r.wireCache.HandleEvent(ctx, wreq.GetNSN(), state.DeleteEvent, &state.EventCtx{
 			EpIdx: 0,
 		})
 	}
@@ -185,13 +187,13 @@ func (r *wc) wireDelete(ctx context.Context, wreq *WireReq, origin string) {
 		if resolvedData[0].Success && resolvedData[0].HostIP == resolvedData[1].HostIP {
 			// both endpoints resolve to the same host -> through dependency we indicate
 			// this (the state machine handles the dependency)
-			r.wireCache.HandleEvent(wreq.GetNSN(), state.DeleteEvent, &state.EventCtx{
+			r.wireCache.HandleEvent(ctx, wreq.GetNSN(), state.DeleteEvent, &state.EventCtx{
 				EpIdx:    1,
 				SameHost: true,
 			})
 			return
 		}
-		r.wireCache.HandleEvent(wreq.GetNSN(), state.DeleteEvent, &state.EventCtx{
+		r.wireCache.HandleEvent(ctx, wreq.GetNSN(), state.DeleteEvent, &state.EventCtx{
 			EpIdx: 1,
 		})
 	}

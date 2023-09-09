@@ -9,9 +9,10 @@ require (
 	github.com/golang/protobuf v1.5.3
 	github.com/google/go-cmp v0.5.9
 	github.com/google/uuid v1.3.0
+	github.com/hansthienpondt/nipam v0.0.5
 	github.com/itchyny/gojq v0.12.13
 	github.com/nephio-project/nephio/controllers/pkg v0.0.0-20230724195903-feb6c2f91cc3
-	github.com/nokia/k8s-ipam v0.0.4-0.20230907150948-fa2a31d37509
+	github.com/nokia/k8s-ipam v0.0.4-0.20230909054844-8b8e9e4ad9f7
 	github.com/pkg/errors v0.9.1
 	github.com/scrapli/scrapligo v1.1.13-0.20230907020628-34c35689c60c
 	github.com/sirupsen/logrus v1.9.0
@@ -33,7 +34,11 @@ require (
 	sigs.k8s.io/controller-runtime v0.15.0
 )
 
-require github.com/pmezard/go-difflib v1.0.0 // indirect
+require (
+	github.com/kentik/patricia v1.2.0 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
+	go4.org/netipx v0.0.0-20230303233057-f1b76eb4bb35 // indirect
+)
 
 require (
 	github.com/Microsoft/go-winio v0.6.0 // indirect
@@ -111,5 +116,5 @@ require (
 	k8s.io/kube-openapi v0.0.0-20230718181711-3c0fae5ee9fd // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.3.0 // indirect
-	sigs.k8s.io/yaml v1.3.0 // indirect
+	sigs.k8s.io/yaml v1.3.0
 )

@@ -30,8 +30,8 @@ import (
 	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/pod"
 	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/service"
 	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/topology"
+	vxlanclient "github.com/henderiw-nephio/wire-connector/pkg/wire/vxlan/client"
 	"github.com/henderiw-nephio/wire-connector/pkg/xdp"
-	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -41,17 +41,18 @@ type Config struct {
 	Poll  time.Duration
 	Copts controller.Options
 
-	Client        client.Client
-	Scheme        *runtime.Scheme
-	ClusterName   string
-	PodManager    pod.Manager     // used in distributed approach
-	NodeManager   nodemgr.Manager // used in distributed approach
-	CRI           cri.CRI
-	XDP           xdp.XDP
-	PodCache      wire.Cache[wirepod.Pod]
-	DaemonCache   wire.Cache[wiredaemon.Daemon]
-	NodeCache     wire.Cache[wirenode.Node]
-	NodePoolCache wire.Cache[invv1alpha1.NodePool]
+	Client      client.Client
+	VXLANClient vxlanclient.Client
+	Scheme      *runtime.Scheme
+	ClusterName string
+	PodManager  pod.Manager     // used in distributed approach
+	NodeManager nodemgr.Manager // used in distributed approach
+	CRI         cri.CRI
+	XDP         xdp.XDP
+	PodCache    wire.Cache[wirepod.Pod]
+	DaemonCache wire.Cache[wiredaemon.Daemon]
+	NodeCache   wire.Cache[wirenode.Node]
+	//NodePoolCache wire.Cache[invv1alpha1.NodePool]
 	ClusterCache  wire.Cache[wirecluster.Cluster]
 	ServiceCache  wire.Cache[wireservice.Service]
 	TopologyCache wire.Cache[wiretopology.Topology]

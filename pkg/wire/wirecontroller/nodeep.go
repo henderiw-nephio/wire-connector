@@ -76,7 +76,7 @@ func (r *NodeEndpoint) Transition(newState state.State, eventCtx *state.EventCtx
 	r.NodeEpResp.UpdateStatus(newState, eventCtx)
 
 	for _, ge := range generatedEvents {
-		r.l.Info("transition generated event", "ge", ge)
+		r.l.Info("transition generated event", "ge", ge, "resolved", r.NodeEpReq.IsResolved())
 		if r.NodeEpReq.IsResolved() {
 			// should always resolve
 			workerNsn := types.NamespacedName{
@@ -133,11 +133,14 @@ func (r *NodeEpReq) GetHostNodeName() string {
 	return r.HostNodeName
 }
 
-func (r *NodeEpReq) CompareName(hostNodeName bool, name string) bool {
-	if hostNodeName {
+func (r *NodeEpReq) CompareName(evaluate EvaluateName, name string) bool {
+	switch evaluate {
+	case EvaluateHostNodeName:
 		return r.HostNodeName == name
-	} else {
+	case EvaluateNodeName:
 		return r.NodeKey.NodeName == name
+	default:
+		return false
 	}
 }
 

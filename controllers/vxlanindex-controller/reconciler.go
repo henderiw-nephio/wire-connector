@@ -14,7 +14,7 @@
  limitations under the License.
 */
 
-package nodepoolcontroller
+package vxlanindexxontroller
 
 import (
 	"context"
@@ -22,14 +22,15 @@ import (
 	"reflect"
 
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
-	"github.com/henderiw-nephio/wire-connector/pkg/wire"
+	vxlanclient "github.com/henderiw-nephio/wire-connector/pkg/wire/vxlan/client"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
-	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
+	"github.com/nephio-project/nephio/controllers/pkg/resource"
+	resourcev1alpha1 "github.com/nokia/k8s-ipam/apis/resource/common/v1alpha1"
+	vxlanv1alpha1 "github.com/nokia/k8s-ipam/apis/resource/vxlan/v1alpha1"
 	"github.com/nokia/k8s-ipam/pkg/meta"
-	"github.com/nokia/k8s-ipam/pkg/resource"
 	"github.com/pkg/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -38,80 +39,79 @@ import (
 )
 
 func init() {
-	reconcilerinterface.Register("nodepoolcachecontroller", &reconciler{})
+	reconcilerinterface.Register("vxlanindexcontroller", &reconciler{})
 }
 
 const (
+	finalizer = "vxlanindex.resource.nephio.org/finalizer"
 	// error
 	errGetCr        = "cannot get resource"
 	errUpdateStatus = "cannot update status"
 )
 
-// New Reconciler -> used for intercluster controller
-func New(ctx context.Context, cfg *ctrlconfig.Config) reconcile.Reconciler {
-	return &reconciler{
-		Client:        cfg.Client,
-		nodepoolCache: cfg.NodePoolCache,
-		clusterName:   cfg.ClusterName,
-	}
-}
-
 // SetupWithManager sets up the controller with the Manager.
 func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c interface{}) (map[schema.GroupVersionKind]chan event.GenericEvent, error) {
-	// register scheme
 	cfg, ok := c.(*ctrlconfig.Config)
 	if !ok {
 		return nil, fmt.Errorf("cannot initialize, expecting controllerConfig, got: %s", reflect.TypeOf(c).Name())
 	}
-
 	// register scheme
-	if err := invv1alpha1.AddToScheme(mgr.GetScheme()); err != nil {
+	if err := vxlanv1alpha1.AddToScheme(mgr.GetScheme()); err != nil {
 		return nil, err
 	}
 
 	// initialize reconciler
 	r.Client = mgr.GetClient()
-	r.nodepoolCache = cfg.NodePoolCache
+	r.VXLANClient = cfg.VXLANClient
+	r.finalizer = resource.NewAPIFinalizer(mgr.GetClient(), finalizer)
 
 	return nil,
 		ctrl.NewControllerManagedBy(mgr).
-			Named("NodePoolCacheController").
-			For(&invv1alpha1.NodePool{}).
+			Named("VXLANIndexController").
+			For(&vxlanv1alpha1.VXLANIndex{}).
 			Complete(r)
 }
 
-// reconciler reconciles a KRM resource
+// reconciler reconciles a IPPrefix object
 type reconciler struct {
 	client.Client
-
-	clusterName   string
-	nodepoolCache wire.Cache[invv1alpha1.NodePool]
+	VXLANClient vxlanclient.Client
+	finalizer   *resource.APIFinalizer
 }
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := log.FromContext(ctx).WithValues("cluster", r.clusterName)
-	log.Info("reconcile nodepool")
+	log := log.FromContext(ctx)
+	log.Info("reconcile")
 
-	cr := &invv1alpha1.NodePool{}
+	cr := &vxlanv1alpha1.VXLANIndex{}
 	if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
-		// There's no need to requeue if we no longer exist. Otherwise we'll be
-		// requeued implicitly because we return an error.
-		if resource.IgnoreNotFound(err) != nil {
+		if !apierrors.IsNotFound(err) {
 			log.Error(err, errGetCr)
 			return ctrl.Result{}, errors.Wrap(resource.IgnoreNotFound(err), errGetCr)
 		}
-		r.nodepoolCache.Delete(ctx, types.NamespacedName{Namespace: r.clusterName, Name: cr.GetName()})
 		return reconcile.Result{}, nil
 	}
 
 	if meta.WasDeleted(cr) {
-		r.nodepoolCache.Delete(ctx, types.NamespacedName{Namespace: r.clusterName, Name: cr.GetName()})
+		if err := r.VXLANClient.DeleteIndex(ctx, cr); err != nil {
+			log.Error(err, "cannot delete index")
+			cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
+			return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+		}
+
+		if err := r.finalizer.RemoveFinalizer(ctx, cr); err != nil {
+			log.Error(err, "cannot remove finalizer")
+			cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
+			return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+		}
+
+		log.Info("vxlanindex destroyed...")
 		return ctrl.Result{}, nil
 	}
-
-	// update (add/update) node to cache
-	newcr := cr.DeepCopy()
-	r.nodepoolCache.Upsert(ctx, types.NamespacedName{Namespace: r.clusterName, Name: cr.GetName()}, *newcr)
-
-	return ctrl.Result{}, nil
+	if err := r.VXLANClient.CreateIndex(ctx, cr); err != nil {
+		log.Error(err, "cannot create vxlanIndex")
+		cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
+	}
+	cr.SetConditions(resourcev1alpha1.Ready())
+	return ctrl.Result{}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 }

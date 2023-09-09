@@ -10,6 +10,7 @@
 bin/*
 private.md
 *.o
+cmd/scarpli/*
 
 # Test binary, built with `go test -c`
 *.test

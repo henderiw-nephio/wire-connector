@@ -34,6 +34,7 @@ import (
 	"github.com/nokia/k8s-ipam/pkg/resources"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -82,12 +83,14 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 			For(&invv1alpha1.Node{}).
 			Owns(&corev1.Pod{}).
 			Owns(&nadv1.NetworkAttachmentDefinition{}).
+			Owns(&invv1alpha1.Target{}).
 			Complete(r)
 	}
 	return nil, ctrl.NewControllerManagedBy(mgr).
 		Named("NodeDeployerController").
 		For(&invv1alpha1.Node{}).
 		Owns(&corev1.Pod{}).
+		Owns(&invv1alpha1.Target{}).
 		Complete(r)
 
 }
@@ -205,6 +208,26 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
 		return ctrl.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 	}
+	
+	// add a target to the deployment using ownerReferences
+	targetRes := resources.New(r.APIPatchingApplicator, resources.Config{
+		OwnerRef: true,
+		Owns: []schema.GroupVersionKind{
+			invv1alpha1.TargetGroupVersionKind,
+		},
+	})
+	/*
+	if err := targetRes.AddNewResource(cr, buildTarget(cr, podIPs)); err != nil {
+		r.l.Error(err, "cannot add target resource")
+		cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
+		return ctrl.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+	}
+	*/
+	if err := targetRes.APIApply(ctx, cr); err != nil {
+		r.l.Error(err, "cannot apply target resource")
+		cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
+		return ctrl.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+	}
 
 	r.l.Info("ready", "req", req)
 	cr.SetConditions(resourcev1alpha1.Ready())
@@ -257,4 +280,29 @@ func getPodStatus(pod *corev1.Pod) ([]corev1.PodIP, string, bool) {
 		return nil, "no ip provided", false
 	}
 	return pod.Status.PodIPs, "", true
+}
+
+func buildTarget(cr *invv1alpha1.Node, ips []corev1.PodIP) *invv1alpha1.Target {
+	labels := cr.GetLabels()
+	labels[invv1alpha1.NephioTopologyKey] = cr.Namespace
+	if len(labels) == 0 {
+		labels = map[string]string{}
+	}
+	for k, v := range cr.Spec.GetUserDefinedLabels() {
+		labels[k] = v
+	}
+	targetSpec := invv1alpha1.TargetSpec{
+		Provider:   cr.Spec.Provider,
+		SecretName: cr.Spec.Provider,
+		Address:    &ips[0].IP,
+	}
+	return invv1alpha1.BuildTarget(
+		metav1.ObjectMeta{
+			Name:      cr.GetName(),
+			Namespace: cr.GetNamespace(),
+			Labels:    labels,
+		},
+		targetSpec,
+		invv1alpha1.TargetStatus{},
+	)
 }

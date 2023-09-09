@@ -200,10 +200,16 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 		// if everything is ok we dont have to deploy things
 		if wresp.StatusCode != wirepb.StatusCode_OK {
-			_, err := r.wireclient.WireCreate(ctx, wreq)
+			resp, err := r.wireclient.WireCreate(ctx, wreq)
 			if err != nil {
 				log.Error(err, "cannot create wire")
 				cr.SetConditions(resourcev1alpha1.WiringFailed("cannot create wire"))
+				return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+			}
+			if resp.StatusCode == wirepb.StatusCode_NOK {
+				err := fmt.Errorf("cannot create wire %s", resp.Reason)
+				log.Error(err, "cannot create wire")
+				cr.SetConditions(resourcev1alpha1.WiringFailed(err.Error()))
 				return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 			}
 			log.Info("wire deploying...")

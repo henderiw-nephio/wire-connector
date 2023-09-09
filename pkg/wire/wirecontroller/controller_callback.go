@@ -234,7 +234,7 @@ func (r *wc) commonCallback(ctx context.Context, a wire.Action, nsn types.Namesp
 					go func() {
 						defer wg.Done()
 						r.wireCache.UnResolve(wireNSN, epIdx)
-						r.wireCache.HandleEvent(wireNSN, state.ResolutionFailedEvent, &state.EventCtx{
+						r.wireCache.HandleEvent(ctx, wireNSN, state.ResolutionFailedEvent, &state.EventCtx{
 							EpIdx:   epIdx,
 							Message: cbctx.Message,
 							Hold:    cbctx.Hold, // we do not want this event to be replciated to the other endpoint
@@ -252,7 +252,7 @@ func (r *wc) commonCallback(ctx context.Context, a wire.Action, nsn types.Namesp
 					go func() {
 						defer wg.Done()
 						r.nodeepCache.UnResolve(nodeepNSN)
-						r.nodeepCache.HandleEvent(nodeepNSN, state.ResolutionFailedEvent, &state.EventCtx{
+						r.nodeepCache.HandleEvent(ctx, nodeepNSN, state.ResolutionFailedEvent, &state.EventCtx{
 							Message: cbctx.Message,
 						})
 					}()
@@ -278,7 +278,7 @@ func (r *wc) commonCallback(ctx context.Context, a wire.Action, nsn types.Namesp
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				r.nodeepCreate(nodeep.NodeEpReq, "callback")
+				r.nodeepCreate(ctx, nodeep.NodeEpReq, "callback")
 			}()
 		}
 	}

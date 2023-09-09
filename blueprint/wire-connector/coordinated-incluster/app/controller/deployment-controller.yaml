@@ -63,8 +63,6 @@ spec:
           value: "true"
         - name: RECONCILER_NODENODEPOOLCONTROLLER
           value: "true"
-        - name: RECONCILER_NODEPOOLCACHECONTROLLER
-          value: "true"
         - name: RECONCILER_TOPOLOGYCACHECONTROLLER
           value: "true"
         - name: RECONCILER_TOPOLOGYCONTROLLER
@@ -72,6 +70,8 @@ spec:
         - name: RECONCILER_LOGICALINTERCONNECTCONTROLLER
           value: "true"
         - name: RECONCILER_LINKCONTROLLER
+          value: "true"
+        - name: RECONCILER_VXLANINDEXCONTROLLER
           value: "true"
         resources:
           requests:

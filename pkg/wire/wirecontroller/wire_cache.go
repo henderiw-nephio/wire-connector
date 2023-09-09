@@ -25,6 +25,7 @@ import (
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire/cache/resolve"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire/state"
+	vxlanclient "github.com/henderiw-nephio/wire-connector/pkg/wire/vxlan/client"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
@@ -42,20 +43,22 @@ type WireCache interface {
 	SetDesiredAction(types.NamespacedName, DesiredAction)
 	Resolve(nsn types.NamespacedName, resolvedData []*resolve.Data)
 	UnResolve(nsn types.NamespacedName, epIdx int)
-	HandleEvent(types.NamespacedName, state.Event, *state.EventCtx) error
+	HandleEvent(context.Context, types.NamespacedName, state.Event, *state.EventCtx) error
 }
 
-func NewWireCache(c wire.Cache[*Wire]) WireCache {
+func NewWireCache(c wire.Cache[*Wire], vxlanclient vxlanclient.Client) WireCache {
 	l := ctrl.Log.WithName("wire-cache")
 	return &wcache{
-		c: c,
-		l: l,
+		c:           c,
+		vxlanclient: vxlanclient,
+		l:           l,
 	}
 }
 
 type wcache struct {
-	c wire.Cache[*Wire]
-	l logr.Logger
+	vxlanclient vxlanclient.Client
+	c           wire.Cache[*Wire]
+	l           logr.Logger
 }
 
 // Get return the type
@@ -101,7 +104,7 @@ func (r *wcache) UnResolve(nsn types.NamespacedName, epIdx int) {
 	}
 }
 
-func (r *wcache) HandleEvent(nsn types.NamespacedName, event state.Event, eventCtx *state.EventCtx) error {
+func (r *wcache) HandleEvent(ctx context.Context, nsn types.NamespacedName, event state.Event, eventCtx *state.EventCtx) error {
 	if eventCtx.EpIdx < 0 || eventCtx.EpIdx > 1 {
 		return fmt.Errorf("cannot handleEvent, invalid endpoint index %d", eventCtx.EpIdx)
 	}
@@ -117,9 +120,13 @@ func (r *wcache) HandleEvent(nsn types.NamespacedName, event state.Event, eventC
 
 	// update the wire status
 	if w.DesiredAction == DesiredActionDelete && w.WireResp.StatusCode == wirepb.StatusCode_OK {
-		r.c.Delete(context.Background(), nsn)
+		if err := r.vxlanclient.DeleteClaim(ctx, w.WireReq.WireRequest); err != nil {
+			return err
+		}
+		r.c.Delete(ctx, nsn)
+
 	} else {
-		r.Upsert(context.Background(), nsn, w)
+		r.Upsert(ctx, nsn, w)
 	}
 	return nil
 }
