@@ -36,8 +36,8 @@ import (
 	_ "github.com/henderiw-nephio/wire-connector/controllers/node-nodepool-controller"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/pod-cache-controller"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/topology-controller"
-	_ "github.com/henderiw-nephio/wire-connector/controllers/wire-controller"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/vxlanindex-controller"
+	_ "github.com/henderiw-nephio/wire-connector/controllers/wire-controller"
 	"github.com/henderiw-nephio/wire-connector/pkg/grpcserver"
 	"github.com/henderiw-nephio/wire-connector/pkg/grpcserver/healthhandler"
 	"github.com/henderiw-nephio/wire-connector/pkg/node"
@@ -50,15 +50,16 @@ import (
 	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/pod"
 	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/service"
 	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/topology"
-	vxlanclient "github.com/henderiw-nephio/wire-connector/pkg/wire/vxlan/client"
 	nodeepproxy "github.com/henderiw-nephio/wire-connector/pkg/wire/proxy/nodeep"
+	vxlanclient "github.com/henderiw-nephio/wire-connector/pkg/wire/vxlan/client"
 	wirecontroller "github.com/henderiw-nephio/wire-connector/pkg/wire/wirecontroller"
+	"go.uber.org/zap/zapcore"
 
 	//resolverproxy "github.com/henderiw-nephio/wire-connector/pkg/wire/proxy/resolver"
 	wireproxy "github.com/henderiw-nephio/wire-connector/pkg/wire/proxy/wire"
 	reconciler "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
-	"go.uber.org/zap/zapcore"
 	"golang.org/x/exp/slices"
+	"golang.org/x/exp/slog"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -68,12 +69,21 @@ import (
 	//+kubebuilder:scaffold:imports
 )
 
+/*
 var (
 	setupLog = ctrl.Log.WithName("setup")
 )
+*/
 
 func main() {
 	var enabledReconcilersString string
+
+	var loggingLevel = new(slog.LevelVar)
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level:     loggingLevel,
+		//AddSource: true,
+	}))
+	slog.SetDefault(logger)
 
 	opts := zap.Options{
 		Development: true,
@@ -81,13 +91,12 @@ func main() {
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
-
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 	// setup controllers
 	runScheme := runtime.NewScheme()
 	if err := scheme.AddToScheme(runScheme); err != nil {
-		setupLog.Error(err, "cannot initializer schema")
+		slog.Error("cannot initialize schema", "err", err)
 		os.Exit(1)
 	}
 
@@ -95,22 +104,17 @@ func main() {
 		Scheme: runScheme,
 	})
 	if err != nil {
-		setupLog.Error(err, "unable to start manager")
+		slog.Error("cannot start manager", "err", err)
 		os.Exit(1)
 	}
 
 	vxlanClient, err := vxlanclient.New(mgr.GetClient())
 	if err != nil {
-		setupLog.Error(err, "unable to start manager")
+		slog.Error("cannot create vxlan client", "err", err)
 		os.Exit(1)
 	}
-	setupLog.Info("setup controller")
+	slog.Info("setup controller")
 	ctx := ctrl.SetupSignalHandler()
-
-	if err != nil {
-		setupLog.Error(err, "unable to create vxlan be")
-		os.Exit(1)
-	}
 
 	c := wire.NewCache[wirecluster.Cluster]()
 	svc := wire.NewCache[wireservice.Service]()
@@ -120,7 +124,7 @@ func main() {
 	n := wire.NewCache[wirenode.Node]()
 
 	wc, err := wirecontroller.New(ctx, &wirecontroller.Config{
-		VXLANClient: vxlanClient,
+		VXLANClient:   vxlanClient,
 		ClusterCache:  c,
 		ServiceCache:  svc,
 		DaemonCache:   d,
@@ -129,7 +133,8 @@ func main() {
 		TopologyCache: t,
 	})
 	if err != nil {
-		setupLog.Error(err, "unable to start manager")
+		//setupLog.Error(err, "unable to start manager")
+		slog.Error("cannot start manager", "err", err)
 		os.Exit(1)
 	}
 
@@ -161,13 +166,14 @@ func main() {
 	// to ensure the client connection works
 	go func() {
 		if err := s.Start(ctx); err != nil {
-			setupLog.Error(err, "cannot start grpcserver")
+			//setupLog.Error(err, "cannot start grpcserver")
+			slog.Error("cannot start grpc server", "err", err)
 			os.Exit(1)
 		}
 	}()
 
 	ctrlCfg := &ctrlconfig.Config{
-		VXLANClient: vxlanClient,
+		VXLANClient:   vxlanClient,
 		ClusterCache:  c,
 		ServiceCache:  svc,
 		PodCache:      pd,
@@ -184,26 +190,29 @@ func main() {
 			continue
 		}
 		if _, err = r.SetupWithManager(ctx, mgr, ctrlCfg); err != nil {
-			setupLog.Error(err, "cannot setup with manager", "reconciler", name)
+			//setupLog.Error(err, "cannot setup with manager", "reconciler", name)
+			slog.Error("cannot setup manager", "err", err, "reconciler", name)
 			os.Exit(1)
 		}
 		enabled = append(enabled, name)
 	}
 
 	if len(enabled) == 0 {
-		setupLog.Info("no reconcilers are enabled; did you forget to pass the --reconcilers flag?")
+		slog.Info("no reconcilers are enabled; did you forget to pass the --reconcilers flag?")
 	} else {
-		setupLog.Info("enabled reconcilers", "reconcilers", strings.Join(enabled, ","))
+		slog.Info("enabled reconcilers", "reconcilers", strings.Join(enabled, ","))
 	}
 
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
-		setupLog.Error(err, "cannot set up health check")
+		//setupLog.Error(err, "cannot set up health check")
+		slog.Error("cannot setup health check", "err", err)
 		os.Exit(1)
 	}
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
-		setupLog.Error(err, "cannot set up ready check")
+		//setupLog.Error(err, "cannot set up ready check")
+		slog.Error("cannot setup ready check", "err", err)
 		os.Exit(1)
 	}
 
@@ -213,17 +222,17 @@ func main() {
 			case <-ctx.Done():
 				return
 			default:
-				setupLog.Info("clusters...")
+				slog.Info("clusters...")
 				for nsn, cluster := range c.List() {
-					setupLog.Info("cluster", "nsn", nsn, "cluster", cluster.IsReady)
+					slog.Info("cluster", "nsn", nsn, "cluster", cluster.IsReady)
 				}
-				setupLog.Info("services...")
+				slog.Info("services...")
 				for nsn, service := range svc.List() {
-					setupLog.Info("service", "nsn", nsn, "service", service)
+					slog.Info("service", "nsn", nsn, "service", service)
 				}
-				setupLog.Info("topologies...")
+				slog.Info("topologies...")
 				for nsn, topology := range t.List() {
-					setupLog.Info("topology", "nsn", nsn, "topology", topology)
+					slog.Info("topology", "nsn", nsn, "topology", topology)
 				}
 				/*
 					setupLog.Info("nodes...")
@@ -231,22 +240,22 @@ func main() {
 						setupLog.Info("node", "Name", nsn, "node", node)
 					}
 				*/
-				setupLog.Info("pods...")
+				slog.Info("pods...")
 				for nsn, pod := range pd.List() {
-					setupLog.Info("pod", "Name", nsn, "pod", pod)
+					slog.Info("pod", "Name", nsn, "pod", pod)
 				}
-				setupLog.Info("daemons...")
+				slog.Info("daemons...")
 				for nsn, daemon := range d.List() {
-					setupLog.Info("daemon", "Name", nsn, "daemon", daemon)
+					slog.Info("daemon", "Name", nsn, "daemon", daemon)
 				}
 				time.Sleep(5 * time.Second)
 			}
 		}
 	}()
 
-	setupLog.Info("starting manager")
+	slog.Info("starting manager")
 	if err := mgr.Start(ctx); err != nil {
-		setupLog.Error(err, "problem running manager")
+		slog.Error("cannot start manager", "err", err)
 		os.Exit(1)
 	}
 }
