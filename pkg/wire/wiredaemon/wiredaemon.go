@@ -19,13 +19,13 @@ package wiredaemon
 import (
 	"context"
 	"fmt"
+	"os"
 
-	"github.com/go-logr/logr"
 	"github.com/henderiw-nephio/wire-connector/pkg/cri"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
 	"github.com/henderiw-nephio/wire-connector/pkg/xdp"
+	"golang.org/x/exp/slog"
 	"k8s.io/apimachinery/pkg/types"
-	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 type Config struct {
@@ -35,7 +35,11 @@ type Config struct {
 }
 
 func New(cfg *Config) wire.DaemonWirer {
-	l := ctrl.Log.WithName("wiredaemon")
+	l := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: new(slog.LevelVar),
+		//AddSource: true,
+	})).WithGroup("wirer-daemon")
+	slog.SetDefault(l)
 	return &daemon{
 		//wireCache: wire.NewCache[daemonwire.Wire](),
 		cri: cfg.CRI,
@@ -49,14 +53,14 @@ type daemon struct {
 	xdp xdp.XDP
 	cri cri.CRI
 	//logger
-	l logr.Logger
+	l *slog.Logger
 }
 
 // TODO optimize this by using a cache to avoid querying all the time
 func (r *daemon) getContainerNsPath(ctx context.Context, nodeNSN types.NamespacedName) (string, error) {
 	containers, err := r.cri.ListContainers(ctx, nil)
 	if err != nil {
-		r.l.Error(err, "cannot get containers from cri")
+		r.l.Error("cannot get containers from cri", "err", err)
 		return "", err
 	}
 
@@ -67,7 +71,7 @@ func (r *daemon) getContainerNsPath(ctx context.Context, nodeNSN types.Namespace
 		}
 		info, err := r.cri.GetContainerInfo(ctx, c.GetId())
 		if err != nil {
-			r.l.Error(err, "cannot get container info", "name", containerName, "id", c.GetId())
+			r.l.Error("cannot get container info", "err", err, "name", containerName, "id", c.GetId())
 			return "", err
 		}
 		r.l.Info("container", "name", containerName, "name", fmt.Sprintf("%s=%s", nodeNSN.Name, info.PodName), "namespace", fmt.Sprintf("%s=%s", nodeNSN.Namespace, info.Namespace))

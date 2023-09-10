@@ -20,14 +20,13 @@ import (
 	"context"
 	"os"
 
-	"github.com/go-logr/logr"
 	"github.com/henderiw-nephio/wire-connector/pkg/cri"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
 	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/pod"
 	"github.com/henderiw-nephio/wire-connector/pkg/xdp"
 	"github.com/vishvananda/netlink"
-	ctrl "sigs.k8s.io/controller-runtime"
+	"golang.org/x/exp/slog"
 )
 
 type WireNode2Node interface {
@@ -43,7 +42,11 @@ type WireNode2NodeConfig struct {
 }
 
 func NewWireNode2Node(ctx context.Context, req *wirepb.WireRequest, cfg *WireNode2NodeConfig) WireNode2Node {
-	l := ctrl.Log.WithName("wire")
+	l := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: new(slog.LevelVar),
+		//AddSource: true,
+	})).WithGroup("wirer-node2node")
+	slog.SetDefault(l)
 	r := &w{
 		xdp: cfg.XDP,
 		cri: cfg.CRI,
@@ -66,7 +69,7 @@ type w struct {
 	xdp xdp.XDP
 	cri cri.CRI
 
-	l logr.Logger
+	l *slog.Logger
 }
 
 // getEndpoint returns an endpoint which provides context wrt

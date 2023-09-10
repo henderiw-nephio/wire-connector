@@ -78,11 +78,16 @@ var (
 func main() {
 	var enabledReconcilersString string
 
-	var loggingLevel = new(slog.LevelVar)
+	/*
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: loggingLevel,
+		Level: new(slog.LevelVar),
 		//AddSource: true,
 	}))
+	*/
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: new(slog.LevelVar),
+		//AddSource: true,
+	})).WithGroup("controller main")
 	slog.SetDefault(logger)
 
 	opts := zap.Options{
@@ -224,15 +229,15 @@ func main() {
 			default:
 				slog.Info("clusters...")
 				for nsn, cluster := range c.List() {
-					slog.Info("cluster", "nsn", nsn, "cluster", cluster.IsReady)
+					slog.Info("cluster", "nsn", nsn, "data", cluster.IsReady)
 				}
 				slog.Info("services...")
 				for nsn, service := range svc.List() {
-					slog.Info("service", "nsn", nsn, "service", service)
+					slog.Info("service", "nsn", nsn, "data", service)
 				}
 				slog.Info("topologies...")
 				for nsn, topology := range t.List() {
-					slog.Info("topology", "nsn", nsn, "topology", topology)
+					slog.Info("topology", "nsn", nsn, "data", topology)
 				}
 				/*
 					setupLog.Info("nodes...")
@@ -242,11 +247,11 @@ func main() {
 				*/
 				slog.Info("pods...")
 				for nsn, pod := range pd.List() {
-					slog.Info("pod", "Name", nsn, "pod", pod)
+					slog.Info("pod", "nsn", nsn, "data", pod)
 				}
 				slog.Info("daemons...")
 				for nsn, daemon := range d.List() {
-					slog.Info("daemon", "Name", nsn, "daemon", daemon)
+					slog.Info("daemon", "nsn", nsn, "data", daemon)
 				}
 				time.Sleep(5 * time.Second)
 			}

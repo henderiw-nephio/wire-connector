@@ -19,11 +19,11 @@ package wiredaemon
 import (
 	"fmt"
 	"net"
+	"os"
 
-	"github.com/go-logr/logr"
 	"github.com/henderiw-nephio/wire-connector/pkg/xdp"
 	"github.com/vishvananda/netlink"
-	ctrl "sigs.k8s.io/controller-runtime"
+	"golang.org/x/exp/slog"
 )
 
 type EndpointConfig struct {
@@ -35,7 +35,11 @@ type EndpointConfig struct {
 }
 
 func NewEndpoint(cfg *EndpointConfig) Endpoint {
-	l := ctrl.Log.WithName("endpoint")
+	l := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: new(slog.LevelVar),
+		//AddSource: true,
+	})).WithGroup("wirer-endpoint")
+	slog.SetDefault(l)
 	return Endpoint{
 		ifName: cfg.IfName,
 		//isReady: cfg.IsReady,
@@ -59,7 +63,7 @@ type Endpoint struct {
 
 	xdp xdp.XDP
 	//logger
-	l logr.Logger
+	l *slog.Logger
 }
 
 func (r Endpoint) SetMAC(mac net.HardwareAddr) {
@@ -75,7 +79,7 @@ func (r Endpoint) DeployEp2Node() error {
 			if err := addIfInNS(r.nsPath, r.ifName, r.veth); err != nil {
 				// delete the links to ensure we dont keep these resources hanging
 				if err := netlink.LinkDel(r.veth); err != nil {
-					r.l.Info("delete vethA failed", "name", r.veth.Attrs().Name, "err", err)
+					r.l.Error("delete vethA failed", "name", r.veth.Attrs().Name, "err", err)
 				}
 				return err
 			}
@@ -88,12 +92,12 @@ func (r Endpoint) DeployEp2Node() error {
 			}
 		}
 		/*
-		if !doesItfceExists(r.ifName) {
-			r.l.Info("deploy ep2node endpoint", "ifName", r.ifName, "nsPath", r.nsPath)
-			if err := setIfNameAndUp(r.ifName, r.veth); err != nil {
-				return err
+			if !doesItfceExists(r.ifName) {
+				r.l.Info("deploy ep2node endpoint", "ifName", r.ifName, "nsPath", r.nsPath)
+				if err := setIfNameAndUp(r.ifName, r.veth); err != nil {
+					return err
+				}
 			}
-		}
 		*/
 	}
 	return nil
@@ -142,7 +146,7 @@ func (r Endpoint) DestroyNode2Node() error {
 	// we only need to destroy non local ep of a wire since the other end is managed by node2ep
 	if !r.isLocal {
 		if err := deleteItfce(r.ifName); err != nil {
-			r.l.Info("deleteItfce failed", "itfce", r.ifName, "err", err.Error())
+			r.l.Error("deleteItfce failed", "itfce", r.ifName, "err", err.Error())
 			return err
 		}
 	}

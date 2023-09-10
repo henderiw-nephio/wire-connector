@@ -18,11 +18,11 @@ package wiredaemon
 
 import (
 	"context"
+	"os"
 
-	"github.com/go-logr/logr"
 	"github.com/henderiw-nephio/wire-connector/pkg/cri"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/endpointpb"
-	ctrl "sigs.k8s.io/controller-runtime"
+	"golang.org/x/exp/slog"
 )
 
 type WireEp2Node interface {
@@ -38,7 +38,11 @@ type WireEp2NodeConfig struct {
 }
 
 func NewWireEp2Node(ctx context.Context, nsPath string, cfg *WireEp2NodeConfig) WireEp2Node {
-	l := ctrl.Log.WithName("wire-ep-2-node")
+	l := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: new(slog.LevelVar),
+		//AddSource: true,
+	})).WithGroup("wirer-ep2node")
+	slog.SetDefault(l)
 	r := &wep2node{
 		cri: cfg.CRI,
 		l:   l,
@@ -56,7 +60,7 @@ type wep2node struct {
 
 	cri cri.CRI
 
-	l logr.Logger
+	l *slog.Logger
 }
 
 // IsReady returns true if both ep are ready
@@ -71,9 +75,9 @@ func (r *wep2node) IsReady() bool {
 func (r *wep2node) Deploy(req *endpointpb.EndpointRequest) error {
 	for _, ep := range req.Endpoints {
 		epA := NewEndpoint(&EndpointConfig{
-			IfName: ep.IfName,
+			IfName:  ep.IfName,
 			IsLocal: true,
-			NsPath: r.nsPath,// for serverType this will be set to "" since the ep is on the host
+			NsPath:  r.nsPath, // for serverType this will be set to "" since the ep is on the host
 		})
 		// if we wire a server the veth pair is totally hostname based
 		//if req.ServerType {
@@ -98,7 +102,7 @@ func (r *wep2node) Deploy(req *endpointpb.EndpointRequest) error {
 				continue
 			}
 		}
-		
+
 		// the ep2node veth-pair does not exist -> create it
 
 		// get random names for veth sides as they will be created in root netns first
@@ -123,9 +127,9 @@ func (r *wep2node) Deploy(req *endpointpb.EndpointRequest) error {
 func (r *wep2node) Destroy(req *endpointpb.EndpointRequest) error {
 	for _, ep := range req.Endpoints {
 		epA := NewEndpoint(&EndpointConfig{
-			IfName: ep.IfName,
+			IfName:  ep.IfName,
 			IsLocal: true,
-			NsPath: r.nsPath,// for serverType this will be set to "" since the ep is on the host
+			NsPath:  r.nsPath, // for serverType this will be set to "" since the ep is on the host
 		})
 
 		epB := NewEndpoint(&EndpointConfig{

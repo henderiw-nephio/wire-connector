@@ -23,8 +23,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/henderiw-nephio/wire-connector/pkg/ns"
-	log "github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
+	"golang.org/x/exp/slog"
 )
 
 const (
@@ -52,7 +52,7 @@ func createVethPair(epA, epB Endpoint) (netlink.Link, netlink.Link, error) {
 	}
 	ifNameB := epB.ifName
 
-	log.Infof("createVethIfacePair, itfce A: %s, B: %s", ifNameA, ifNameB)
+	slog.Info("createVethIfacePair", "ifNameA", ifNameA, "ifNameB", ifNameB)
 
 	vethA := &netlink.Veth{
 		LinkAttrs: netlink.LinkAttrs{
@@ -171,7 +171,7 @@ func doesItfceExists(ifName string) bool {
 }
 
 func doesItfceExistsInNS(ifName, nsPath string) bool {
-	log.Infof("validate itfce %s in container ns %s", ifName, nsPath)
+	slog.Info("validate ", "ifName", ifName, "nsPath", nsPath)
 	netns, err := ns.GetNS(nsPath)
 	if err != nil {
 		// container namespace does not exist
@@ -195,7 +195,7 @@ func doesItfceExistsInNS(ifName, nsPath string) bool {
 }
 
 func getPeerVethIndexFrimIfInNS(nsPath, ifName string) (int, bool) {
-	log.Infof("get peer veth idx from itfce %s in container ns %s", ifName, nsPath)
+	slog.Info("get peer veth ifIndex", "ifName", ifName, "nsPath", nsPath)
 	netns, err := ns.GetNS(nsPath)
 	if err != nil {
 		// container namespace does not exist
@@ -223,12 +223,12 @@ func getPeerVethIndexFrimIfInNS(nsPath, ifName string) (int, bool) {
 
 func setIfNameAndUp(ifName string, veth netlink.Link) error {
 	if err := netlink.LinkSetName(veth, ifName); err != nil {
-		log.Infof("setIfNameAndUp LinkSetName veth %v ifName %s err %s", veth, ifName, err.Error())
+		slog.Error("setIfNameAndUp LinkSetName", "err", err, "ifName", ifName, "veth", veth)
 		return err
 	}
 	// set the link uo
 	if err := netlink.LinkSetUp(veth); err != nil {
-		log.Infof("setIfNameAndUp LinkSetUp err %s", err.Error())
+		slog.Error("setIfNameAndUp LinkSetUp", "err", err)
 		return err
 	}
 	return nil
@@ -237,14 +237,14 @@ func setIfNameAndUp(ifName string, veth netlink.Link) error {
 func setItfceUp(veth netlink.Link) error {
 	// set the link uo
 	if err := netlink.LinkSetUp(veth); err != nil {
-		log.Infof("setIfNameAndUp LinkSetUp err %s", err.Error())
+		slog.Error("setIfNameAndUp LinkSetUp", "err", err)
 		return err
 	}
 	return nil
 }
 
 func addIfInNS(nsPath, ifName string, veth netlink.Link) error {
-	log.Infof("add itfce %s in container ns %s", ifName, nsPath)
+	slog.Info("add itfce in container ns", "ifName", ifName, "nsPath", nsPath)
 	netns, err := ns.GetNS(nsPath)
 	if err != nil {
 		// container namespace does not exist
@@ -269,7 +269,7 @@ func setIfUp(itfce netlink.Link) error {
 }
 
 func deleteIfInNS(ifName, nsPath string) error {
-	log.Infof("delete itfce %s in container: %s", ifName, nsPath)
+	slog.Info("delete itfce in container ns", "ifName", ifName, "nsPath", nsPath)
 	netns, err := ns.GetNS(nsPath)
 	if err != nil {
 		// container namespace does not exist
@@ -288,7 +288,7 @@ func deleteIfInNS(ifName, nsPath string) error {
 		}
 		return nil
 	}); err != nil {
-		log.Infof("delete itfce err: %v", err)
+		slog.Error("delete itfce", "err", err)
 		if strings.Contains(err.Error(), "not found") {
 			// if the interface is not found it is already deleted. This can happen in a veth pair.
 			// typically when 1 end of the vethpair is deleted the other end also get deleted
@@ -303,7 +303,7 @@ func getPeerIDFromIndex(index int) string {
 	//log.Infof("getPeerID: idx: %d", index)
 	ll, err := netlink.LinkList()
 	if err != nil {
-		log.Debugf("cannot list net links err : %s", err.Error())
+		slog.Error("cannot list net links", "err", err)
 		return ""
 	}
 

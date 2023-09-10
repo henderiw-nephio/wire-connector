@@ -17,7 +17,6 @@ limitations under the License.
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"strconv"
@@ -33,11 +32,10 @@ import (
 	wireproxy "github.com/henderiw-nephio/wire-connector/pkg/wire/proxy/wire"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire/wiredaemon"
 	"github.com/henderiw-nephio/wire-connector/pkg/xdp"
-	"go.uber.org/zap/zapcore"
 	"golang.org/x/exp/slices"
+	"golang.org/x/exp/slog"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -46,32 +44,40 @@ var (
 )
 
 func main() {
-	opts := zap.Options{
-		Development: true,
-		TimeEncoder: zapcore.ISO8601TimeEncoder,
-	}
-	opts.BindFlags(flag.CommandLine)
-	flag.Parse()
+	/*
+		opts := zap.Options{
+			Development: true,
+			TimeEncoder: zapcore.ISO8601TimeEncoder,
+		}
+		opts.BindFlags(flag.CommandLine)
+		flag.Parse()
 
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+		ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	setupLog.Info("setup daemon")
+		setupLog.Info("setup daemon")
+	*/
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: new(slog.LevelVar),
+		//AddSource: true,
+	})).WithGroup("daemon main")
+	slog.SetDefault(logger)
+	slog.Info("start daemon")
 	ctx := ctrl.SetupSignalHandler()
 
 	cri, err := cri.New()
 	if err != nil {
-		setupLog.Error(err, "cannot init cri")
+		slog.Error("cannot init cri", "err", err)
 		os.Exit(1)
 	}
 
 	xdpapp, err := xdp.NewXdpApp()
 	if err != nil {
-		setupLog.Error(err, "cannot setup xdp app")
+		slog.Error("cannot setup xdp app cri", "err", err)
 		os.Exit(1)
 	}
 
 	if err := xdpapp.Init(ctx); err != nil {
-		setupLog.Error(err, "cannot init xdp app")
+		slog.Error("cannot init xdp app cri", "err", err)
 		os.Exit(1)
 	}
 
@@ -107,7 +113,7 @@ func main() {
 
 	// block
 	if err := s.Start(ctx); err != nil {
-		setupLog.Error(err, "cannot start grpcserver")
+		slog.Error("cannot start grpc server", "err", err)
 		os.Exit(1)
 	}
 }
