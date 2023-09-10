@@ -80,7 +80,7 @@ func main() {
 
 	var loggingLevel = new(slog.LevelVar)
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level:     loggingLevel,
+		Level: loggingLevel,
 		//AddSource: true,
 	}))
 	slog.SetDefault(logger)

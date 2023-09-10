@@ -14,7 +14,7 @@ require (
 	github.com/nephio-project/nephio/controllers/pkg v0.0.0-20230724195903-feb6c2f91cc3
 	github.com/nokia/k8s-ipam v0.0.4-0.20230909054844-8b8e9e4ad9f7
 	github.com/pkg/errors v0.9.1
-	github.com/scrapli/scrapligo v1.1.13-0.20230907020628-34c35689c60c
+	github.com/scrapli/scrapligo v1.1.13-0.20230910001830-cfdfb03fa474
 	github.com/sirupsen/logrus v1.9.0
 	github.com/spf13/cobra v1.7.0
 	github.com/stretchr/testify v1.8.4

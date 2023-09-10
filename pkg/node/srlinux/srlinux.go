@@ -17,7 +17,6 @@ import (
 	"github.com/henderiw-nephio/wire-connector/pkg/node"
 	nadv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
-	"github.com/scrapli/scrapligo/driver/opoptions"
 	"github.com/scrapli/scrapligo/driver/options"
 	"github.com/scrapli/scrapligo/logging"
 	"github.com/scrapli/scrapligo/platform"
@@ -308,48 +307,12 @@ func (r *srl) SetInitialConfig(ctx context.Context, cr *invv1alpha1.Node, ips []
 	}
 	defer d.Close()
 
-	/*
-			configs := []string{
-		        fmt.Sprintf("set / system tls server-profile %s", certData.ProfileName),
-				fmt.Sprintf("set / system tls server-profile %s authenticate-client false", certData.ProfileName),
-				fmt.Sprintf("set / system tls server-profile %s key \"%s\"", certData.ProfileName, certData.Key),
-				fmt.Sprintf("set / system tls server-profile %s certificate \"%s\"", certData.ProfileName, certData.Cert),
-				fmt.Sprintf("set / system tls server-profile %s trust-anchor \"%s\"", certData.ProfileName, certData.CA),
-				"set / system lldp admin state enable",
-				"set / system gnmi-server admin-state enable",
-				"set / system gnmi-server rate-limit 65000",
-				"set / system gnmi-server trace-options [ common request response ]",
-				"set / system gnmi-server network-instance mgmt admin-state enable",
-				fmt.Sprintf("set / system gnmi-server network-instance mgmt tls-profile %s", certData.ProfileName),
-				"set / system gnmi-server network-instance mgmt unix-socket admin-state enable",
-				"set / system gribi-server admin-state enable",
-				"set / system gribi-server network-instance mgmt admin-state enable",
-				fmt.Sprintf("set / system gribi-server network-instance mgmt tls-profile %s", certData.ProfileName),
-				"set / system json-rpc-server admin-state enable",
-				"set / system json-rpc-server network-instance mgmt http admin-state enable",
-				"set / system json-rpc-server network-instance mgmt https admin-state enable",
-				fmt.Sprintf("set / system json-rpc-server network-instance mgmt https tls-profile %s", certData.ProfileName),
-				"set / system p4rt-server admin-state enable",
-				"set / system p4rt-server network-instance mgmt admin-state enable",
-				fmt.Sprintf("set / system p4rt-server network-instance mgmt tls-profile %s", certData.ProfileName),
-				"commit save",
-		    }
-
-		    resp, err := d.SendConfigs(configs, opoptions.WithFuzzyMatchInput())
-		    if err != nil {
-		        return err
-		    } else {
-		        fmt.Println("Failed?: ", resp.Failed)
-		    }
-
-		    cb := make([]byte, channelLog.Len())
-		    _, _ = channelLog.Read(cb)
-		    fmt.Printf("Channel log output:\n%s", cb)
-	*/
-
-	commands := []string{
+	configs := []string{
 		fmt.Sprintf("set / system tls server-profile %s", certData.ProfileName),
 		fmt.Sprintf("set / system tls server-profile %s authenticate-client false", certData.ProfileName),
+		fmt.Sprintf("set / system tls server-profile %s key \"%s\"", certData.ProfileName, certData.Key),
+		fmt.Sprintf("set / system tls server-profile %s certificate \"%s\"", certData.ProfileName, certData.Cert),
+		fmt.Sprintf("set / system tls server-profile %s trust-anchor \"%s\"", certData.ProfileName, certData.CA),
 		"set / system lldp admin state enable",
 		"set / system gnmi-server admin-state enable",
 		"set / system gnmi-server rate-limit 65000",
@@ -367,34 +330,70 @@ func (r *srl) SetInitialConfig(ctx context.Context, cr *invv1alpha1.Node, ips []
 		//"set / system p4rt-server admin-state enable",
 		//"set / system p4rt-server network-instance mgmt admin-state enable",
 		//fmt.Sprintf("set / system p4rt-server network-instance mgmt tls-profile %s", certData.ProfileName),
+		"commit save",
 	}
 
-	_, err = d.SendConfigs(commands, opoptions.WithFuzzyMatchInput())
+	resp, err := d.SendConfigs(configs)
 	if err != nil {
 		return err
+	} else {
+		fmt.Println("Failed?: ", resp.Failed)
 	}
 
-	// key and cert are send outside of sendconfigs, because it was not working properly with `eager` option
-	_, err = d.SendConfig(fmt.Sprintf("set / system tls server-profile %s key \"%s\"", certData.ProfileName, certData.Key),
-		opoptions.WithEager(),
-	)
-	if err != nil {
-		return err
-	}
+	cb := make([]byte, channelLog.Len())
+	_, _ = channelLog.Read(cb)
+	fmt.Printf("Channel log output:\n%s", cb)
+	/*
 
-	_, err = d.SendConfig(fmt.Sprintf("set / system tls server-profile %s certificate \"%s\"", certData.ProfileName, certData.Cert),
-		opoptions.WithEager(),
-	)
-	if err != nil {
-		return err
-	}
+		commands := []string{
+			fmt.Sprintf("set / system tls server-profile %s", certData.ProfileName),
+			fmt.Sprintf("set / system tls server-profile %s authenticate-client false", certData.ProfileName),
+			"set / system lldp admin state enable",
+			"set / system gnmi-server admin-state enable",
+			"set / system gnmi-server rate-limit 65000",
+			"set / system gnmi-server trace-options [ common request response ]",
+			"set / system gnmi-server network-instance mgmt admin-state enable",
+			fmt.Sprintf("set / system gnmi-server network-instance mgmt tls-profile %s", certData.ProfileName),
+			"set / system gnmi-server network-instance mgmt unix-socket admin-state enable",
+			//"set / system gribi-server admin-state enable",
+			//"set / system gribi-server network-instance mgmt admin-state enable",
+			//fmt.Sprintf("set / system gribi-server network-instance mgmt tls-profile %s", certData.ProfileName),
+			"set / system json-rpc-server admin-state enable",
+			"set / system json-rpc-server network-instance mgmt http admin-state enable",
+			"set / system json-rpc-server network-instance mgmt https admin-state enable",
+			fmt.Sprintf("set / system json-rpc-server network-instance mgmt https tls-profile %s", certData.ProfileName),
+			//"set / system p4rt-server admin-state enable",
+			//"set / system p4rt-server network-instance mgmt admin-state enable",
+			//fmt.Sprintf("set / system p4rt-server network-instance mgmt tls-profile %s", certData.ProfileName),
+		}
 
-	_, err = d.SendConfig(fmt.Sprintf("set / system tls server-profile %s trust-anchor \"%s\"", certData.ProfileName, certData.CA),
-		opoptions.WithEager(),
-	)
-	if err != nil {
-		return err
-	}
+		_, err = d.SendConfigs(commands, opoptions.WithFuzzyMatchInput())
+		if err != nil {
+			return err
+		}
+
+		// key and cert are send outside of sendconfigs, because it was not working properly with `eager` option
+		_, err = d.SendConfig(fmt.Sprintf("set / system tls server-profile %s key \"%s\"", certData.ProfileName, certData.Key),
+			opoptions.WithEager(),
+		)
+		if err != nil {
+			return err
+		}
+
+		_, err = d.SendConfig(fmt.Sprintf("set / system tls server-profile %s certificate \"%s\"", certData.ProfileName, certData.Cert),
+			opoptions.WithEager(),
+		)
+		if err != nil {
+			return err
+		}
+
+		_, err = d.SendConfig(fmt.Sprintf("set / system tls server-profile %s trust-anchor \"%s\"", certData.ProfileName, certData.CA),
+			opoptions.WithEager(),
+		)
+		if err != nil {
+			return err
+		}
+	*/
 
 	/*
 		_, err = d.SendConfig(fmt.Sprintf("set / system banner login-banner \"%s\"", banner),
@@ -405,7 +404,9 @@ func (r *srl) SetInitialConfig(ctx context.Context, cr *invv1alpha1.Node, ips []
 		}
 	*/
 
-	_, err = d.SendConfig("commit save")
+	/*
+		_, err = d.SendConfig("commit save")
+	*/
 
 	prompt, err := d.GetPrompt()
 	if err != nil {

@@ -257,8 +257,8 @@ github.com/rogpeppe/fastuuid v1.2.0/go.mod h1:jVj6XXZzXRy/MSR5jhDC/2q6DgLz+nrA6L
 github.com/rogpeppe/go-internal v1.3.0/go.mod h1:M8bDsm7K2OlrFYOpmOWEs/qY81heoFRclV5y23lUDJ4=
 github.com/rogpeppe/go-internal v1.10.0 h1:TMyTOH3F/DB16zRVcYyreMH6GnZZrwQVAoYjRBZyWFQ=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
-github.com/scrapli/scrapligo v1.1.13-0.20230907020628-34c35689c60c h1:XBd/9sr/yCNAOgR70IC9w4Z3XvEcTPjSRMmxctCLn6E=
-github.com/scrapli/scrapligo v1.1.13-0.20230907020628-34c35689c60c/go.mod h1:rRx/rT2oNPYztiT3/ik0FRR/Ro7AdzN/eR9AtF8A81Y=
+github.com/scrapli/scrapligo v1.1.13-0.20230910001830-cfdfb03fa474 h1:mze/mC23xhUSo3JHH77MDVSKbankJrQdj9S0OdELAwQ=
+github.com/scrapli/scrapligo v1.1.13-0.20230910001830-cfdfb03fa474/go.mod h1:rRx/rT2oNPYztiT3/ik0FRR/Ro7AdzN/eR9AtF8A81Y=
 github.com/sirikothe/gotextfsm v1.0.1-0.20200816110946-6aa2cfd355e4 h1:FHUL2HofYJuslFOQdy/JjjP36zxqIpd/dcoiwLMIs7k=
 github.com/sirikothe/gotextfsm v1.0.1-0.20200816110946-6aa2cfd355e4/go.mod h1:CJYqpTg9u5VPCoD0VEl9E68prCIiWQD8m457k098DdQ=
 github.com/sirupsen/logrus v1.9.0 h1:trlNQbNUG3OdDrDil03MCb1H2o9nJ1x4/5LYw7byDE0=
