@@ -18,18 +18,18 @@ package grpcserver
 
 import (
 	"context"
+	"log/slog"
 	"net"
 	"sync"
 
-	"github.com/go-logr/logr"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/endpointpb"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
+	"github.com/henderiw/logger/log"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/semaphore"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 type GrpcServer struct {
@@ -40,7 +40,7 @@ type GrpcServer struct {
 	sem *semaphore.Weighted
 
 	// logger
-	l logr.Logger
+	l *slog.Logger
 
 	//wire Handlers
 	wireGetHandler    WireGetHandler
@@ -79,12 +79,13 @@ type EndpointWatchHandler func(*endpointpb.WatchRequest, endpointpb.NodeEndpoint
 
 type Option func(*GrpcServer)
 
-func New(c Config, opts ...Option) *GrpcServer {
+func New(ctx context.Context, c Config, opts ...Option) *GrpcServer {
 	c.setDefaults()
 	s := &GrpcServer{
 		config: c,
 		sem:    semaphore.NewWeighted(c.MaxRPC),
 		cm:     &sync.Mutex{},
+		l:      log.FromContext(ctx).WithGroup("grpcserver"),
 	}
 
 	for _, o := range opts {
@@ -95,15 +96,13 @@ func New(c Config, opts ...Option) *GrpcServer {
 }
 
 func (s *GrpcServer) Start(ctx context.Context) error {
-	s.l = log.FromContext(ctx)
-	s.l.Info("grpc server start...")
-	s.l.Info("grpc server start",
-		"address", s.config.Address,
+	log := s.l.With("address", s.config.Address,
 		"certDir", s.config.CertDir,
 		"certName", s.config.CertName,
 		"keyName", s.config.KeyName,
-		"caName", s.config.CaName,
-	)
+		"caName", s.config.CaName)
+	log.Info("start...")
+	
 	l, err := net.Listen("tcp", s.config.Address)
 	if err != nil {
 		return errors.Wrap(err, "cannot listen")
@@ -116,21 +115,21 @@ func (s *GrpcServer) Start(ctx context.Context) error {
 	grpcServer := grpc.NewServer(opts...)
 
 	wirepb.RegisterWireServer(grpcServer, s)
-	s.l.Info("grpc server with wire service...")
+	log.Info("grpc server with wire service...")
 
 	endpointpb.RegisterNodeEndpointServer(grpcServer, s)
-	s.l.Info("grpc server with endpoint service...")
+	log.Info("grpc server with endpoint service...")
 
 	healthpb.RegisterHealthServer(grpcServer, s)
-	s.l.Info("grpc server with health service...")
+	log.Info("grpc server with health service...")
 
 	reflection.Register(grpcServer)
-	s.l.Info("grpc server with reflection service...")
+	log.Info("grpc server with reflection service...")
 
-	s.l.Info("starting grpc server...")
+	log.Info("starting grpc server...")
 	err = grpcServer.Serve(l)
 	if err != nil {
-		s.l.Info("gRPC serve failed", "error", err)
+		log.Info("gRPC serve failed", "error", err)
 		return err
 	}
 	return nil

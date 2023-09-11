@@ -2,10 +2,11 @@ package xdp
 
 import (
 	"context"
-	"log"
+	"log/slog"
 
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
+	"github.com/henderiw/logger/log"
 )
 
 // $BPF_CLANG and $BPF_CFLAGS are set by the Makefile.
@@ -19,13 +20,16 @@ type XDP interface {
 
 type xdpApp struct {
 	objs bpfObjects
+	l    *slog.Logger
 }
 
-func NewXdpApp() (XDP, error) {
+func NewXdpApp(ctx context.Context) (XDP, error) {
 	if err := IncreaseResourceLimits(); err != nil {
 		return nil, err
 	}
-	return &xdpApp{}, nil
+	return &xdpApp{
+		l: log.FromContext(ctx).WithGroup("xdp"),
+	}, nil
 }
 
 func (r *xdpApp) Init(ctx context.Context) error {
@@ -37,7 +41,7 @@ func (r *xdpApp) Init(ctx context.Context) error {
 		for {
 			select {
 			case <-ctx.Done():
-				log.Printf("ctx.Done")
+				r.l.Info("context done")
 				r.objs.Close()
 				return
 			}

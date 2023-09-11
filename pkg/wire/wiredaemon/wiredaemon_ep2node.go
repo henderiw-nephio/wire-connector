@@ -22,17 +22,21 @@ import (
 
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/endpointpb"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
+	"github.com/henderiw/logger/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"k8s.io/apimachinery/pkg/types"
 )
 
 func (r *daemon) EndpointGet(ctx context.Context, req *endpointpb.EndpointRequest) (*endpointpb.EndpointResponse, error) {
+	log := log.FromContext(ctx)
+	log.Info("ep2node get...")
 	return &endpointpb.EndpointResponse{}, status.Error(codes.Unimplemented, "not implemented")
 }
 
 func (r *daemon) EndpointUpSert(ctx context.Context, req *endpointpb.EndpointRequest) (*endpointpb.EmptyResponse, error) {
-	r.l.Info("ep2node upsert...", "server", req.ServerType)
+	log := log.FromContext(ctx)
+	log.Info("ep2node upsert...")
 
 	// this validates the container exists and returns a valid nsPath if it exists
 	// if the nsPath does not exist the container is not ready and we return a NOK response
@@ -47,14 +51,16 @@ func (r *daemon) EndpointUpSert(ctx context.Context, req *endpointpb.EndpointReq
 
 	// container is ready
 	w := NewWireEp2Node(ctx, nsPath, &WireEp2NodeConfig{CRI: r.cri})
-	if err := w.Deploy(req); err != nil {
+	if err := w.Deploy(ctx, req); err != nil {
 		return &endpointpb.EmptyResponse{StatusCode: endpointpb.StatusCode_NOK, Reason: err.Error()}, nil
 	}
 	return &endpointpb.EmptyResponse{StatusCode: endpointpb.StatusCode_OK}, nil
 }
 
 func (r *daemon) EndpointDelete(ctx context.Context, req *endpointpb.EndpointRequest) (*endpointpb.EmptyResponse, error) {
-	r.l.Info("ep2node delete...", "server", req.ServerType)
+	log := log.FromContext(ctx)
+	log.Info("ep2node delete...")
+
 	// this validates the container exists and returns a valid nsPath if it exists
 	nsPath := ""
 	if !req.ServerType {
@@ -67,7 +73,7 @@ func (r *daemon) EndpointDelete(ctx context.Context, req *endpointpb.EndpointReq
 
 	// after this check we determine we are ready to wire
 	w := NewWireEp2Node(ctx, nsPath, &WireEp2NodeConfig{CRI: r.cri})
-	if err := w.Destroy(req); err != nil {
+	if err := w.Destroy(ctx, req); err != nil {
 		return &endpointpb.EmptyResponse{StatusCode: endpointpb.StatusCode_NOK, Reason: err.Error()}, nil
 	}
 	return &endpointpb.EmptyResponse{StatusCode: endpointpb.StatusCode_OK}, nil

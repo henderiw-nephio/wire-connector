@@ -19,13 +19,14 @@ package wiredaemon
 import (
 	"context"
 	"fmt"
-	"os"
+	"log/slog"
 
 	"github.com/henderiw-nephio/wire-connector/pkg/cri"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
 	"github.com/henderiw-nephio/wire-connector/pkg/xdp"
-	"golang.org/x/exp/slog"
+	"github.com/henderiw/logger/log"
 	"k8s.io/apimachinery/pkg/types"
+
 )
 
 type Config struct {
@@ -34,17 +35,12 @@ type Config struct {
 	CRI cri.CRI
 }
 
-func New(cfg *Config) wire.DaemonWirer {
-	l := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: new(slog.LevelVar),
-		//AddSource: true,
-	})).WithGroup("wirer-daemon")
-	slog.SetDefault(l)
+func New(ctx context.Context, cfg *Config) wire.DaemonWirer {
 	return &daemon{
 		//wireCache: wire.NewCache[daemonwire.Wire](),
 		cri: cfg.CRI,
 		xdp: cfg.XDP,
-		l:   l,
+		l:   log.FromContext(ctx).WithGroup("wirer-daemon"),
 	}
 }
 
@@ -57,10 +53,11 @@ type daemon struct {
 }
 
 // TODO optimize this by using a cache to avoid querying all the time
-func (r *daemon) getContainerNsPath(ctx context.Context, nodeNSN types.NamespacedName) (string, error) {
+func (r *daemon) getContainerNsPath(ctx context.Context, nsn types.NamespacedName) (string, error) {
+	log  := r.l.With("nsn", nsn)
 	containers, err := r.cri.ListContainers(ctx, nil)
 	if err != nil {
-		r.l.Error("cannot get containers from cri", "err", err)
+		log.Error("cannot get containers from cri", "err", err)
 		return "", err
 	}
 
@@ -71,11 +68,11 @@ func (r *daemon) getContainerNsPath(ctx context.Context, nodeNSN types.Namespace
 		}
 		info, err := r.cri.GetContainerInfo(ctx, c.GetId())
 		if err != nil {
-			r.l.Error("cannot get container info", "err", err, "name", containerName, "id", c.GetId())
+			log.Error("cannot get container info", "err", err, "name", containerName, "id", c.GetId())
 			return "", err
 		}
-		r.l.Info("container", "name", containerName, "name", fmt.Sprintf("%s=%s", nodeNSN.Name, info.PodName), "namespace", fmt.Sprintf("%s=%s", nodeNSN.Namespace, info.Namespace))
-		if info.PodName == nodeNSN.Name && info.Namespace == nodeNSN.Namespace {
+		log.Info("container", "name", containerName, "name", fmt.Sprintf("%s=%s", nsn.Name, info.PodName), "namespace", fmt.Sprintf("%s=%s", nsn.Namespace, info.Namespace))
+		if info.PodName == nsn.Name && info.Namespace == nsn.Namespace {
 			return info.NsPath, nil
 		}
 	}

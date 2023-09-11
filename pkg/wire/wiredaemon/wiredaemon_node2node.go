@@ -21,16 +21,21 @@ import (
 
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
+	"github.com/henderiw/logger/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 func (r *daemon) WireGet(ctx context.Context, req *wirepb.WireRequest) (*wirepb.WireResponse, error) {
+	log := log.FromContext(ctx)
+	log.Info("node2node get...")
 	return &wirepb.WireResponse{}, status.Error(codes.Unimplemented, "not implemented")
 }
 
 func (r *daemon) WireUpSert(ctx context.Context, req *wirepb.WireRequest) (*wirepb.EmptyResponse, error) {
-	r.l.Info("upsert...")
+	log := log.FromContext(ctx)
+	log.Info("node2node upsert...")
+
 	w := NewWireNode2Node(ctx, req, &WireNode2NodeConfig{XDP: r.xdp, CRI: r.cri})
 	if err := w.Deploy(); err != nil {
 		return &wirepb.EmptyResponse{StatusCode: wirepb.StatusCode_NOK, Reason: err.Error()}, nil
@@ -39,6 +44,9 @@ func (r *daemon) WireUpSert(ctx context.Context, req *wirepb.WireRequest) (*wire
 }
 
 func (r *daemon) WireDelete(ctx context.Context, req *wirepb.WireRequest) (*wirepb.EmptyResponse, error) {
+	log := log.FromContext(ctx)
+	log.Info("node2node delete...")
+
 	w := NewWireNode2Node(ctx, req, &WireNode2NodeConfig{XDP: r.xdp, CRI: r.cri})
 	if err := w.Destroy(); err != nil {
 		return &wirepb.EmptyResponse{StatusCode: wirepb.StatusCode_NOK, Reason: err.Error()}, nil

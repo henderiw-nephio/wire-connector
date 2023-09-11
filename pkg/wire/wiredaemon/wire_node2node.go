@@ -19,14 +19,15 @@ package wiredaemon
 import (
 	"context"
 	"os"
+	"log/slog"
 
 	"github.com/henderiw-nephio/wire-connector/pkg/cri"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
 	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/pod"
 	"github.com/henderiw-nephio/wire-connector/pkg/xdp"
+	"github.com/henderiw/logger/log"
 	"github.com/vishvananda/netlink"
-	"golang.org/x/exp/slog"
 )
 
 type WireNode2Node interface {
@@ -42,15 +43,10 @@ type WireNode2NodeConfig struct {
 }
 
 func NewWireNode2Node(ctx context.Context, req *wirepb.WireRequest, cfg *WireNode2NodeConfig) WireNode2Node {
-	l := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: new(slog.LevelVar),
-		//AddSource: true,
-	})).WithGroup("wirer-node2node")
-	slog.SetDefault(l)
 	r := &w{
 		xdp: cfg.XDP,
 		cri: cfg.CRI,
-		l:   l,
+		l:   log.FromContext(ctx).WithGroup("wirer node2node"),
 	}
 
 	r.endpointA = r.getEndpoint(ctx, req, 0)
@@ -76,7 +72,7 @@ type w struct {
 // IsLocal and IsReady, if isLocal the nsPath is returned if found
 func (r *w) getEndpoint(ctx context.Context, req *wirepb.WireRequest, epIdx int) Endpoint {
 	epReq := req.Endpoints[epIdx]
-	r.l.Info("getEndpoint", "epReq", epReq)
+	r.l.Info("getEndpoint")
 	epCfg := &EndpointConfig{
 		IsLocal: epReq.HostIP == os.Getenv("NODE_IP"),
 		HostIP:  epReq.HostIP,
@@ -100,8 +96,8 @@ func (r *w) getEndpoint(ctx context.Context, req *wirepb.WireRequest, epIdx int)
 		epCfg.IfName = getTunnelName(epHash)
 	}
 
-	r.l.Info("getEndpoint", "epCfg", epCfg)
-	return NewEndpoint(epCfg)
+	r.l.Info("getEndpoint")
+	return NewEndpoint(ctx, epCfg)
 }
 
 // Deploy deploys the link on the host

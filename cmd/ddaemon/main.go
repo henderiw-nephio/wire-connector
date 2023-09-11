@@ -79,13 +79,13 @@ func main() {
 	setupLog.Info("setup controller")
 	ctx := ctrl.SetupSignalHandler()
 
-	cri, err := cri.New()
+	cri, err := cri.New(ctx)
 	if err != nil {
 		setupLog.Error(err, "unable to initialize cri")
 		os.Exit(1)
 	}
 
-	xdpapp, err := xdp.NewXdpApp()
+	xdpapp, err := xdp.NewXdpApp(ctx)
 	if err != nil {
 		setupLog.Error(err, "cannot to set xdp app")
 		os.Exit(1)

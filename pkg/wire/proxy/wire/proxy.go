@@ -18,12 +18,12 @@ package wireproxy
 
 import (
 	"context"
+	"log/slog"
 
-	"github.com/go-logr/logr"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
+	"github.com/henderiw/logger/log"
 	"google.golang.org/grpc/peer"
-	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 type Proxy interface {
@@ -37,12 +37,11 @@ type Config struct {
 	Backend wire.Node2NodeWirer
 }
 
-func New(cfg *Config) Proxy {
-	l := ctrl.Log.WithName("wire-proxy")
+func New(ctx context.Context, cfg *Config) Proxy {
 	return &p{
 		be:    cfg.Backend,
 		state: NewProxyState(&stateConfig{be: cfg.Backend}),
-		l:     l,
+		l:     log.FromContext(ctx).WithGroup("node2node grpc proxy"),
 	}
 }
 
@@ -50,18 +49,21 @@ type p struct {
 	be    wire.Node2NodeWirer
 	state *s
 	//logger
-	l logr.Logger
+	l *slog.Logger
 }
 
 func (r *p) WireGet(ctx context.Context, req *wirepb.WireRequest) (*wirepb.WireResponse, error) {
+	ctx = log.IntoContext(ctx, r.l.With("nsn", req.WireKey.String(), "epA", req.Endpoints[0], "epB", req.Endpoints[1], "intercluster", req.Intercluster))
 	return r.be.WireGet(ctx, req)
 }
 
 func (r *p) WireCreate(ctx context.Context, req *wirepb.WireRequest) (*wirepb.EmptyResponse, error) {
+	ctx = log.IntoContext(ctx, r.l.With("nsn", req.WireKey.String(), "epA", req.Endpoints[0], "epB", req.Endpoints[1], "intercluster", req.Intercluster))
 	return r.be.WireUpSert(ctx, req)
 }
 
 func (r *p) WireDelete(ctx context.Context, req *wirepb.WireRequest) (*wirepb.EmptyResponse, error) {
+	ctx = log.IntoContext(ctx, r.l.With("nsn", req.WireKey.String(), "epA", req.Endpoints[0], "epB", req.Endpoints[1], "intercluster", req.Intercluster))
 	return r.be.WireDelete(ctx, req)
 }
 
@@ -72,7 +74,7 @@ func (r *p) WireWatch(req *wirepb.WatchRequest, stream wirepb.Wire_WireWatchServ
 	if p != nil {
 		addr = p.Addr.String()
 	}
-	r.l.Info("waatch", "address", addr, "req", req)
+	r.l.Info("watch", "address", addr, "req", req)
 
 	r.state.AddWireCallBackFn(req, stream)
 	return nil

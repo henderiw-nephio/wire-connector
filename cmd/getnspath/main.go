@@ -14,7 +14,7 @@ func main() {
 	}
 	containerID := os.Args[1]
 
-	cri, err := cri.New()
+	cri, err := cri.New(nil)
 	if err != nil {
 		panic(err)
 	}

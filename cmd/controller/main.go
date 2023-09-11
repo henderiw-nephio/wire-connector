@@ -143,15 +143,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	np := nodeepproxy.New(&nodeepproxy.Config{
+	np := nodeepproxy.New(ctx, &nodeepproxy.Config{
 		Backend: wc,
 	})
-	wp := wireproxy.New(&wireproxy.Config{
+	wp := wireproxy.New(ctx, &wireproxy.Config{
 		Backend: wc,
 	})
 	wh := healthhandler.New()
 
-	s := grpcserver.New(grpcserver.Config{
+	s := grpcserver.New(ctx, grpcserver.Config{
 		Address:  ":" + strconv.Itoa(9999),
 		Insecure: true,
 	},

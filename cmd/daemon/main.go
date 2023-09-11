@@ -21,6 +21,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"log/slog"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -32,8 +33,8 @@ import (
 	wireproxy "github.com/henderiw-nephio/wire-connector/pkg/wire/proxy/wire"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire/wiredaemon"
 	"github.com/henderiw-nephio/wire-connector/pkg/xdp"
+	"github.com/henderiw/logger/log"
 	"golang.org/x/exp/slices"
-	"golang.org/x/exp/slog"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	ctrl "sigs.k8s.io/controller-runtime"
 	//+kubebuilder:scaffold:imports
@@ -44,58 +45,45 @@ var (
 )
 
 func main() {
-	/*
-		opts := zap.Options{
-			Development: true,
-			TimeEncoder: zapcore.ISO8601TimeEncoder,
-		}
-		opts.BindFlags(flag.CommandLine)
-		flag.Parse()
-
-		ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
-
-		setupLog.Info("setup daemon")
-	*/
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: new(slog.LevelVar),
-		//AddSource: true,
-	})).WithGroup("daemon main")
-	slog.SetDefault(logger)
-	slog.Info("start daemon")
+	l := log.NewLogger(&log.HandlerOptions{Name: "wirer-daemon", AddSource: false})
+	slog.SetDefault(l)
+	l.Info("start daemon")
+	
 	ctx := ctrl.SetupSignalHandler()
+	ctx = log.IntoContext(ctx, l)
 
-	cri, err := cri.New()
+	cri, err := cri.New(ctx)
 	if err != nil {
-		slog.Error("cannot init cri", "err", err)
+		l.Error("cannot init cri", "error", err)
 		os.Exit(1)
 	}
 
-	xdpapp, err := xdp.NewXdpApp()
+	xdpapp, err := xdp.NewXdpApp(ctx)
 	if err != nil {
-		slog.Error("cannot setup xdp app cri", "err", err)
+		l.Error("cannot setup xdp app cri", "error", err)
 		os.Exit(1)
 	}
 
 	if err := xdpapp.Init(ctx); err != nil {
-		slog.Error("cannot init xdp app cri", "err", err)
+		l.Error("cannot init xdp app cri", "err", err)
 		os.Exit(1)
 	}
 
-	wd := wiredaemon.New(&wiredaemon.Config{
+	wd := wiredaemon.New(ctx, &wiredaemon.Config{
 		XDP: xdpapp,
 		CRI: cri,
 	})
 
-	nodeepp := nodeepproxy.New(&nodeepproxy.Config{
+	nodeepp := nodeepproxy.New(ctx, &nodeepproxy.Config{
 		Backend: wd,
 	})
-	wirep := wireproxy.New(&wireproxy.Config{
+	wirep := wireproxy.New(ctx, &wireproxy.Config{
 		Backend: wd,
 	})
 
 	wh := healthhandler.New()
 
-	s := grpcserver.New(grpcserver.Config{
+	s := grpcserver.New(ctx, grpcserver.Config{
 		Address:  ":" + strconv.Itoa(9999),
 		Insecure: true,
 	},
@@ -113,7 +101,7 @@ func main() {
 
 	// block
 	if err := s.Start(ctx); err != nil {
-		slog.Error("cannot start grpc server", "err", err)
+		l.Error("cannot start grpc server", "err", err)
 		os.Exit(1)
 	}
 }

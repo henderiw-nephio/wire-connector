@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"reflect"
 	"time"
 
+	"github.com/henderiw/logger/log"
 	"github.com/itchyny/gojq"
 	internalapi "k8s.io/cri-api/pkg/apis"
 	criv1 "k8s.io/cri-api/pkg/apis/runtime/v1"
@@ -35,24 +36,26 @@ type cri struct {
 	timeout       time.Duration
 	runtimeClient internalapi.RuntimeService
 	//imageClient   internalapi.ImageManagerService
+	l *slog.Logger
 }
 
-func New() (CRI, error) {
+func New(ctx context.Context) (CRI, error) {
 	runtimeClient, err := remote.NewRemoteRuntimeService(RuntimeEndpoint, defaultTimeout, nil)
 	if err != nil {
 		return nil, err
 	}
 	/*
-	imageClient, err := remote.NewRemoteImageService(ImageEndpoint, defaultTimeout, nil)
-	if err != nil {
-		return nil, err
-	}
+		imageClient, err := remote.NewRemoteImageService(ImageEndpoint, defaultTimeout, nil)
+		if err != nil {
+			return nil, err
+		}
 	*/
 
 	return &cri{
 		timeout:       defaultTimeout,
 		runtimeClient: runtimeClient,
 		//imageClient:   imageClient,
+		l: log.FromContext(ctx).WithGroup("cri"),
 	}, nil
 }
 
@@ -121,7 +124,7 @@ func GetNsPath(jsonString string) (string, error) {
 	}
 	query, err := gojq.Parse(jqNsPath)
 	if err != nil {
-		log.Fatalln(err)
+		return "", err
 	}
 	iter := query.Run(x) // or query.RunWithContext
 

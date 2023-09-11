@@ -17,13 +17,14 @@
 package wiredaemon
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"net"
-	"os"
 
 	"github.com/henderiw-nephio/wire-connector/pkg/xdp"
+	"github.com/henderiw/logger/log"
 	"github.com/vishvananda/netlink"
-	"golang.org/x/exp/slog"
 )
 
 type EndpointConfig struct {
@@ -34,19 +35,15 @@ type EndpointConfig struct {
 	HostIP  string
 }
 
-func NewEndpoint(cfg *EndpointConfig) Endpoint {
-	l := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: new(slog.LevelVar),
-		//AddSource: true,
-	})).WithGroup("wirer-endpoint")
-	slog.SetDefault(l)
+func NewEndpoint(ctx context.Context, cfg *EndpointConfig) Endpoint {
+
 	return Endpoint{
 		ifName: cfg.IfName,
 		//isReady: cfg.IsReady,
 		isLocal: cfg.IsLocal,
 		nsPath:  cfg.NsPath,
 		hostIP:  cfg.HostIP,
-		l:       l,
+		l:       log.FromContext(ctx).WithGroup("endpoint").With("ifName", cfg.IfName, "nsPath", cfg.NsPath, "hostIP", cfg.HostIP, "isLocal", cfg.IsLocal),
 	}
 }
 
@@ -71,7 +68,7 @@ func (r Endpoint) SetMAC(mac net.HardwareAddr) {
 }
 
 func (r Endpoint) DeployEp2Node() error {
-	r.l.Info("deploy ep2node endpoint", "ifName", r.ifName, "nsPath", r.nsPath)
+	r.l.Info("deploy ep2node endpoint")
 	if r.nsPath != "" {
 		// if this does not exist we add the interface
 		if !doesItfceExistsInNS(r.ifName, r.nsPath) {
@@ -85,7 +82,7 @@ func (r Endpoint) DeployEp2Node() error {
 			}
 		}
 	} else {
-		r.l.Info("deploy ep2node endpoint", "ifName", r.ifName, "nsPath", r.nsPath)
+		r.l.Info("deploy ep2node endpoint")
 		if doesItfceExists(r.ifName) {
 			if err := setItfceUp(r.veth); err != nil {
 				return err
@@ -104,7 +101,7 @@ func (r Endpoint) DeployEp2Node() error {
 }
 
 func (r Endpoint) DestroyEp2Node() error {
-	r.l.Info("destroy ep2node endpoint", "ifName", r.ifName, "nsPath", r.nsPath)
+	r.l.Info("destroy ep2node endpoint")
 	if r.nsPath != "" {
 		// if this does not exist we add the interface
 		// the delete is safe and validate the existance
@@ -120,7 +117,7 @@ func (r Endpoint) DestroyEp2Node() error {
 }
 
 func (r Endpoint) DeployNode2Node(peerEp Endpoint) error {
-	r.l.Info("deploy wire endpoint", "ifName", r.ifName, "nsPath", r.nsPath)
+	r.l.Info("deploy wire endpoint")
 	if r.isLocal {
 		// a local interface endpoint should exist
 		if _, err := netlink.LinkByName(r.ifName); err != nil {
@@ -142,7 +139,7 @@ func (r Endpoint) DeployNode2Node(peerEp Endpoint) error {
 // for local endpoints it deletes the veth itfce from the container ns
 // for remote endpoints it deletes the tun interface and xdp
 func (r Endpoint) DestroyNode2Node() error {
-	r.l.Info("destroy wire endpoint", "ifName", r.ifName, "local", r.isLocal)
+	r.l.Info("destroy wire endpoint")
 	// we only need to destroy non local ep of a wire since the other end is managed by node2ep
 	if !r.isLocal {
 		if err := deleteItfce(r.ifName); err != nil {

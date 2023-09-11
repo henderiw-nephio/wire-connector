@@ -1,6 +1,6 @@
 module github.com/henderiw-nephio/wire-connector
 
-go 1.20
+go 1.21.1
 
 require (
 	github.com/cilium/ebpf v0.9.1
@@ -10,6 +10,7 @@ require (
 	github.com/google/go-cmp v0.5.9
 	github.com/google/uuid v1.3.0
 	github.com/hansthienpondt/nipam v0.0.5
+	github.com/henderiw/logger v0.0.0-20230911123436-8655829b1abe
 	github.com/itchyny/gojq v0.12.13
 	github.com/nephio-project/nephio/controllers/pkg v0.0.0-20230724195903-feb6c2f91cc3
 	github.com/nokia/k8s-ipam v0.0.4-0.20230909054844-8b8e9e4ad9f7

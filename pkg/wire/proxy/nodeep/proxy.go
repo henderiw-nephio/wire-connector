@@ -18,12 +18,12 @@ package nodeepproxy
 
 import (
 	"context"
+	"log/slog"
 
-	"github.com/go-logr/logr"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/endpointpb"
 	"github.com/henderiw-nephio/wire-connector/pkg/wire"
+	"github.com/henderiw/logger/log"
 	"google.golang.org/grpc/peer"
-	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 type Proxy interface {
@@ -37,12 +37,11 @@ type Config struct {
 	Backend wire.Ep2NodeWirer
 }
 
-func New(cfg *Config) Proxy {
-	l := ctrl.Log.WithName("nodeep-proxy")
+func New(ctx context.Context, cfg *Config) Proxy {
 	return &p{
 		be:    cfg.Backend,
 		state: NewProxyState(&stateConfig{be: cfg.Backend}),
-		l:     l,
+		l:     log.FromContext(ctx).WithGroup("nodeep grpc proxy"),
 	}
 }
 
@@ -50,18 +49,21 @@ type p struct {
 	be    wire.Ep2NodeWirer
 	state *s
 	//logger
-	l logr.Logger
+	l *slog.Logger
 }
 
 func (r *p) EndpointGet(ctx context.Context, req *endpointpb.EndpointRequest) (*endpointpb.EndpointResponse, error) {
+	ctx = log.IntoContext(ctx, r.l.With("nsn", req.NodeKey.String(), "server", req.ServerType))
 	return r.be.EndpointGet(ctx, req)
 }
 
 func (r *p) EndpointCreate(ctx context.Context, req *endpointpb.EndpointRequest) (*endpointpb.EmptyResponse, error) {
+	ctx = log.IntoContext(ctx, r.l.With("nsn", req.NodeKey.String(), "server", req.ServerType))
 	return r.be.EndpointUpSert(ctx, req)
 }
 
 func (r *p) EndpointDelete(ctx context.Context, req *endpointpb.EndpointRequest) (*endpointpb.EmptyResponse, error) {
+	ctx = log.IntoContext(ctx, r.l.With("nsn", req.NodeKey.String(), "server", req.ServerType))
 	return r.be.EndpointDelete(ctx, req)
 }
 
@@ -72,7 +74,7 @@ func (r *p) EndpointWatch(req *endpointpb.WatchRequest, stream endpointpb.NodeEn
 	if p != nil {
 		addr = p.Addr.String()
 	}
-	r.l.Info("waatch", "address", addr, "req", req)
+	r.l.Info("watch", "address", addr, "req", req)
 
 	// TODO add watch
 	//r.state.AddCallBackFn(req, stream)

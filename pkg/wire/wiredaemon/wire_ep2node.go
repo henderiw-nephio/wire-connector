@@ -18,17 +18,17 @@ package wiredaemon
 
 import (
 	"context"
-	"os"
+	"log/slog"
 
 	"github.com/henderiw-nephio/wire-connector/pkg/cri"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/endpointpb"
-	"golang.org/x/exp/slog"
+	"github.com/henderiw/logger/log"
 )
 
 type WireEp2Node interface {
 	IsReady() bool
-	Deploy(req *endpointpb.EndpointRequest) error
-	Destroy(req *endpointpb.EndpointRequest) error
+	Deploy(ctx context.Context, req *endpointpb.EndpointRequest) error
+	Destroy(ctx context.Context, req *endpointpb.EndpointRequest) error
 }
 
 type WireEp2NodeConfig struct {
@@ -38,14 +38,9 @@ type WireEp2NodeConfig struct {
 }
 
 func NewWireEp2Node(ctx context.Context, nsPath string, cfg *WireEp2NodeConfig) WireEp2Node {
-	l := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: new(slog.LevelVar),
-		//AddSource: true,
-	})).WithGroup("wirer-ep2node")
-	slog.SetDefault(l)
 	r := &wep2node{
 		cri: cfg.CRI,
-		l:   l,
+		l:   log.FromContext(ctx).WithGroup("wirer ep2node"),
 	}
 	r.nsPath = nsPath
 	r.isReady = true
@@ -72,9 +67,9 @@ func (r *wep2node) IsReady() bool {
 // Creates a veth pair
 // Per endpoint deploys either a veth itfce in the container namespace
 // or a remote tunnel for which a veth pair gets cross connected with BPF XDP
-func (r *wep2node) Deploy(req *endpointpb.EndpointRequest) error {
+func (r *wep2node) Deploy(ctx context.Context, req *endpointpb.EndpointRequest) error {
 	for _, ep := range req.Endpoints {
-		epA := NewEndpoint(&EndpointConfig{
+		epA := NewEndpoint(ctx, &EndpointConfig{
 			IfName:  ep.IfName,
 			IsLocal: true,
 			NsPath:  r.nsPath, // for serverType this will be set to "" since the ep is on the host
@@ -83,7 +78,7 @@ func (r *wep2node) Deploy(req *endpointpb.EndpointRequest) error {
 		//if req.ServerType {
 		//	epA.nsPath = ""
 		//}
-		epB := NewEndpoint(&EndpointConfig{
+		epB := NewEndpoint(ctx, &EndpointConfig{
 			IfName:  getVethName(getHashValue(getNsIfName(req.NodeKey.Topology, req.NodeKey.NodeName, ep.IfName))),
 			IsLocal: true,
 			NsPath:  "", // this is explicit since this is the host namespace on which this req is send
@@ -124,15 +119,15 @@ func (r *wep2node) Deploy(req *endpointpb.EndpointRequest) error {
 	return nil
 }
 
-func (r *wep2node) Destroy(req *endpointpb.EndpointRequest) error {
+func (r *wep2node) Destroy(ctx context.Context, req *endpointpb.EndpointRequest) error {
 	for _, ep := range req.Endpoints {
-		epA := NewEndpoint(&EndpointConfig{
+		epA := NewEndpoint(ctx, &EndpointConfig{
 			IfName:  ep.IfName,
 			IsLocal: true,
 			NsPath:  r.nsPath, // for serverType this will be set to "" since the ep is on the host
 		})
 
-		epB := NewEndpoint(&EndpointConfig{
+		epB := NewEndpoint(ctx, &EndpointConfig{
 			IfName:  getVethName(getHashValue(getNsIfName(req.NodeKey.Topology, req.NodeKey.NodeName, ep.IfName))),
 			IsLocal: true,
 			NsPath:  "", // this is explicit since this is the host namespace on which this req is send
