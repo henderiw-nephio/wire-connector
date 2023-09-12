@@ -30,13 +30,13 @@ import (
 	servicecachecontroller "github.com/henderiw-nephio/wire-connector/controllers/service-cache-controller"
 	topologycachecontroller "github.com/henderiw-nephio/wire-connector/controllers/topology-cache-controller"
 	"github.com/henderiw-nephio/wire-connector/pkg/cluster"
-	"github.com/henderiw-nephio/wire-connector/pkg/wire"
-	wirecluster "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/cluster"
-	wiredaemon "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/daemon"
-	wirenode "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/node"
-	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/pod"
-	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/service"
-	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/topology"
+	"github.com/henderiw-nephio/wire-connector/pkg/wirer"
+	wirecluster "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/cluster"
+	wiredaemon "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/daemon"
+	wirenode "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/node"
+	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/pod"
+	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/service"
+	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/topology"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
 	//invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
 	"github.com/nokia/k8s-ipam/pkg/meta"
@@ -101,12 +101,12 @@ type reconciler struct {
 	mgr manager.Manager
 
 	//scheme       *runtime.Scheme
-	clusterCache wire.Cache[wirecluster.Cluster]
-	serviceCache wire.Cache[wireservice.Service]
-	topoCache    wire.Cache[wiretopology.Topology]
-	podCache     wire.Cache[wirepod.Pod]
-	daemonCache  wire.Cache[wiredaemon.Daemon]
-	nodeCache    wire.Cache[wirenode.Node]
+	clusterCache wirer.Cache[wirecluster.Cluster]
+	serviceCache wirer.Cache[wireservice.Service]
+	topoCache    wirer.Cache[wiretopology.Topology]
+	podCache     wirer.Cache[wirepod.Pod]
+	daemonCache  wirer.Cache[wiredaemon.Daemon]
+	nodeCache    wirer.Cache[wirenode.Node]
 }
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -156,7 +156,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			}
 
 			r.clusterCache.Upsert(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: clusterClient.GetName()}, wirecluster.Cluster{
-				Object: wire.Object{
+				Object: wirer.Object{
 					IsReady: true,
 				},
 				// add the controller with the service and topology/namespace reconcilers

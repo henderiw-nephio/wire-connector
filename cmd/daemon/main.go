@@ -29,9 +29,9 @@ import (
 	"github.com/henderiw-nephio/wire-connector/pkg/cri"
 	"github.com/henderiw-nephio/wire-connector/pkg/grpcserver"
 	"github.com/henderiw-nephio/wire-connector/pkg/grpcserver/healthhandler"
-	nodeepproxy "github.com/henderiw-nephio/wire-connector/pkg/wire/proxy/nodeep"
-	wireproxy "github.com/henderiw-nephio/wire-connector/pkg/wire/proxy/wire"
-	"github.com/henderiw-nephio/wire-connector/pkg/wire/wiredaemon"
+	nodeepproxy "github.com/henderiw-nephio/wire-connector/pkg/wirer/proxy/nodeep"
+	wireproxy "github.com/henderiw-nephio/wire-connector/pkg/wirer/proxy/wire"
+	"github.com/henderiw-nephio/wire-connector/pkg/wirer/wiredaemon"
 	"github.com/henderiw-nephio/wire-connector/pkg/xdp"
 	"github.com/henderiw/logger/log"
 	"golang.org/x/exp/slices"
@@ -45,27 +45,30 @@ var (
 )
 
 func main() {
+	// slog logger
 	l := log.NewLogger(&log.HandlerOptions{Name: "wirer-daemon", AddSource: false})
 	slog.SetDefault(l)
-	l.Info("start daemon")
-	
+
 	ctx := ctrl.SetupSignalHandler()
 	ctx = log.IntoContext(ctx, l)
 
+	log := l
+	log.Info("start")
+
 	cri, err := cri.New(ctx)
 	if err != nil {
-		l.Error("cannot init cri", "error", err)
+		log.Error("cannot init cri", "error", err)
 		os.Exit(1)
 	}
 
 	xdpapp, err := xdp.NewXdpApp(ctx)
 	if err != nil {
-		l.Error("cannot setup xdp app cri", "error", err)
+		log.Error("cannot setup xdp app cri", "error", err)
 		os.Exit(1)
 	}
 
 	if err := xdpapp.Init(ctx); err != nil {
-		l.Error("cannot init xdp app cri", "err", err)
+		log.Error("cannot init xdp app cri", "err", err)
 		os.Exit(1)
 	}
 
@@ -101,7 +104,7 @@ func main() {
 
 	// block
 	if err := s.Start(ctx); err != nil {
-		l.Error("cannot start grpc server", "err", err)
+		log.Error("cannot start grpc server", "err", err)
 		os.Exit(1)
 	}
 }

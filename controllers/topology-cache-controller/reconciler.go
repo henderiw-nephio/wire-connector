@@ -22,8 +22,8 @@ import (
 	"reflect"
 
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
-	"github.com/henderiw-nephio/wire-connector/pkg/wire"
-	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/topology"
+	"github.com/henderiw-nephio/wire-connector/pkg/wirer"
+	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/topology"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
 	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
 	"github.com/nokia/k8s-ipam/pkg/meta"
@@ -83,7 +83,7 @@ type reconciler struct {
 	client.Client
 
 	clusterName string
-	topoCache   wire.Cache[wiretopology.Topology]
+	topoCache   wirer.Cache[wiretopology.Topology]
 }
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -119,7 +119,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		}
 
 		r.topoCache.Upsert(ctx, types.NamespacedName{Namespace: r.clusterName, Name: req.Name}, wiretopology.Topology{
-			Object:      wire.Object{IsReady: true},
+			Object:      wirer.Object{IsReady: true},
 			ClusterName: r.clusterName,
 		})
 	} else {

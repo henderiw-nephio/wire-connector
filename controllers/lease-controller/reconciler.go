@@ -24,8 +24,8 @@ import (
 	"time"
 
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
-	"github.com/henderiw-nephio/wire-connector/pkg/wire"
-	wiredaemon "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/daemon"
+	"github.com/henderiw-nephio/wire-connector/pkg/wirer"
+	wiredaemon "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/daemon"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
 	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
 	"github.com/nokia/k8s-ipam/pkg/meta"
@@ -74,7 +74,7 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 type reconciler struct {
 	client.Client
 
-	daemonCache wire.Cache[wiredaemon.Daemon]
+	daemonCache wirer.Cache[wiredaemon.Daemon]
 }
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

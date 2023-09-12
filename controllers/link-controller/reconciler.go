@@ -103,6 +103,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	// for links owned by the logical interconnect link we dont do anything
+	// because th endpoint allocation is already done
 	for _, ownRef := range cr.OwnerReferences {
 		if ownRef.APIVersion == topov1alpha1.GroupVersion.String() &&
 			ownRef.Kind == topov1alpha1.LogicalInterconnectKind {

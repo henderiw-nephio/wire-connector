@@ -22,7 +22,7 @@ import (
 	"reflect"
 
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
-	vxlanclient "github.com/henderiw-nephio/wire-connector/pkg/wire/vxlan/client"
+	vxlanclient "github.com/henderiw-nephio/wire-connector/pkg/wirer/vxlan/client"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
 	"github.com/nephio-project/nephio/controllers/pkg/resource"
 	resourcev1alpha1 "github.com/nokia/k8s-ipam/apis/resource/common/v1alpha1"

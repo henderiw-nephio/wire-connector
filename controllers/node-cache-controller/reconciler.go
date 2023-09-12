@@ -22,9 +22,9 @@ import (
 	"reflect"
 
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
-	"github.com/henderiw-nephio/wire-connector/pkg/wire"
-	wirenode "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/node"
-	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/pod"
+	"github.com/henderiw-nephio/wire-connector/pkg/wirer"
+	wirenode "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/node"
+	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/pod"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
 	"github.com/nokia/k8s-ipam/pkg/meta"
 	"github.com/nokia/k8s-ipam/pkg/resource"
@@ -84,8 +84,8 @@ type reconciler struct {
 	client.Client
 
 	clusterName string
-	nodeCache   wire.Cache[wirenode.Node]
-	podCache    wire.Cache[wirepod.Pod]
+	nodeCache   wirer.Cache[wirenode.Node]
+	podCache    wirer.Cache[wirepod.Pod]
 }
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -122,7 +122,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	// we add the node as a pod to make the resolution easier for wiring and endpoint creation
 	// this means the wirer sees everything as a pod
 	r.podCache.Upsert(ctx, types.NamespacedName{Namespace: clusterNamespace, Name: cr.GetName()}, wirepod.Pod{
-		Object:       wire.Object{IsReady: true},
+		Object:       wirer.Object{IsReady: true},
 		HostIP:       wn.HostIP,
 		HostNodeName: cr.GetName(),
 	})

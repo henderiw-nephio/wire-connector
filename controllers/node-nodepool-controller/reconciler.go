@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
-	wirenode "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/node"
+	wirenode "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/node"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
 	"github.com/nephio-project/nephio/controllers/pkg/resource"
 	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"

@@ -23,14 +23,14 @@ import (
 	noder "github.com/henderiw-nephio/wire-connector/pkg/node"
 	"github.com/henderiw-nephio/wire-connector/pkg/nodemgr"
 	"github.com/henderiw-nephio/wire-connector/pkg/pod"
-	"github.com/henderiw-nephio/wire-connector/pkg/wire"
-	wirecluster "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/cluster"
-	wiredaemon "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/daemon"
-	wirenode "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/node"
-	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/pod"
-	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/service"
-	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/topology"
-	vxlanclient "github.com/henderiw-nephio/wire-connector/pkg/wire/vxlan/client"
+	"github.com/henderiw-nephio/wire-connector/pkg/wirer"
+	wirecluster "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/cluster"
+	wiredaemon "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/daemon"
+	wirenode "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/node"
+	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/pod"
+	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/service"
+	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/topology"
+	vxlanclient "github.com/henderiw-nephio/wire-connector/pkg/wirer/vxlan/client"
 	"github.com/henderiw-nephio/wire-connector/pkg/xdp"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -49,12 +49,12 @@ type Config struct {
 	NodeManager nodemgr.Manager // used in distributed approach
 	CRI         cri.CRI
 	XDP         xdp.XDP
-	PodCache    wire.Cache[wirepod.Pod]
-	DaemonCache wire.Cache[wiredaemon.Daemon]
-	NodeCache   wire.Cache[wirenode.Node]
+	PodCache    wirer.Cache[wirepod.Pod]
+	DaemonCache wirer.Cache[wiredaemon.Daemon]
+	NodeCache   wirer.Cache[wirenode.Node]
 	//NodePoolCache wire.Cache[invv1alpha1.NodePool]
-	ClusterCache  wire.Cache[wirecluster.Cluster]
-	ServiceCache  wire.Cache[wireservice.Service]
-	TopologyCache wire.Cache[wiretopology.Topology]
+	ClusterCache  wirer.Cache[wirecluster.Cluster]
+	ServiceCache  wirer.Cache[wireservice.Service]
+	TopologyCache wirer.Cache[wiretopology.Topology]
 	NodeRegistry  noder.NodeRegistry
 }

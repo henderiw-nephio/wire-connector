@@ -25,9 +25,9 @@ import (
 	"time"
 
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
-	"github.com/henderiw-nephio/wire-connector/pkg/wire"
-	wirenode "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/node"
-	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/service"
+	"github.com/henderiw-nephio/wire-connector/pkg/wirer"
+	wirenode "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/node"
+	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/service"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
 	"github.com/nokia/k8s-ipam/pkg/meta"
 	"github.com/nokia/k8s-ipam/pkg/resource"
@@ -86,7 +86,7 @@ type reconciler struct {
 	client.Client
 
 	clusterName  string
-	serviceCache wire.Cache[wireservice.Service]
+	serviceCache wirer.Cache[wireservice.Service]
 }
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -122,7 +122,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	r.serviceCache.Upsert(ctx,
 		types.NamespacedName{Name: r.clusterName},
 		wireservice.Service{
-			Object:      wire.Object{IsReady: true},
+			Object:      wirer.Object{IsReady: true},
 			GRPCAddress: cr.Status.LoadBalancer.Ingress[0].IP,     // we pick the first IP
 			GRPCPort:    strconv.Itoa(int(cr.Spec.Ports[0].Port)), // we expect only 1 service to be exposed
 		},

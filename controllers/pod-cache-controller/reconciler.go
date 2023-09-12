@@ -22,9 +22,9 @@ import (
 	"reflect"
 
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
-	"github.com/henderiw-nephio/wire-connector/pkg/wire"
-	wiredaemon "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/daemon"
-	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/pod"
+	"github.com/henderiw-nephio/wire-connector/pkg/wirer"
+	wiredaemon "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/daemon"
+	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/pod"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
 	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
 	"github.com/nokia/k8s-ipam/pkg/meta"
@@ -85,8 +85,8 @@ type reconciler struct {
 	client.Client
 
 	clusterName string
-	podCache    wire.Cache[wirepod.Pod]
-	daemonCache wire.Cache[wiredaemon.Daemon]
+	podCache    wirer.Cache[wirepod.Pod]
+	daemonCache wirer.Cache[wiredaemon.Daemon]
 }
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

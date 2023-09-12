@@ -27,7 +27,7 @@ import (
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
 	"github.com/henderiw-nephio/wire-connector/pkg/node"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/endpointpb"
-	wclient "github.com/henderiw-nephio/wire-connector/pkg/wire/client"
+	wclient "github.com/henderiw-nephio/wire-connector/pkg/wirer/client"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
 	"github.com/nephio-project/nephio/controllers/pkg/resource"
 	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"

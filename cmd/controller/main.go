@@ -19,6 +19,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -43,23 +44,23 @@ import (
 	"github.com/henderiw-nephio/wire-connector/pkg/node"
 	"github.com/henderiw-nephio/wire-connector/pkg/node/srlinux"
 	"github.com/henderiw-nephio/wire-connector/pkg/node/xserver"
-	"github.com/henderiw-nephio/wire-connector/pkg/wire"
-	wirecluster "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/cluster"
-	wiredaemon "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/daemon"
-	wirenode "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/node"
-	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/pod"
-	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/service"
-	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wire/cache/topology"
-	nodeepproxy "github.com/henderiw-nephio/wire-connector/pkg/wire/proxy/nodeep"
-	vxlanclient "github.com/henderiw-nephio/wire-connector/pkg/wire/vxlan/client"
-	wirecontroller "github.com/henderiw-nephio/wire-connector/pkg/wire/wirecontroller"
+	"github.com/henderiw-nephio/wire-connector/pkg/wirer"
+	wirecluster "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/cluster"
+	wiredaemon "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/daemon"
+	wirenode "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/node"
+	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/pod"
+	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/service"
+	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/topology"
+	nodeepproxy "github.com/henderiw-nephio/wire-connector/pkg/wirer/proxy/nodeep"
+	vxlanclient "github.com/henderiw-nephio/wire-connector/pkg/wirer/vxlan/client"
+	wirecontroller "github.com/henderiw-nephio/wire-connector/pkg/wirer/wirecontroller"
+	"github.com/henderiw/logger/log"
 	"go.uber.org/zap/zapcore"
 
 	//resolverproxy "github.com/henderiw-nephio/wire-connector/pkg/wire/proxy/resolver"
-	wireproxy "github.com/henderiw-nephio/wire-connector/pkg/wire/proxy/wire"
+	wireproxy "github.com/henderiw-nephio/wire-connector/pkg/wirer/proxy/wire"
 	reconciler "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
 	"golang.org/x/exp/slices"
-	"golang.org/x/exp/slog"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -69,27 +70,20 @@ import (
 	//+kubebuilder:scaffold:imports
 )
 
-/*
-var (
-	setupLog = ctrl.Log.WithName("setup")
-)
-*/
-
 func main() {
 	var enabledReconcilersString string
 
-	/*
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: new(slog.LevelVar),
-		//AddSource: true,
-	}))
-	*/
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: new(slog.LevelVar),
-		//AddSource: true,
-	})).WithGroup("controller main")
-	slog.SetDefault(logger)
+	// this is the strategic direction
+	l := log.NewLogger(&log.HandlerOptions{Name: "wirer-controller", AddSource: false})
+	slog.SetDefault(l)
 
+	ctx := ctrl.SetupSignalHandler()
+	ctx = log.IntoContext(ctx, l)
+
+	log := l
+	log.Info("start")
+
+	// this is the controller runtime dependency for now until they move to slog
 	opts := zap.Options{
 		Development: true,
 		TimeEncoder: zapcore.ISO8601TimeEncoder,
@@ -101,7 +95,7 @@ func main() {
 	// setup controllers
 	runScheme := runtime.NewScheme()
 	if err := scheme.AddToScheme(runScheme); err != nil {
-		slog.Error("cannot initialize schema", "err", err)
+		log.Error("cannot initialize schema", "error", err)
 		os.Exit(1)
 	}
 
@@ -109,24 +103,23 @@ func main() {
 		Scheme: runScheme,
 	})
 	if err != nil {
-		slog.Error("cannot start manager", "err", err)
+		log.Error("cannot start manager", "err", err)
 		os.Exit(1)
 	}
 
 	vxlanClient, err := vxlanclient.New(mgr.GetClient())
 	if err != nil {
-		slog.Error("cannot create vxlan client", "err", err)
+		log.Error("cannot create vxlan client", "err", err)
 		os.Exit(1)
 	}
-	slog.Info("setup controller")
-	ctx := ctrl.SetupSignalHandler()
+	log.Info("setup controller")
 
-	c := wire.NewCache[wirecluster.Cluster]()
-	svc := wire.NewCache[wireservice.Service]()
-	t := wire.NewCache[wiretopology.Topology]()
-	pd := wire.NewCache[wirepod.Pod]()
-	d := wire.NewCache[wiredaemon.Daemon]()
-	n := wire.NewCache[wirenode.Node]()
+	c := wirer.NewCache[wirecluster.Cluster]()
+	svc := wirer.NewCache[wireservice.Service]()
+	t := wirer.NewCache[wiretopology.Topology]()
+	pd := wirer.NewCache[wirepod.Pod]()
+	d := wirer.NewCache[wiredaemon.Daemon]()
+	n := wirer.NewCache[wirenode.Node]()
 
 	wc, err := wirecontroller.New(ctx, &wirecontroller.Config{
 		VXLANClient:   vxlanClient,
@@ -139,7 +132,7 @@ func main() {
 	})
 	if err != nil {
 		//setupLog.Error(err, "unable to start manager")
-		slog.Error("cannot start manager", "err", err)
+		log.Error("cannot start manager", "err", err)
 		os.Exit(1)
 	}
 
@@ -172,7 +165,7 @@ func main() {
 	go func() {
 		if err := s.Start(ctx); err != nil {
 			//setupLog.Error(err, "cannot start grpcserver")
-			slog.Error("cannot start grpc server", "err", err)
+			log.Error("cannot start grpc server", "err", err)
 			os.Exit(1)
 		}
 	}()
@@ -196,28 +189,28 @@ func main() {
 		}
 		if _, err = r.SetupWithManager(ctx, mgr, ctrlCfg); err != nil {
 			//setupLog.Error(err, "cannot setup with manager", "reconciler", name)
-			slog.Error("cannot setup manager", "err", err, "reconciler", name)
+			log.Error("cannot setup manager", "err", err, "reconciler", name)
 			os.Exit(1)
 		}
 		enabled = append(enabled, name)
 	}
 
 	if len(enabled) == 0 {
-		slog.Info("no reconcilers are enabled; did you forget to pass the --reconcilers flag?")
+		log.Info("no reconcilers are enabled; did you forget to pass the --reconcilers flag?")
 	} else {
-		slog.Info("enabled reconcilers", "reconcilers", strings.Join(enabled, ","))
+		log.Info("enabled reconcilers", "reconcilers", strings.Join(enabled, ","))
 	}
 
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		//setupLog.Error(err, "cannot set up health check")
-		slog.Error("cannot setup health check", "err", err)
+		log.Error("cannot setup health check", "err", err)
 		os.Exit(1)
 	}
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		//setupLog.Error(err, "cannot set up ready check")
-		slog.Error("cannot setup ready check", "err", err)
+		log.Error("cannot setup ready check", "err", err)
 		os.Exit(1)
 	}
 
@@ -227,17 +220,17 @@ func main() {
 			case <-ctx.Done():
 				return
 			default:
-				slog.Info("clusters...")
+				log.Info("clusters...")
 				for nsn, cluster := range c.List() {
-					slog.Info("cluster", "nsn", nsn, "data", cluster.IsReady)
+					log.Info("cluster", "nsn", nsn, "data", cluster.IsReady)
 				}
-				slog.Info("services...")
+				log.Info("services...")
 				for nsn, service := range svc.List() {
-					slog.Info("service", "nsn", nsn, "data", service)
+					log.Info("service", "nsn", nsn, "data", service)
 				}
-				slog.Info("topologies...")
+				log.Info("topologies...")
 				for nsn, topology := range t.List() {
-					slog.Info("topology", "nsn", nsn, "data", topology)
+					log.Info("topology", "nsn", nsn, "data", topology)
 				}
 				/*
 					setupLog.Info("nodes...")
@@ -245,22 +238,22 @@ func main() {
 						setupLog.Info("node", "Name", nsn, "node", node)
 					}
 				*/
-				slog.Info("pods...")
+				log.Info("pods...")
 				for nsn, pod := range pd.List() {
-					slog.Info("pod", "nsn", nsn, "data", pod)
+					log.Info("pod", "nsn", nsn, "data", pod)
 				}
-				slog.Info("daemons...")
+				log.Info("daemons...")
 				for nsn, daemon := range d.List() {
-					slog.Info("daemon", "nsn", nsn, "data", daemon)
+					log.Info("daemon", "nsn", nsn, "data", daemon)
 				}
 				time.Sleep(5 * time.Second)
 			}
 		}
 	}()
 
-	slog.Info("starting manager")
+	log.Info("starting manager")
 	if err := mgr.Start(ctx); err != nil {
-		slog.Error("cannot start manager", "err", err)
+		log.Error("cannot start manager", "err", err)
 		os.Exit(1)
 	}
 }

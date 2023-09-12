@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
-	wclient "github.com/henderiw-nephio/wire-connector/pkg/wire/client"
+	wclient "github.com/henderiw-nephio/wire-connector/pkg/wirer/client"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
 	"github.com/nephio-project/nephio/controllers/pkg/resource"
 	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
