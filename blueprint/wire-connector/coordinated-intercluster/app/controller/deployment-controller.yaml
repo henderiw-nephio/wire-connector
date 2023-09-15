@@ -55,8 +55,8 @@ spec:
           value: "true"
         - name: RECONCILER_CLUSTERCONTROLLER
           value: "true"
-        - name: RECONCILER_LINKCONTROLLER
-          value: "true"
+        #- name: RECONCILER_LINKCONTROLLER
+        #  value: "true"
         - name: RECONCILER_VXLANINDEXCONTROLLER
           value: "true"
         resources:

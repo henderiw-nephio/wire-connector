@@ -23,7 +23,9 @@ import (
 
 	clusterwatchcontroller "github.com/henderiw-nephio/wire-connector/controllers/cluster-controller/clusterwatch-controller"
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
+	epcachecontroller "github.com/henderiw-nephio/wire-connector/controllers/endpoint-cache-controller"
 	nodecachecontroller "github.com/henderiw-nephio/wire-connector/controllers/node-cache-controller"
+
 	//nodenodepoolcontroller "github.com/henderiw-nephio/wire-connector/controllers/node-nodepool-controller"
 	//nodepoolcachecontroller "github.com/henderiw-nephio/wire-connector/controllers/nodepool-cache-controller"
 	podcachecontroller "github.com/henderiw-nephio/wire-connector/controllers/pod-cache-controller"
@@ -38,11 +40,12 @@ import (
 	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/service"
 	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/topology"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
-	//invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
+	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
 	"github.com/nokia/k8s-ipam/pkg/meta"
 	"github.com/nokia/k8s-ipam/pkg/resource"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -73,9 +76,9 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 	}
 
 	/*
-	if err := invv1alpha1.AddToScheme(mgr.GetScheme()); err != nil {
-		return nil, err
-	}
+		if err := invv1alpha1.AddToScheme(mgr.GetScheme()); err != nil {
+			return nil, err
+		}
 	*/
 
 	// initialize reconciler
@@ -138,14 +141,23 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			r.clusterCache.Delete(ctx, req.NamespacedName)
 		} else {
 			log.Info("cluster ready")
+			runScheme := runtime.NewScheme()
+			if err := scheme.AddToScheme(runScheme); err != nil {
+				log.Error(err, "cannot initialize core schema")
+			}
+			if err := invv1alpha1.AddToScheme(runScheme); err != nil {
+				log.Error(err, "cannot initialize invv1alpha1 schema")
+			}
 			// update (add/update) node to cache
-			cl, err := client.New(config, client.Options{})
+			cl, err := client.New(config, client.Options{
+				Scheme: runScheme,
+			})
 			if err != nil {
 				log.Error(err, "cannot get cluster client")
 				return ctrl.Result{}, errors.Wrap(err, "cannot get cluster client")
 			}
 			cc := &ctrlconfig.Config{
-				//Scheme:        r.scheme,
+				Scheme:        runScheme,
 				ClusterName:   clusterClient.GetName(),
 				Client:        cl,
 				ServiceCache:  r.serviceCache,
@@ -167,19 +179,20 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 						{Object: &corev1.Service{}, Reconciler: servicecachecontroller.New(ctx, cc)},
 						{Object: &corev1.Pod{}, Reconciler: podcachecontroller.New(ctx, cc)},
 						{Object: &corev1.Node{}, Reconciler: nodecachecontroller.New(ctx, cc)},
+						{Object: &invv1alpha1.Endpoint{}, Reconciler: epcachecontroller.New(ctx, cc)},
 						/*
-						{Object: &invv1alpha1.NodePool{}, Reconciler: nodepoolcachecontroller.New(ctx, cc)},
-						{Object: &corev1.Node{}, Reconciler: nodenodepoolcontroller.New(ctx, cc),
-							Owns: []client.Object{&invv1alpha1.Node{}},
-							Watches: []clusterwatchcontroller.Watch{
-								{Object: &invv1alpha1.NodePool{}, EventHandler: nodenodepoolcontroller.NewNodePoolEventHandler(cc)},
+							{Object: &invv1alpha1.NodePool{}, Reconciler: nodepoolcachecontroller.New(ctx, cc)},
+							{Object: &corev1.Node{}, Reconciler: nodenodepoolcontroller.New(ctx, cc),
+								Owns: []client.Object{&invv1alpha1.Node{}},
+								Watches: []clusterwatchcontroller.Watch{
+									{Object: &invv1alpha1.NodePool{}, EventHandler: nodenodepoolcontroller.NewNodePoolEventHandler(cc)},
+								},
 							},
-						},
 						*/
 					},
 					RESTConfig: config,
 					RESTmapper: cl.RESTMapper(),
-					Scheme:     scheme.Scheme, // this is the default kubernetes scheme
+					Scheme:     runScheme, // this is the default kubernetes scheme
 				}),
 			})
 		}

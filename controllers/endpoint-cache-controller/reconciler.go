@@ -14,27 +14,22 @@
  limitations under the License.
 */
 
-package servicecachecontroller
+package endpointcachecontroller
 
 import (
 	"context"
 	"fmt"
-	"os"
 	"reflect"
-	"strconv"
-	"time"
 
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
 	"github.com/henderiw-nephio/wire-connector/pkg/wirer"
-	wirenode "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/node"
-	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/service"
+	wireendpoint "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/endpoint"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
+	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
 	"github.com/nokia/k8s-ipam/pkg/meta"
 	"github.com/nokia/k8s-ipam/pkg/resource"
 	"github.com/pkg/errors"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -43,7 +38,7 @@ import (
 )
 
 func init() {
-	reconcilerinterface.Register("servicecachecontroller", &reconciler{})
+	reconcilerinterface.Register("endpointcachecontroller", &reconciler{})
 }
 
 const (
@@ -52,12 +47,12 @@ const (
 	errUpdateStatus = "cannot update status"
 )
 
-// New Reconciler
+// New Reconciler -> used for intercluster controller
 func New(ctx context.Context, cfg *ctrlconfig.Config) reconcile.Reconciler {
 	return &reconciler{
-		Client:       cfg.Client,
-		serviceCache: cfg.ServiceCache,
-		clusterName:  cfg.ClusterName,
+		Client:      cfg.Client,
+		epCache:     cfg.EndpointCache,
+		clusterName: cfg.ClusterName,
 	}
 }
 
@@ -71,13 +66,12 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 
 	// initialize reconciler
 	r.Client = mgr.GetClient()
-	r.serviceCache = cfg.ServiceCache
-	r.clusterName = cfg.ClusterName
+	r.epCache = cfg.EndpointCache
 
 	return nil,
 		ctrl.NewControllerManagedBy(mgr).
-			Named("ServiceCacheController").
-			For(&corev1.Service{}).
+			Named("EndpointCacheController").
+			For(&invv1alpha1.Endpoint{}).
 			Complete(r)
 }
 
@@ -85,15 +79,20 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 type reconciler struct {
 	client.Client
 
-	clusterName  string
-	serviceCache wirer.Cache[wireservice.Service]
+	clusterName string
+	epCache     wirer.Cache[wireendpoint.Endpoint]
 }
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx).WithValues("cluster", r.clusterName)
-	log.Info("reconcile service")
+	log.Info("reconcile node")
 
-	cr := &corev1.Service{}
+	clusterNamespace := r.clusterName
+	if clusterNamespace == "" {
+		clusterNamespace = "default"
+	}
+
+	cr := &invv1alpha1.Endpoint{}
 	if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
 		// There's no need to requeue if we no longer exist. Otherwise we'll be
 		// requeued implicitly because we return an error.
@@ -101,44 +100,21 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			log.Error(err, errGetCr)
 			return ctrl.Result{}, errors.Wrap(resource.IgnoreNotFound(err), errGetCr)
 		}
-		r.serviceCache.Delete(ctx, types.NamespacedName{Namespace: r.clusterName, Name: req.Name})
+		r.epCache.Delete(ctx, req.NamespacedName)
 		return reconcile.Result{}, nil
 	}
 
 	if meta.WasDeleted(cr) {
-		r.serviceCache.Delete(ctx, types.NamespacedName{Namespace: r.clusterName, Name: req.Name})
+		r.epCache.Delete(ctx, req.NamespacedName)
 		return ctrl.Result{}, nil
 	}
 
-	if cr.Name != "wirer-service" || cr.Namespace != os.Getenv("POD_NAMESPACE") {
-		return ctrl.Result{}, nil
-	}
-	log.Info("wirer-service", "spec", cr.Spec, "status", cr.Status)
-	// the service is interested for us
-	if len(cr.Status.LoadBalancer.Ingress) == 0 {
-		r.serviceCache.Delete(ctx, types.NamespacedName{Name: r.clusterName})
-		return ctrl.Result{RequeueAfter: 1 * time.Second}, nil
-	}
-	r.serviceCache.Upsert(ctx,
-		types.NamespacedName{Name: r.clusterName},
-		wireservice.Service{
-			Object:      wirer.Object{IsReady: true},
-			GRPCAddress: cr.Status.LoadBalancer.Ingress[0].IP,     // we pick the first IP
-			GRPCPort:    strconv.Itoa(int(cr.Spec.Ports[0].Port)), // we expect only 1 service to be exposed
-		},
-	)
+	// update (add/update) node to cache
+	cr = cr.DeepCopy()
+	r.epCache.Upsert(ctx, req.NamespacedName, wireendpoint.Endpoint{
+		Object:   wirer.Object{IsReady: true},
+		Endpoint: *cr,
+	})
+
 	return ctrl.Result{}, nil
-}
-
-// getNode retrieves specific data from the CR.
-func (r *reconciler) getNode(n *corev1.Node) wirenode.Node {
-	node := wirenode.Node{}
-
-	for _, addr := range n.Status.Addresses {
-		if addr.Type == corev1.NodeInternalIP {
-			node.IsReady = true
-			node.HostIP = addr.Address
-		}
-	}
-	return node
 }

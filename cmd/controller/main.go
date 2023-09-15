@@ -51,6 +51,7 @@ import (
 	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/pod"
 	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/service"
 	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/topology"
+	wireendpoint "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/endpoint"
 	nodeepproxy "github.com/henderiw-nephio/wire-connector/pkg/wirer/proxy/nodeep"
 	vxlanclient "github.com/henderiw-nephio/wire-connector/pkg/wirer/vxlan/client"
 	wirecontroller "github.com/henderiw-nephio/wire-connector/pkg/wirer/wirecontroller"
@@ -120,6 +121,7 @@ func main() {
 	pd := wirer.NewCache[wirepod.Pod]()
 	d := wirer.NewCache[wiredaemon.Daemon]()
 	n := wirer.NewCache[wirenode.Node]()
+	ep := wirer.NewCache[wireendpoint.Endpoint]()
 
 	wc, err := wirecontroller.New(ctx, &wirecontroller.Config{
 		VXLANClient:   vxlanClient,
@@ -178,6 +180,7 @@ func main() {
 		TopologyCache: t,
 		DaemonCache:   d,
 		NodeCache:     n,
+		EndpointCache: ep,
 		NodeRegistry:  registerSupportedNodeProviders(),
 	}
 
@@ -188,7 +191,6 @@ func main() {
 			continue
 		}
 		if _, err = r.SetupWithManager(ctx, mgr, ctrlCfg); err != nil {
-			//setupLog.Error(err, "cannot setup with manager", "reconciler", name)
 			log.Error("cannot setup manager", "err", err, "reconciler", name)
 			os.Exit(1)
 		}

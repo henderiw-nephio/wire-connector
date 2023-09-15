@@ -31,6 +31,7 @@ import (
 	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/service"
 	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/topology"
 	vxlanclient "github.com/henderiw-nephio/wire-connector/pkg/wirer/vxlan/client"
+	wireendpoint "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/endpoint"
 	"github.com/henderiw-nephio/wire-connector/pkg/xdp"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -56,5 +57,6 @@ type Config struct {
 	ClusterCache  wirer.Cache[wirecluster.Cluster]
 	ServiceCache  wirer.Cache[wireservice.Service]
 	TopologyCache wirer.Cache[wiretopology.Topology]
+	EndpointCache wirer.Cache[wireendpoint.Endpoint]
 	NodeRegistry  noder.NodeRegistry
 }
