@@ -1,5 +1,5 @@
 /*
-Copyright 2022 Nokia.
+Copyright 2023 The Nephio Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,16 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package cluster
+package link2controller
 
-import (
-	clusterwatchcontroller "github.com/henderiw-nephio/wire-connector/controllers/cluster-controller/clusterwatch-controller"
-	"github.com/henderiw-nephio/wire-connector/pkg/wirer"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-)
-
-type Cluster struct {
-	wirer.Object
-	Client client.Client
-	clusterwatchcontroller.Controller
+type adder interface {
+	Add(item interface{})
 }

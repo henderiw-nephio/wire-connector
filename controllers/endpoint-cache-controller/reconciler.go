@@ -85,7 +85,7 @@ type reconciler struct {
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx).WithValues("cluster", r.clusterName)
-	log.Info("reconcile node")
+	log.Info("reconcile endpoint")
 
 	clusterNamespace := r.clusterName
 	if clusterNamespace == "" {

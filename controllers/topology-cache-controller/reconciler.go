@@ -98,19 +98,19 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			log.Error(err, errGetCr)
 			return ctrl.Result{}, errors.Wrap(resource.IgnoreNotFound(err), errGetCr)
 		}
-		r.topoCache.Delete(ctx, types.NamespacedName{Namespace: r.clusterName, Name: req.Name})
+		r.topoCache.Delete(ctx, types.NamespacedName{Name: req.Name})
 		return reconcile.Result{}, nil
 	}
 
 	if meta.WasDeleted(cr) {
-		r.topoCache.Delete(ctx, types.NamespacedName{Namespace: r.clusterName, Name: req.Name})
+		r.topoCache.Delete(ctx, types.NamespacedName{Name: req.Name})
 		return ctrl.Result{}, nil
 	}
 
 	// update (add/update) node to cache
 	if cr.GetLabels()[invv1alpha1.NephioTopologyKey] == cr.GetName() {
 		// validate if namespace is not already used in another cluster
-		t, err := r.topoCache.Get(types.NamespacedName{Namespace: r.clusterName, Name: req.Name})
+		t, err := r.topoCache.Get(types.NamespacedName{Name: req.Name})
 		if err == nil {
 			if t.ClusterName != r.clusterName {
 				log.Error(fmt.Errorf("overlapping namespace"), "overlapping namespace", "cluster", t.ClusterName, "cluster", r.clusterName)
@@ -118,7 +118,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			}
 		}
 
-		r.topoCache.Upsert(ctx, types.NamespacedName{Namespace: r.clusterName, Name: req.Name}, wiretopology.Topology{
+		r.topoCache.Upsert(ctx, types.NamespacedName{Name: req.Name}, wiretopology.Topology{
 			Object:      wirer.Object{IsReady: true},
 			ClusterName: r.clusterName,
 		})

@@ -29,7 +29,7 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "github.com/henderiw-nephio/wire-connector/controllers/cluster-controller"
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
-	_ "github.com/henderiw-nephio/wire-connector/controllers/link-controller"
+	_ "github.com/henderiw-nephio/wire-connector/controllers/link-controller2"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/logicalinterconnect-controller"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/node-cache-controller"
 	_ "github.com/henderiw-nephio/wire-connector/controllers/node-deployer"

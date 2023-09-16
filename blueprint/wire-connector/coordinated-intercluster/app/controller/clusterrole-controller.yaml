@@ -66,3 +66,15 @@ rules:
   - patch
   - create
   - delete
+- apiGroups:
+  - '*'
+  resources:
+  - configmaps
+  verbs:
+  - get
+  - list
+  - watch
+  - update
+  - patch
+  - create
+  - delete

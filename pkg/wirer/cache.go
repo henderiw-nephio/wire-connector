@@ -58,7 +58,7 @@ func (r *cache[T1]) Get(nsn types.NamespacedName) (T1, error) {
 
 	x, ok := r.db[nsn]
 	if !ok {
-		return *new(T1), fmt.Errorf(NotFound)
+		return *new(T1), fmt.Errorf("%s, nsn: %s", NotFound, nsn.String())
 	}
 	return x, nil
 }

@@ -35,6 +35,7 @@ import (
 	"github.com/henderiw-nephio/wire-connector/pkg/wirer"
 	wirecluster "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/cluster"
 	wiredaemon "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/daemon"
+	wireendpoint "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/endpoint"
 	wirenode "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/node"
 	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/pod"
 	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/service"
@@ -89,6 +90,7 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 	r.podCache = cfg.PodCache
 	r.daemonCache = cfg.DaemonCache
 	r.nodeCache = cfg.NodeCache
+	r.epCache = cfg.EndpointCache
 	r.mgr = mgr
 
 	return nil,
@@ -110,6 +112,7 @@ type reconciler struct {
 	podCache     wirer.Cache[wirepod.Pod]
 	daemonCache  wirer.Cache[wiredaemon.Daemon]
 	nodeCache    wirer.Cache[wirenode.Node]
+	epCache      wirer.Cache[wireendpoint.Endpoint]
 }
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -165,12 +168,14 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 				PodCache:      r.podCache,
 				NodeCache:     r.nodeCache,
 				DaemonCache:   r.daemonCache,
+				EndpointCache: r.epCache,
 			}
 
 			r.clusterCache.Upsert(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: clusterClient.GetName()}, wirecluster.Cluster{
 				Object: wirer.Object{
 					IsReady: true,
 				},
+				Client: cl,
 				// add the controller with the service and topology/namespace reconcilers
 				Controller: clusterwatchcontroller.New(r.mgr, &clusterwatchcontroller.Config{
 					Name: clusterClient.GetName(),

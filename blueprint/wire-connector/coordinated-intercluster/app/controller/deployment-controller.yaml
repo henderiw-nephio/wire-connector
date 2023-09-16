@@ -51,6 +51,8 @@ spec:
               fieldPath: status.hostIP
         - name: WIRER_INTERCLUSTER
           value: "true"
+        - name: RECONCILER_LinkCONTROLLER
+          value: "true"
         - name: RECONCILER_WIRECONTROLLER
           value: "true"
         - name: RECONCILER_CLUSTERCONTROLLER
