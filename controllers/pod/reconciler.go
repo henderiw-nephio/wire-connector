@@ -22,7 +22,6 @@ import (
 	"os"
 	"reflect"
 
-	"github.com/go-logr/logr"
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
 	"github.com/henderiw-nephio/wire-connector/pkg/cri"
 	"github.com/henderiw-nephio/wire-connector/pkg/pod"
@@ -76,19 +75,17 @@ type reconciler struct {
 
 	podManager pod.Manager
 	cri        cri.CRI
-
-	l logr.Logger
 }
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	r.l = log.FromContext(ctx)
+	log := log.FromContext(ctx)
 
 	cr := &corev1.Pod{}
 	if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
 		// There's no need to requeue if we no longer exist. Otherwise we'll be
 		// requeued implicitly because we return an error.
 		if resource.IgnoreNotFound(err) != nil {
-			r.l.Error(err, errGetCr)
+			log.Error(err, errGetCr)
 			return ctrl.Result{}, errors.Wrap(resource.IgnoreNotFound(err), errGetCr)
 		}
 		return reconcile.Result{}, nil
@@ -99,7 +96,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		// if so clean up the link wire
 		// delete the pod from the manager
 		r.podManager.DeletePod(req.NamespacedName)
-		r.l.Info("cr deleted")
+		log.Info("cr deleted")
 		return ctrl.Result{}, nil
 	}
 
@@ -109,7 +106,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, nil
 	}
 
-	r.l.Info("reconcile")
+	log.Info("reconcile")
 	// update (add/update) pod to inventory
 	r.podManager.UpsertPod(req.NamespacedName, cr)
 
@@ -121,7 +118,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	containers, err := r.cri.ListContainers(ctx, nil)
 	if err != nil {
-		r.l.Error(err, "cannot get containers from cri")
+		log.Error(err, "cannot get containers from cri")
 		return ctrl.Result{}, err
 	}
 
@@ -132,10 +129,10 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		}
 		info, err := r.cri.GetContainerInfo(ctx, c.GetId())
 		if err != nil {
-			r.l.Error(err, "cannot get container info name: %s, id: %s", containerName, c.GetId())
+			log.Error(err, "cannot get container info name: %s, id: %s", containerName, c.GetId())
 			return ctrl.Result{}, err
 		}
-		r.l.Info("container", "name", containerName, "name", fmt.Sprintf("%s=%s", cr.GetName(), info.PodName), "namespace", fmt.Sprintf("%s=%s", cr.GetNamespace(), info.Namespace))
+		log.Info("container", "name", containerName, "name", fmt.Sprintf("%s=%s", cr.GetName(), info.PodName), "namespace", fmt.Sprintf("%s=%s", cr.GetNamespace(), info.Namespace))
 		if info.PodName == cr.GetName() && info.Namespace == cr.GetNamespace() {
 			r.podManager.UpsertContainer(req.NamespacedName, containerName, &pod.ContainerCtx{
 				ID:     c.GetId(),

@@ -76,8 +76,8 @@ type reconciler struct {
 }
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	r.l = log.FromContext(ctx)
-	r.l.Info("reconcile")
+	log := log.FromContext(ctx)
+	log.Info("reconcile")
 
 	cr := &corev1.Node{}
 	if err := r.Get(ctx, req.NamespacedName, cr); err != nil {

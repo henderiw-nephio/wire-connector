@@ -113,7 +113,7 @@ func (r *wc) resolveWire(ctx context.Context, wreq *WireReq) []*resolve.Data {
 	for epIdx := range wreq.Endpoints {
 		resolvedData[epIdx] = r.resolveEndpoint(wreq.GetEndpointNodeNSN(epIdx), wreq.Intercluster)
 	}
-	if resolvedData[0].Action == false && resolvedData[1].Action == false {
+	if !resolvedData[0].Action && !resolvedData[1].Action {
 		return []*resolve.Data{
 			{
 				Success: false,

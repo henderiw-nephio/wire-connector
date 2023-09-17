@@ -22,7 +22,6 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/go-logr/logr"
 	"github.com/nephio-project/nephio/controllers/pkg/resource"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -41,7 +40,6 @@ const (
 type Capi struct {
 	client.Client
 	Secret *corev1.Secret
-	l      logr.Logger
 }
 
 func (r *Capi) GetName() string {
@@ -67,22 +65,22 @@ func (r *Capi) GetRESTConfig(ctx context.Context) (*rest.Config, error) {
 }
 
 func (r *Capi) isCapiClusterReady(ctx context.Context) bool {
-	r.l = log.FromContext(ctx)
+	log := log.FromContext(ctx)
 	name := r.GetName()
 
 	cl := resource.GetUnstructuredFromGVK(&schema.GroupVersionKind{Group: capiv1beta1.GroupVersion.Group, Version: capiv1beta1.GroupVersion.Version, Kind: reflect.TypeOf(capiv1beta1.Cluster{}).Name()})
 	if err := r.Get(ctx, types.NamespacedName{Namespace: r.Secret.GetNamespace(), Name: name}, cl); err != nil {
-		r.l.Error(err, "cannot get cluster")
+		log.Error(err, "cannot get cluster")
 		return false
 	}
 	b, err := json.Marshal(cl)
 	if err != nil {
-		r.l.Error(err, "cannot marshal cluster")
+		log.Error(err, "cannot marshal cluster")
 		return false
 	}
 	cluster := &capiv1beta1.Cluster{}
 	if err := json.Unmarshal(b, cluster); err != nil {
-		r.l.Error(err, "cannot unmarshal cluster")
+		log.Error(err, "cannot unmarshal cluster")
 		return false
 	}
 	return isReady(cluster.GetConditions())

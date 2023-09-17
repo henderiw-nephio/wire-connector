@@ -46,7 +46,7 @@ func init() {
 }
 
 const (
-	finalizer = "topo.nephio.org/finalizer"
+	finalizer = "link.topo.nephio.org/finalizer"
 	// error
 	errGetCr        = "cannot get resource"
 	errUpdateStatus = "cannot update status"

@@ -63,6 +63,7 @@ func init() {
 }
 
 const (
+	finalizer = "cluster.topo.nephio.org/finalizer"
 	// error
 	errGetCr        = "cannot get resource"
 	errUpdateStatus = "cannot update status"
@@ -81,6 +82,7 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 			return nil, err
 		}
 	*/
+	r.finalizer = resource.NewAPIFinalizer(mgr.GetClient(), finalizer)
 
 	// initialize reconciler
 	r.Client = mgr.GetClient()
@@ -103,7 +105,8 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 // reconciler reconciles a KRM resource
 type reconciler struct {
 	client.Client
-	mgr manager.Manager
+	mgr       manager.Manager
+	finalizer *resource.APIFinalizer
 
 	//scheme       *runtime.Scheme
 	clusterCache wirer.Cache[wirecluster.Cluster]
@@ -131,17 +134,33 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return reconcile.Result{}, nil
 	}
 
+	// get clusterclient will return a client if the name of the secret contains kubeconfig
+	clusterClient := cluster.Cluster{Client: r.Client}.GetClusterClient(cr)
+
 	if meta.WasDeleted(cr) {
-		r.clusterCache.Delete(ctx, req.NamespacedName)
+		if clusterClient != nil {
+			// we only act on secrets that are clusterclients
+			r.clusterCache.Delete(ctx, types.NamespacedName{Name: clusterClient.GetName()})
+
+			if err := r.finalizer.RemoveFinalizer(ctx, cr); err != nil {
+				log.Error(err, "cannot remove finalizer")
+				return reconcile.Result{Requeue: true}, err
+			}
+		}
+
 		return ctrl.Result{}, nil
 	}
 
-	clusterClient := cluster.Cluster{Client: r.Client}.GetClusterClient(cr)
 	if clusterClient != nil {
+		if err := r.finalizer.AddFinalizer(ctx, cr); err != nil {
+			log.Error(err, "cannot add finalizer")
+			return reconcile.Result{Requeue: true}, err
+		}
+
 		config, err := clusterClient.GetRESTConfig(ctx)
 		if err != nil {
 			log.Info("cluster client cannot get restconfig", "err", err)
-			r.clusterCache.Delete(ctx, req.NamespacedName)
+			r.clusterCache.Delete(ctx, types.NamespacedName{Name: clusterClient.GetName()})
 		} else {
 			log.Info("cluster ready")
 			runScheme := runtime.NewScheme()
@@ -171,7 +190,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 				EndpointCache: r.epCache,
 			}
 
-			r.clusterCache.Upsert(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: clusterClient.GetName()}, wirecluster.Cluster{
+			r.clusterCache.Upsert(ctx, types.NamespacedName{Name: clusterClient.GetName()}, wirecluster.Cluster{
 				Object: wirer.Object{
 					IsReady: true,
 				},
@@ -201,9 +220,6 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 				}),
 			})
 		}
-	} else {
-
-		r.clusterCache.Delete(ctx, req.NamespacedName)
 	}
 	return ctrl.Result{}, nil
 }

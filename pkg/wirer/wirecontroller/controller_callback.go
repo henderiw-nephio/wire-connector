@@ -78,8 +78,8 @@ func (r *wc) clusterCallback(ctx context.Context, a wirer.Action, nsn types.Name
 		// for topologies we store the following data
 		// namespace = cluster, name = namespace which is the topology
 		// we check if the Namespace of the topology matches the clusterName
-		for topoNSN := range r.topologyCache.List() {
-			if topoNSN.Namespace == nsn.Name {
+		for topoNSN, topo := range r.topologyCache.List() {
+			if topo.ClusterName == nsn.Name {
 				r.topologyCache.Delete(ctx, topoNSN)
 			}
 		}

@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/go-logr/logr"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
 	"github.com/nephio-project/nephio/controllers/pkg/resource"
 	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
@@ -97,20 +96,18 @@ type reconciler struct {
 	epLease   lease.Lease
 
 	claimedEndpoints []invv1alpha1.Endpoint
-
-	l logr.Logger
 }
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	r.l = log.FromContext(ctx)
-	r.l.Info("reconcile", "req", req)
+	log := log.FromContext(ctx)
+	log.Info("reconcile", "req", req)
 
 	cr := &topov1alpha1.LogicalInterconnect{}
 	if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
 		// There's no need to requeue if we no longer exist. Otherwise we'll be
 		// requeued implicitly because we return an error.
 		if resource.IgnoreNotFound(err) != nil {
-			r.l.Error(err, errGetCr)
+			log.Error(err, errGetCr)
 			return ctrl.Result{}, perrors.Wrap(resource.IgnoreNotFound(err), errGetCr)
 		}
 		return reconcile.Result{}, nil
@@ -127,30 +124,30 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	if meta.WasDeleted(cr) {
 		// delete usedRef from endpoint status
 		if err := r.endpoint.DeleteClaim(ctx, r.claimedEndpoints); err != nil {
-			r.l.Error(err, "cannot delete endpoint claim")
+			log.Error(err, "cannot delete endpoint claim")
 			cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
 			return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 		}
 		if err := r.finalizer.RemoveFinalizer(ctx, cr); err != nil {
-			r.l.Error(err, "cannot remove finalizer")
+			log.Error(err, "cannot remove finalizer")
 			cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
 			return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 		}
-		r.l.Info("Successfully deleted resource")
+		log.Info("Successfully deleted resource")
 		return reconcile.Result{Requeue: false}, nil
 	}
 	if err := r.finalizer.AddFinalizer(ctx, cr); err != nil {
 		// If this is the first time we encounter this issue we'll be requeued
 		// implicitly when we update our status with the new error condition. If
 		// not, we requeue explicitly, which will trigger backoff.
-		r.l.Error(err, "cannot add finalizer")
+		log.Error(err, "cannot add finalizer")
 		cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
 		return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 	}
 
 	// acquire lease to update the resource
 	if err := r.epLease.AcquireLease(ctx, cr); err != nil {
-		r.l.Error(err, "cannot acquire lease")
+		log.Error(err, "cannot acquire lease")
 		cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
 		return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 	}
@@ -159,15 +156,15 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		// populate resources failed
 		if errd := r.resources.APIDelete(ctx, cr); errd != nil {
 			err = errors.Join(err, errd)
-			r.l.Error(err, "cannot populate and delete existingresources")
+			log.Error(err, "cannot populate and delete existingresources")
 			return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 		}
 		if errd := r.endpoint.DeleteClaim(ctx, r.claimedEndpoints); errd != nil {
 			err = errors.Join(err, errd)
-			r.l.Error(err, "cannot populate and delete endpoint claims")
+			log.Error(err, "cannot populate and delete endpoint claims")
 			return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 		}
-		r.l.Error(err, "cannot populate resources")
+		log.Error(err, "cannot populate resources")
 		cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
 		return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 	}
@@ -177,7 +174,8 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 }
 
 func (r *reconciler) populateResources(ctx context.Context, cr *topov1alpha1.LogicalInterconnect) error {
-	r.l.Info("populate resources")
+	log := log.FromContext(ctx)
+	log.Info("populate resources")
 	var err error
 	// initialize the resource list
 	r.resources.Init(client.MatchingLabels{})

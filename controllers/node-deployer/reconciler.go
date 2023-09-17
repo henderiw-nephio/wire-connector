@@ -23,7 +23,6 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/go-logr/logr"
 	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
 	"github.com/henderiw-nephio/wire-connector/pkg/node"
 	nadv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
@@ -103,12 +102,11 @@ type reconciler struct {
 	nodeRegistry node.NodeRegistry
 	//resources    resources.Resources
 
-	l logr.Logger
 }
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	r.l = log.FromContext(ctx)
-	r.l.Info("reconcile", "req", req)
+	log := log.FromContext(ctx)
+	log.Info("reconcile", "req", req)
 
 	res := resources.New(r.APIPatchingApplicator, resources.Config{
 		OwnerRef: true,
@@ -121,7 +119,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
 		// if the resource no longer exists the reconcile loop is done
 		if resource.IgnoreNotFound(err) != nil {
-			r.l.Error(err, errGetCr)
+			log.Error(err, errGetCr)
 			return ctrl.Result{}, errors.Wrap(resource.IgnoreNotFound(err), errGetCr)
 		}
 		return ctrl.Result{}, nil
@@ -130,11 +128,11 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	if resource.WasDeleted(cr) {
 		if err := r.finalizer.RemoveFinalizer(ctx, cr); err != nil {
-			r.l.Error(err, "cannot remove finalizer")
+			log.Error(err, "cannot remove finalizer")
 			cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
 			return ctrl.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 		}
-		r.l.Info("Successfully deleted resource")
+		log.Info("Successfully deleted resource")
 		return ctrl.Result{}, nil
 	}
 
@@ -167,7 +165,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	if os.Getenv("ENABLE_NAD") == "true" {
 		for _, nad := range nads {
-			r.l.Info("nad info", "name", nad.GetName())
+			log.Info("nad info", "name", nad.GetName())
 			if err := res.AddNewResource(cr, nad); err != nil {
 				cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
 				return ctrl.Result{}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
@@ -202,13 +200,13 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{Requeue: true, RequeueAfter: 5 * time.Second}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 	}
 
-	r.l.Info("pod ips", "ips", podIPs)
+	log.Info("pod ips", "ips", podIPs)
 	if err := node.SetInitialConfig(ctx, cr, podIPs); err != nil {
-		r.l.Error(err, "cannot set initial config")
+		log.Error(err, "cannot set initial config")
 		cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
 		return ctrl.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 	}
-	
+
 	// add a target to the deployment using ownerReferences
 	targetRes := resources.New(r.APIPatchingApplicator, resources.Config{
 		OwnerRef: true,
@@ -217,24 +215,25 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		},
 	})
 	/*
-	if err := targetRes.AddNewResource(cr, buildTarget(cr, podIPs)); err != nil {
-		r.l.Error(err, "cannot add target resource")
-		cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
-		return ctrl.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
-	}
+		if err := targetRes.AddNewResource(cr, buildTarget(cr, podIPs)); err != nil {
+			r.l.Error(err, "cannot add target resource")
+			cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
+			return ctrl.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+		}
 	*/
 	if err := targetRes.APIApply(ctx, cr); err != nil {
-		r.l.Error(err, "cannot apply target resource")
+		log.Error(err, "cannot apply target resource")
 		cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
 		return ctrl.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 	}
 
-	r.l.Info("ready", "req", req)
+	log.Info("ready", "req", req)
 	cr.SetConditions(resourcev1alpha1.Ready())
 	return ctrl.Result{}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 }
 
 func (r *reconciler) handlePodUpdate(ctx context.Context, cr *invv1alpha1.Node, newPod *corev1.Pod) error {
+	log := log.FromContext(ctx)
 	var create bool
 	existingPod := &corev1.Pod{}
 	if err := r.Get(ctx, types.NamespacedName{
@@ -247,13 +246,13 @@ func (r *reconciler) handlePodUpdate(ctx context.Context, cr *invv1alpha1.Node, 
 		// pod does not exist -> indicate to create it
 		create = true
 	} else {
-		r.l.Info("pod exists",
+		log.Info("pod exists",
 			"oldHash", existingPod.GetAnnotations()[invv1alpha1.RevisionHash],
 			"newHash", newPod.GetAnnotations()[invv1alpha1.RevisionHash],
 		)
 		if newPod.GetAnnotations()[invv1alpha1.RevisionHash] != existingPod.GetAnnotations()[invv1alpha1.RevisionHash] {
 			// pod spec changed, since pods are immutable we delete and create the pod
-			r.l.Info("pod spec changed")
+			log.Info("pod spec changed")
 			if err := r.Delete(ctx, existingPod); err != nil {
 				return err
 			}
