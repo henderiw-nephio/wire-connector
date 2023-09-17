@@ -17,15 +17,16 @@ limitations under the License.
 package wirecontroller
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"os"
 
-	"github.com/go-logr/logr"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
 	"github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/resolve"
 	"github.com/henderiw-nephio/wire-connector/pkg/wirer/state"
+	"github.com/henderiw/logger/log"
 	"k8s.io/apimachinery/pkg/types"
-	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 type DesiredAction string
@@ -41,13 +42,11 @@ type Wire struct {
 	WireReq        *WireReq
 	WireResp       *WireResp
 	EndpointsState []state.State
-	l              logr.Logger
+	l              *slog.Logger
 }
 
 // NewWire is like create link/wire, once the object exists, this is no longer required
-func NewWire(d Dispatcher, wreq *WireReq, vpnID uint32) *Wire {
-	l := ctrl.Log.WithName("wire").WithValues("nsn", wreq.GetNSN())
-
+func NewWire(ctx context.Context, d Dispatcher, wreq *WireReq, vpnID uint32) *Wire {
 	wreq.AddVPN(vpnID)
 	return &Wire{
 		dispatcher:     d,
@@ -55,7 +54,7 @@ func NewWire(d Dispatcher, wreq *WireReq, vpnID uint32) *Wire {
 		WireReq:        wreq,
 		WireResp:       newWireResp(wreq),
 		EndpointsState: []state.State{&state.Deleted{}, &state.Deleted{}},
-		l:              l,
+		l:              log.FromContext(ctx).WithGroup("wire").With("nsn", wreq.GetNSN()),
 	}
 }
 
@@ -80,41 +79,44 @@ func (r *Wire) GetAdditionalState(eventCtx *state.EventCtx) []state.StateCtx {
 	}
 }
 
-func (r *Wire) Transition(newState state.State, eventCtx *state.EventCtx, generatedEvents ...state.WorkerAction) {
-	r.l.Info("transition", "from/to", fmt.Sprintf("%s/%s", r.EndpointsState[eventCtx.EpIdx], newState), "eventCtx", eventCtx, "wireResp", r.WireResp, "generated events", generatedEvents)
+func (r *Wire) Transition(ctx context.Context, newState state.State, eventCtx *state.EventCtx, generatedEvents ...state.WorkerAction) {
+	log := log.FromContext(ctx).With("from/to", fmt.Sprintf("%s/%s", r.EndpointsState[eventCtx.EpIdx], newState), "eventCtx", eventCtx, "wireResp", r.WireResp, "generated events", generatedEvents)
+	log.Info("transition")
 	r.EndpointsState[eventCtx.EpIdx] = newState
 	r.WireResp.UpdateStatus(newState, eventCtx)
-	r.l.Info("transition", "link status", fmt.Sprintf("%s/%s", r.WireResp.StatusCode.String(), r.WireResp.Reason),
+	log.Info("transition", "link status", fmt.Sprintf("%s/%s", r.WireResp.StatusCode.String(), r.WireResp.Reason),
 		"ep0 status", fmt.Sprintf("%s/%s", r.WireResp.EndpointsStatus[0].StatusCode.String(), r.WireResp.EndpointsStatus[0].Reason),
 		"ep1 status", fmt.Sprintf("%s/%s", r.WireResp.EndpointsStatus[1].StatusCode.String(), r.WireResp.EndpointsStatus[1].Reason),
 	)
 
 	for _, ge := range generatedEvents {
-		r.l.Info("transition generated event", "from/to", fmt.Sprintf("%s/%s", r.EndpointsState[eventCtx.EpIdx], newState), "ge", ge)
+		log = log.With("from/to", fmt.Sprintf("%s/%s", r.EndpointsState[eventCtx.EpIdx], newState), "ge", ge)
+		log.Info("transition generated event")
 		if r.WireReq.IsResolved(eventCtx.EpIdx) {
 			// should always resolve
 			workerNsn := types.NamespacedName{
-				Namespace: "default",
 				Name:      r.WireReq.GetHostNodeName(eventCtx.EpIdx),
 			}
 			if os.Getenv("WIRER_INTERCLUSTER") == "true" {
 				workerNsn = types.NamespacedName{
-					Namespace: "default",
 					Name:      r.WireReq.GetClusterName(eventCtx.EpIdx),
 				}
 			}
+			log.Info("transition generated event", "workerNsn", workerNsn)
 
 			if err := r.dispatcher.Write(workerNsn, state.WorkerEvent{Action: ge, Req: r.WireReq, EventCtx: eventCtx}); err != nil {
 				// should never happen, as it means the worker does not exist
-				r.HandleEvent(state.FailedEvent, eventCtx)
+				newEventCtx := *eventCtx
+				newEventCtx.Message = err.Error()
+				r.HandleEvent(ctx, state.FailedEvent, &newEventCtx)
 				continue
 			}
 		}
 	}
 }
 
-func (r *Wire) HandleEvent(event state.Event, eventCtx *state.EventCtx) {
-	r.EndpointsState[eventCtx.EpIdx].HandleEvent(event, eventCtx, r)
+func (r *Wire) HandleEvent(ctx context.Context,event state.Event, eventCtx *state.EventCtx) {
+	r.EndpointsState[eventCtx.EpIdx].HandleEvent(ctx, event, eventCtx, r)
 }
 
 type WireReq struct {
@@ -149,7 +151,6 @@ func (r *WireReq) Resolve(resolvedData []*resolve.Data) {
 			r.Endpoints[epIdx].HostNodeName = res.HostNodeName
 			r.Endpoints[epIdx].ServiceEndpoint = res.ServiceEndpoint
 			r.Endpoints[epIdx].LocalAction = res.Action
-			r.Endpoints[epIdx].ClusterName = res.ClusterName
 		} else {
 			r.Unresolve(epIdx)
 		}

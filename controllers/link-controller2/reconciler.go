@@ -163,6 +163,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		if errd := r.epCache.DeleteClaim(ctx, cr); errd != nil {
 			err = errors.Join(err, errd)
 			log.Error(err, "cannot claim resource and delete endpoint claims")
+			cr.SetConditions(resourcev1alpha1.Failed(err.Error()))
 			return reconcile.Result{Requeue: true}, perrors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 		}
 		log.Error(err, "cannot claim resources")

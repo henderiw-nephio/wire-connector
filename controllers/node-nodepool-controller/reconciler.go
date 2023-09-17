@@ -18,6 +18,8 @@ package nodenodepoolcontroller
 
 import (
 	"context"
+	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -63,9 +65,15 @@ func New(ctx context.Context, cfg *ctrlconfig.Config) reconcile.Reconciler {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c interface{}) (map[schema.GroupVersionKind]chan event.GenericEvent, error) {
+	cfg, ok := c.(*ctrlconfig.Config)
+	if !ok {
+		return nil, fmt.Errorf("cannot initialize, expecting controllerConfig, got: %s", reflect.TypeOf(c).Name())
+	}
 	// initialize reconciler
 	r.APIPatchingApplicator = resource.NewAPIPatchingApplicator(mgr.GetClient())
 	r.finalizer = resource.NewAPIFinalizer(mgr.GetClient(), finalizer)
+
+	r.clusterName = cfg.ClusterName
 
 	return nil,
 		ctrl.NewControllerManagedBy(mgr).
@@ -89,6 +97,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	log.Info("reconcile node")
 
 	res := resources.New(r.APIPatchingApplicator, resources.Config{
+		OwnerRef: false,
 		Owns: []schema.GroupVersionKind{
 			invv1alpha1.NodeGroupVersionKind,
 		},
@@ -120,14 +129,15 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, nil
 	}
 
-	if err := r.finalizer.AddFinalizer(ctx, cr); err != nil {
-		log.Error(err, "cannot add finalizer")
-		return reconcile.Result{Requeue: true}, err
-	}
-
 	found := false
 	for labelKey, labelValue := range cr.GetLabels() {
 		if strings.Contains(labelKey, "nodepool") {
+			
+			if err := r.finalizer.AddFinalizer(ctx, cr); err != nil {
+				log.Error(err, "cannot add finalizer")
+				return reconcile.Result{Requeue: true}, err
+			}
+
 			np := &invv1alpha1.NodePool{}
 			if err := r.Get(ctx, types.NamespacedName{Namespace: "default", Name: labelValue}, np); err != nil {
 				if resource.IgnoreNotFound(err) != nil {
@@ -156,16 +166,10 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			for _, addr := range cr.Status.Addresses {
 				// there is only 1 internal ip
 				if addr.Type == corev1.NodeInternalIP {
-					namespace := r.clusterName
-					if namespace == "" {
-						namespace = "default"
-					}
-
 					if err := res.AddNewResource(cr, invv1alpha1.BuildNode(
 						metav1.ObjectMeta{
 							Name:      cr.Name,
-							Namespace: namespace,
-							//OwnerReferences: []metav1.OwnerReference{{APIVersion: cr.APIVersion, Kind: cr.Kind, Name: cr.Name, UID: cr.UID, Controller: pointer.Bool(true)}},
+							Namespace: r.clusterName,
 						},
 						invv1alpha1.NodeSpec{
 							Provider:          np.Spec.Provider,

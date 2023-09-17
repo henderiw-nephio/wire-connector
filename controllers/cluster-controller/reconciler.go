@@ -41,11 +41,12 @@ import (
 	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/service"
 	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/topology"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
+	"github.com/nephio-project/nephio/controllers/pkg/resource"
 	invv1alpha1 "github.com/nokia/k8s-ipam/apis/inv/v1alpha1"
 	"github.com/nokia/k8s-ipam/pkg/meta"
-	"github.com/nokia/k8s-ipam/pkg/resource"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -71,17 +72,10 @@ const (
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c interface{}) (map[schema.GroupVersionKind]chan event.GenericEvent, error) {
-	// register scheme
 	cfg, ok := c.(*ctrlconfig.Config)
 	if !ok {
 		return nil, fmt.Errorf("cannot initialize, expecting controllerConfig, got: %s", reflect.TypeOf(c).Name())
 	}
-
-	/*
-		if err := invv1alpha1.AddToScheme(mgr.GetScheme()); err != nil {
-			return nil, err
-		}
-	*/
 	r.finalizer = resource.NewAPIFinalizer(mgr.GetClient(), finalizer)
 
 	// initialize reconciler
@@ -99,6 +93,7 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 		ctrl.NewControllerManagedBy(mgr).
 			Named("ClusterController").
 			For(&corev1.Secret{}).
+			Owns(&corev1.ConfigMap{}).
 			Complete(r)
 }
 
@@ -163,6 +158,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			r.clusterCache.Delete(ctx, types.NamespacedName{Name: clusterClient.GetName()})
 		} else {
 			log.Info("cluster ready")
+
 			runScheme := runtime.NewScheme()
 			if err := scheme.AddToScheme(runScheme); err != nil {
 				log.Error(err, "cannot initialize core schema")
@@ -178,6 +174,13 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 				log.Error(err, "cannot get cluster client")
 				return ctrl.Result{}, errors.Wrap(err, "cannot get cluster client")
 			}
+
+			rcl := resource.NewAPIPatchingApplicator(cl)
+			if err := rcl.Apply(ctx, buildConfigMap(cr, clusterClient.GetName())); err != nil {
+				log.Error(err, "cannot get cluster client")
+				return ctrl.Result{}, errors.Wrap(err, "cannot get cluster client")
+			}
+
 			cc := &ctrlconfig.Config{
 				Scheme:        runScheme,
 				ClusterName:   clusterClient.GetName(),
@@ -222,4 +225,18 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		}
 	}
 	return ctrl.Result{}, nil
+}
+
+func buildConfigMap(cr *corev1.Secret, clusterName string) *corev1.ConfigMap {
+	return &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       reflect.TypeOf(corev1.ConfigMap{}).Name(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "clustername",
+			Namespace: "default",
+		},
+		Data: map[string]string{"clusterName": clusterName},
+	}
 }

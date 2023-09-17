@@ -90,10 +90,10 @@ func (r *nodeepCache) HandleEvent(ctx context.Context, nsn types.NamespacedName,
 	if err != nil {
 		return fmt.Errorf("cannot handleEvent, nsn not found %s", nsn.String())
 	}
-	log := r.l.With("event", event, "nsn", nsn, "evenCtx", eventCtx, "state", ep.State.String())
+	log := log.FromContext(ctx).With("event", event, "nsn", nsn, "evenCtx", eventCtx, "state", ep.State.String())
 	log.Info("handleEvent")
 
-	ep.State.HandleEvent(event, eventCtx, ep)
+	ep.State.HandleEvent(ctx, event, eventCtx, ep)
 
 	// update the wire status
 	if ep.State.String() == "Deleted" {

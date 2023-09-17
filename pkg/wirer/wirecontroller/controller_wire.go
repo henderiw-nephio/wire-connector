@@ -78,7 +78,7 @@ func (r *wc) WireUpSert(ctx context.Context, req *wirepb.WireRequest) (*wirepb.E
 			return &wirepb.EmptyResponse{StatusCode: wirepb.StatusCode_NOK, Reason: err.Error()}, nil
 		}
 		log.Info("upsert cache")
-		r.wireCache.Upsert(ctx, wreq.GetNSN(), NewWire(r.dispatcher, wreq, *vxlanID))
+		r.wireCache.Upsert(ctx, wreq.GetNSN(), NewWire(ctx, r.dispatcher, wreq, *vxlanID))
 	} else {
 		r.l.Info("upsert cache", "desired action", DesiredActionCreate)
 		r.wireCache.SetDesiredAction(wreq.GetNSN(), DesiredActionCreate)
@@ -111,7 +111,7 @@ func (r *wc) resolveWire(ctx context.Context, wreq *WireReq) []*resolve.Data {
 	log.Info("resolve wire...")
 	resolvedData := make([]*resolve.Data, 2)
 	for epIdx := range wreq.Endpoints {
-		resolvedData[epIdx] = r.resolveEndpoint(wreq.GetEndpointNodeNSN(epIdx), wreq.Intercluster)
+		resolvedData[epIdx] = r.resolveEndpoint(wreq.GetEndpointNodeNSN(epIdx), wreq.Intercluster, false)
 	}
 	if !resolvedData[0].Action && !resolvedData[1].Action {
 		return []*resolve.Data{
@@ -130,7 +130,7 @@ func (r *wc) resolveWire(ctx context.Context, wreq *WireReq) []*resolve.Data {
 
 func (r *wc) wireCreate(ctx context.Context, wreq *WireReq, origin string) {
 	log := log.FromContext(ctx).With("nsn", wreq.GetNSN(), "origin", origin)
-	log.Info("wireCreate ...start...")
+	log.Info("wireCreate ...start...", "wreq", wreq)
 	// we want to resolve first to see if both endpoints resolve
 	// if not we dont create the endpoint event
 	resolvedData := r.resolveWire(ctx, wreq)
@@ -162,7 +162,7 @@ func (r *wc) wireCreate(ctx context.Context, wreq *WireReq, origin string) {
 		}
 	} else {
 		// handle event is done by the resolution with more specific info
-		log.Info("wireCreate resolution faialed")
+		log.Info("wireCreate resolution failed")
 		// from a callback we try to only deal
 		if origin != "callback" {
 			r.wireCache.HandleEvent(ctx, wreq.GetNSN(), state.ResolutionFailedEvent, &state.EventCtx{

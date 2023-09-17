@@ -18,6 +18,7 @@ package wirecontroller
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/resolve"
 	"k8s.io/apimachinery/pkg/types"
@@ -28,7 +29,8 @@ import (
 // - check if the pod exists in the cache and if it is ready
 // -> if ready we get the nodeName the network pod is running on
 // - via the nodeName we can find the serviceendpoint in the daemon cache if the daemon is ready
-func (r *wc) resolveEndpoint(nsn types.NamespacedName, intercluster bool) *resolve.Data {
+func (r *wc) resolveEndpoint(nsn types.NamespacedName, intercluster, localEndpoint bool) *resolve.Data {
+	// for localEndpoint we dont need to perform topology lookups
 	// find the topology -> provides the clusterName or validates the name exists within the cluster
 	t, err := r.topologyCache.Get(types.NamespacedName{Name: nsn.Namespace})
 	if err != nil {
@@ -46,13 +48,18 @@ func (r *wc) resolveEndpoint(nsn types.NamespacedName, intercluster bool) *resol
 		return &resolve.Data{Message: fmt.Sprintf("topology not ready: %s", nsn.String())}
 	}
 	// the service is only resolved for intercluster wires
-	if intercluster {
+	if intercluster && os.Getenv("WIRER_INTERCLUSTER") == "true" {
 		s, err := r.serviceCache.Get(types.NamespacedName{Name: t.ClusterName})
 		if err != nil {
 			return &resolve.Data{Message: fmt.Sprintf("service not found: %s", nsn.String())}
 		}
 		if !s.IsReady {
 			return &resolve.Data{Message: fmt.Sprintf("service not ready: %s", nsn.String())}
+		}
+		return &resolve.Data{
+			Success:         true,
+			Action:          true,
+			ServiceEndpoint: fmt.Sprintf("%s:%s", s.GRPCAddress, s.GRPCPort),
 		}
 	}
 
@@ -64,7 +71,7 @@ func (r *wc) resolveEndpoint(nsn types.NamespacedName, intercluster bool) *resol
 		return &resolve.Data{Message: fmt.Sprintf("pod not ready: %s", nsn.String())}
 	}
 	daemonHostNodeNSN := types.NamespacedName{
-		Namespace: "default",
+		Namespace: t.ClusterName,
 		Name:      pod.HostNodeName}
 	d, err := r.daemonCache.Get(daemonHostNodeNSN)
 	if err != nil {

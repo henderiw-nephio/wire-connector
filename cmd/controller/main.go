@@ -47,11 +47,11 @@ import (
 	"github.com/henderiw-nephio/wire-connector/pkg/wirer"
 	wirecluster "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/cluster"
 	wiredaemon "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/daemon"
+	wireendpoint "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/endpoint"
 	wirenode "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/node"
 	wirepod "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/pod"
 	wireservice "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/service"
 	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/topology"
-	wireendpoint "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/endpoint"
 	nodeepproxy "github.com/henderiw-nephio/wire-connector/pkg/wirer/proxy/nodeep"
 	vxlanclient "github.com/henderiw-nephio/wire-connector/pkg/wirer/vxlan/client"
 	wirecontroller "github.com/henderiw-nephio/wire-connector/pkg/wirer/wirecontroller"
@@ -62,10 +62,13 @@ import (
 	wireproxy "github.com/henderiw-nephio/wire-connector/pkg/wirer/proxy/wire"
 	reconciler "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
 	"golang.org/x/exp/slices"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	//+kubebuilder:scaffold:imports
@@ -106,6 +109,26 @@ func main() {
 	if err != nil {
 		log.Error("cannot start manager", "err", err)
 		os.Exit(1)
+	}
+
+	clusterName := "mgmt"
+	if os.Getenv("WIRER_INTERCLUSTER") != "true" {
+
+		cl, err := client.New(ctrl.GetConfigOrDie(), client.Options{
+			Scheme: runScheme,
+		})
+		if err != nil {
+			log.Error("cannot create k8s client", "err", err)
+			os.Exit(1)
+		}
+
+		cm := &corev1.ConfigMap{}
+		if err := cl.Get(ctx, types.NamespacedName{Namespace: "default", Name: "clustername"}, cm); err != nil {
+			log.Error("cannot start controller if configmap cannot be found", "err", err)
+			os.Exit(1)
+		}
+
+		clusterName = cm.Data["clusterName"]
 	}
 
 	vxlanClient, err := vxlanclient.New(mgr.GetClient())
@@ -173,6 +196,7 @@ func main() {
 	}()
 
 	ctrlCfg := &ctrlconfig.Config{
+		ClusterName:   clusterName,
 		VXLANClient:   vxlanClient,
 		ClusterCache:  c,
 		ServiceCache:  svc,

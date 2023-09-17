@@ -18,13 +18,13 @@ package wirecontroller
 
 import (
 	"context"
+	"log/slog"
 
-	"github.com/go-logr/logr"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/endpointpb"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
 	"github.com/henderiw-nephio/wire-connector/pkg/wirer/client"
 	"github.com/henderiw-nephio/wire-connector/pkg/wirer/state"
-	ctrl "sigs.k8s.io/controller-runtime"
+	"github.com/henderiw/logger/log"
 )
 
 type Worker interface {
@@ -35,8 +35,6 @@ type Worker interface {
 }
 
 func NewWorker(ctx context.Context, wireCache WireCache, epCache NodeEpCache, cfg *client.Config) (Worker, error) {
-	l := ctrl.Log.WithName("worker").WithValues("address", cfg.Address)
-
 	c, err := client.New(cfg)
 	if err != nil {
 		return nil, err
@@ -47,7 +45,7 @@ func NewWorker(ctx context.Context, wireCache WireCache, epCache NodeEpCache, cf
 		epCache:   epCache,
 		ch:        make(chan state.WorkerEvent, 10),
 		client:    c,
-		l:         l,
+		l:         log.FromContext(ctx).With("address", cfg.Address),
 	}, nil
 }
 
@@ -59,7 +57,7 @@ type worker struct {
 	client    client.Client
 	cancel    context.CancelFunc
 	//logger
-	l logr.Logger
+	l *slog.Logger
 }
 
 func (r *worker) GetConfig() *client.Config {
@@ -67,18 +65,19 @@ func (r *worker) GetConfig() *client.Config {
 }
 
 func (r *worker) Start(ctx context.Context) error {
-	r.l.Info("starting...")
+	log := log.FromContext(ctx).With("address", r.cfg.Address)
+	log.Info("starting...")
 	workerCtx, cancel := context.WithCancel(ctx)
 	r.cancel = cancel
 	if err := r.client.Start(workerCtx); err != nil {
 		return err
 	}
-	r.l.Info("started...")
+	log.Info("started...")
 	go func() {
 		for {
 			select {
 			case e, ok := <-r.ch:
-				r.l.Info("event", "ok", ok, "e", e)
+				log.Info("event", "ok", ok, "e", e)
 				if !ok {
 					continue
 				}
@@ -87,82 +86,94 @@ func (r *worker) Start(ctx context.Context) error {
 					switch req := e.Req.(type) {
 					case *WireReq:
 						nsn := req.GetNSN()
-						r.l.Info("create wire event", "nsn", nsn, "data", req.WireRequest)
+						log = log.With("nsn", nsn, "req", req.WireRequest)
+						log.Info("create wire event")
 						resp, err := r.client.WireCreate(ctx, req.WireRequest)
-						r.l.Info("create wire event", "nsn", nsn, "resp", resp, "err", err)
 						if err != nil {
+							log.Error("create wire event failed", "error", err)
 							eventCtx := e.EventCtx
 							eventCtx.Message = err.Error()
 							r.wireCache.HandleEvent(ctx, nsn, state.FailedEvent, eventCtx)
 							continue
 						}
 						if resp.StatusCode == wirepb.StatusCode_NOK {
+							log.Error("create wire event failed", "resp", resp)
 							eventCtx := e.EventCtx
 							eventCtx.Message = resp.GetReason()
 							r.wireCache.HandleEvent(ctx, nsn, state.FailedEvent, eventCtx)
 						}
 						// success
+						log.Info("create wire event success")
 						r.wireCache.HandleEvent(ctx, nsn, state.CreatedEvent, &state.EventCtx{
 							EpIdx: e.EventCtx.EpIdx,
 						})
 					case *NodeEpReq:
 						nsn := req.GetNSN()
-						r.l.Info("create endpoint event", "nsn", nsn, "data", req.EndpointRequest)
+						log = log.With("nsn", nsn, "req", req.EndpointRequest)
+						log.Info("create endpoint event")
 						resp, err := r.client.EndpointCreate(ctx, req.EndpointRequest)
-						r.l.Info("create endpoint event", "nsn", nsn, "resp", resp, "err", err)
 						if err != nil {
+							log.Error("create endpoint event failed", "error", err)
 							eventCtx := e.EventCtx
 							eventCtx.Message = err.Error()
 							r.epCache.HandleEvent(ctx, nsn, state.FailedEvent, eventCtx)
 							continue
 						}
 						if resp.StatusCode == endpointpb.StatusCode_NOK {
+							log.Error("create endpoint event failed", "resp", resp)
 							eventCtx := e.EventCtx
 							eventCtx.Message = resp.GetReason()
 							r.epCache.HandleEvent(ctx, nsn, state.FailedEvent, eventCtx)
 						}
 						// success
+						log.Error("create endpoint event success")
 						r.epCache.HandleEvent(ctx, nsn, state.CreatedEvent, &state.EventCtx{})
 					}
 				case state.WorkerActionDelete:
 					switch req := e.Req.(type) {
 					case *WireReq:
 						nsn := req.GetNSN()
-						r.l.Info("delete wire event", "nsn", nsn, "data", req.WireRequest)
+						log = log.With("nsn", nsn, "req", req.WireRequest)
+						log.Info("create wire event")
 						resp, err := r.client.WireDelete(ctx, req.WireRequest)
-						r.l.Info("delete wire event", "nsn", nsn, "resp", resp, "err", err)
 						if err != nil {
+							log.Error("delete wire event failed", "error", err)
 							eventCtx := e.EventCtx
 							eventCtx.Message = err.Error()
 							r.wireCache.HandleEvent(ctx, nsn, state.FailedEvent, eventCtx)
 							continue
 						}
 						if resp.StatusCode == wirepb.StatusCode_NOK {
+							log.Error("delete wire event failed", "resp", resp)
 							eventCtx := e.EventCtx
 							eventCtx.Message = resp.GetReason()
 							r.wireCache.HandleEvent(ctx, nsn, state.FailedEvent, eventCtx)
 						}
 						// success
+						log.Info("delete wire event success")
 						r.wireCache.HandleEvent(ctx, nsn, state.DeletedEvent, &state.EventCtx{
 							EpIdx: e.EventCtx.EpIdx,
 						})
 					case *NodeEpReq:
 						nsn := req.GetNSN()
-						r.l.Info("delete endpoint event", "nsn", nsn, "data", req.EndpointRequest)
+						log = log.With("nsn", nsn, "req", req.EndpointRequest)
+						log.Info("delete endpoint event")
 						resp, err := r.client.EndpointCreate(ctx, req.EndpointRequest)
-						r.l.Info("delete endpoint event", "nsn", nsn, "resp", resp, "err", err)
 						if err != nil {
+							log.Error("delete endpoint event failed", "err", err)
 							eventCtx := e.EventCtx
 							eventCtx.Message = err.Error()
 							r.epCache.HandleEvent(ctx, nsn, state.FailedEvent, eventCtx)
 							continue
 						}
 						if resp.StatusCode == endpointpb.StatusCode_NOK {
+							log.Error("delete endpoint event failed", "resp", resp)
 							eventCtx := e.EventCtx
 							eventCtx.Message = resp.GetReason()
 							r.epCache.HandleEvent(ctx, nsn, state.FailedEvent, eventCtx)
 						}
 						// success
+						log.Info("delete endpoint event success")
 						r.epCache.HandleEvent(ctx, nsn, state.DeletedEvent, &state.EventCtx{})
 					}
 				}

@@ -95,7 +95,7 @@ func New(ctx context.Context, cfg *Config) (wirer.Wirer, error) {
 				for nsn, o := range r.nodeepCache.List() {
 					log.Info("nodeep", "nsn", nsn, "nodeep resp", o.NodeEpResp, "nodeep status", o.NodeEpResp.StatusCode)
 				}
-				log.Info("worker...")
+				log.Info("workers...")
 				for nsn, o := range r.workerCache.List() {
 					log.Info("worker", "nsn", nsn, "addess", o.GetConfig().Address)
 				}

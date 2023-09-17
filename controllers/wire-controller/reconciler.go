@@ -20,9 +20,13 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"reflect"
 	"time"
 
+	"github.com/henderiw-nephio/wire-connector/controllers/ctrlconfig"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
+	"github.com/henderiw-nephio/wire-connector/pkg/wirer"
+	wiretopology "github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/topology"
 	wclient "github.com/henderiw-nephio/wire-connector/pkg/wirer/client"
 	reconcilerinterface "github.com/nephio-project/nephio/controllers/pkg/reconcilers/reconciler-interface"
 	"github.com/nephio-project/nephio/controllers/pkg/resource"
@@ -33,6 +37,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -53,6 +58,10 @@ const (
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c interface{}) (map[schema.GroupVersionKind]chan event.GenericEvent, error) {
+	cfg, ok := c.(*ctrlconfig.Config)
+	if !ok {
+		return nil, fmt.Errorf("cannot initialize, expecting controllerConfig, got: %s", reflect.TypeOf(c).Name())
+	}
 	// register scheme
 	if err := invv1alpha1.AddToScheme(mgr.GetScheme()); err != nil {
 		return nil, err
@@ -61,6 +70,7 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 	// initialize reconciler
 	r.Client = mgr.GetClient()
 	r.finalizer = resource.NewAPIFinalizer(mgr.GetClient(), finalizer)
+	r.topoCache = cfg.TopologyCache
 
 	wireClient, err := wclient.New(&wclient.Config{
 		Address:  fmt.Sprintf("%s:%s", "127.0.0.1", "9999"),
@@ -87,9 +97,10 @@ type reconciler struct {
 	finalizer *resource.APIFinalizer
 
 	wireclient wclient.Client
+	topoCache  wirer.Cache[wiretopology.Topology]
 }
 
-func getWireReq(l *invv1alpha1.Link) *wirepb.WireRequest {
+func (r *reconciler) getWireReq(l *invv1alpha1.Link) (*wirepb.WireRequest, error) {
 	req := &wirepb.WireRequest{
 		WireKey: &wirepb.WireKey{
 			Namespace: l.Namespace,
@@ -99,14 +110,18 @@ func getWireReq(l *invv1alpha1.Link) *wirepb.WireRequest {
 		Endpoints:    make([]*wirepb.Endpoint, len(l.Spec.Endpoints), len(l.Spec.Endpoints)),
 	}
 	for epIdx, ep := range l.Spec.Endpoints {
-		req.Endpoints[epIdx] = &wirepb.Endpoint{
-			Topology: ep.Topology,
-			NodeName: ep.NodeName,
-			IfName:   ep.InterfaceName,
+		t, err := r.topoCache.Get(types.NamespacedName{Name: ep.Topology})
+		if err != nil {
+			return nil, err
 		}
-
+		req.Endpoints[epIdx] = &wirepb.Endpoint{
+			Topology:    ep.Topology,
+			NodeName:    ep.NodeName,
+			IfName:      ep.InterfaceName,
+			ClusterName: t.ClusterName,
+		}
 	}
-	return req
+	return req, nil
 }
 
 func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -122,11 +137,16 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return reconcile.Result{}, nil
 	}
 
-	wreq := getWireReq(cr)
+	wreq, err := r.getWireReq(cr)
+	if err != nil {
+		log.Error(err, "cannot get wire request")
+		cr.SetConditions(resourcev1alpha1.WiringFailed(errors.Wrap(err, "cannot get wire request").Error()))
+		return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+	}
 	wresp, err := r.wireclient.WireGet(ctx, wreq)
 	if err != nil {
 		log.Error(err, "cannot get wire")
-		cr.SetConditions(resourcev1alpha1.WiringFailed("cannot get wire"))
+		cr.SetConditions(resourcev1alpha1.WiringFailed(errors.Wrap(err, "cannot get wire").Error()))
 		return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 	}
 	exists := true
@@ -137,11 +157,13 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		log.Info("wire get",
 			"exists", exists,
 			"status", wresp.StatusCode.String(),
+			"reason", wresp.Reason,
 		)
 	} else {
 		log.Info("wire get",
 			"exists", exists,
 			"status", wresp.StatusCode.String(),
+			"reason", wresp.Reason,
 			"ep0", fmt.Sprintf("%s/%s", wresp.EndpointsStatus[0].StatusCode, wresp.EndpointsStatus[0].Reason),
 			"ep1", fmt.Sprintf("%s/%s", wresp.EndpointsStatus[1].StatusCode, wresp.EndpointsStatus[1].Reason),
 		)
@@ -169,28 +191,31 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, nil
 	}
 
-	if !exists && cr.GetCondition(resourcev1alpha1.ConditionTypeReady).Status == v1.ConditionFalse {
-		if err := r.finalizer.RemoveFinalizer(ctx, cr); err != nil {
-			log.Error(err, "cannot remove finalizer")
-			cr.SetConditions(resourcev1alpha1.WiringFailed(err.Error()))
+	// if the Ready condition is not true -> allocation failed
+	// we need to clean up wiring
+	if cr.GetCondition(resourcev1alpha1.ConditionTypeReady).Status == v1.ConditionFalse {
+		log.Info("link not ready")
+		if exists {
+			if _, err := r.wireclient.WireDelete(ctx, wreq); err != nil {
+				log.Error(err, "cannot remove wire")
+				cr.SetConditions(resourcev1alpha1.WiringFailed("cannot remove wire"))
+				return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+			}
+			// TODO -> for now we poll, to be changed to event driven
+			cr.SetConditions(resourcev1alpha1.Wiring("deleting"))
+			return reconcile.Result{RequeueAfter: 1 * time.Second}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+		} else {
+			// does not exist
+			if err := r.finalizer.RemoveFinalizer(ctx, cr); err != nil {
+				log.Error(err, "cannot remove finalizer")
+				cr.SetConditions(resourcev1alpha1.WiringFailed(err.Error()))
+				return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
+			}
+			cr.SetConditions(resourcev1alpha1.WiringUknown())
 			return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 		}
-		cr.SetConditions(resourcev1alpha1.WiringUknown())
-		return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
-	}
-
-	if exists && cr.GetCondition(resourcev1alpha1.ConditionTypeReady).Status == v1.ConditionFalse {
-		if _, err := r.wireclient.WireDelete(ctx, wreq); err != nil {
-			log.Error(err, "cannot remove wire")
-			cr.SetConditions(resourcev1alpha1.WiringFailed("cannot remove wire"))
-			return reconcile.Result{Requeue: true}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
-		}
-		// TODO -> for now we poll, to be changed to event driven
-		cr.SetConditions(resourcev1alpha1.Wiring("deleting"))
-		return reconcile.Result{RequeueAfter: 1 * time.Second}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
-	}
-
-	if cr.GetCondition(resourcev1alpha1.ConditionTypeReady).Status == v1.ConditionTrue {
+	} else {
+		log.Info("link ready")
 		// we should only add a finalizer when we act
 		if err := r.finalizer.AddFinalizer(ctx, cr); err != nil {
 			log.Error(err, "cannot add finalizer")
@@ -221,6 +246,4 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		cr.SetConditions(resourcev1alpha1.Wired())
 		return reconcile.Result{}, errors.Wrap(r.Status().Update(ctx, cr), errUpdateStatus)
 	}
-	// we assume when the link becomes ready we get a new reconcile trigger
-	return ctrl.Result{}, nil
 }

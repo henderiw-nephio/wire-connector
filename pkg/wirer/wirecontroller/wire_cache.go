@@ -104,18 +104,19 @@ func (r *wcache) UnResolve(nsn types.NamespacedName, epIdx int) {
 }
 
 func (r *wcache) HandleEvent(ctx context.Context, nsn types.NamespacedName, event state.Event, eventCtx *state.EventCtx) error {
+	log := log.FromContext(ctx).With("event", event, "nsn", nsn, "eventCtx", eventCtx)
 	if eventCtx.EpIdx < 0 || eventCtx.EpIdx > 1 {
 		return fmt.Errorf("cannot handleEvent, invalid endpoint index %d", eventCtx.EpIdx)
 	}
-
+	
 	w, err := r.Get(nsn)
 	if err != nil {
 		return fmt.Errorf("cannot handleEvent, nsn not found %s", nsn.String())
 	}
-	log := r.l.With("event", event, "nsn", nsn, "evenCtx", eventCtx, "state", w.EndpointsState[eventCtx.EpIdx].String())
+	log = log.With("state", w.EndpointsState[eventCtx.EpIdx].String())
 	log.Info("handleEvent")
 
-	w.EndpointsState[eventCtx.EpIdx].HandleEvent(event, eventCtx, w)
+	w.EndpointsState[eventCtx.EpIdx].HandleEvent(ctx, event, eventCtx, w)
 
 	// update the wire status
 	if w.DesiredAction == DesiredActionDelete && w.WireResp.StatusCode == wirepb.StatusCode_OK {

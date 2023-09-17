@@ -71,6 +71,7 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 	r.Client = mgr.GetClient()
 	r.nodeCache = cfg.NodeCache
 	r.podCache = cfg.PodCache
+	r.clusterName = cfg.ClusterName
 
 	return nil,
 		ctrl.NewControllerManagedBy(mgr).
@@ -92,11 +93,6 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	log := log.FromContext(ctx).WithValues("cluster", r.clusterName)
 	log.Info("reconcile node")
 
-	clusterNamespace := r.clusterName
-	if clusterNamespace == "" {
-		clusterNamespace = "default"
-	}
-
 	cr := &corev1.Node{}
 	if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
 		// There's no need to requeue if we no longer exist. Otherwise we'll be
@@ -105,23 +101,23 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			log.Error(err, errGetCr)
 			return ctrl.Result{}, errors.Wrap(resource.IgnoreNotFound(err), errGetCr)
 		}
-		r.nodeCache.Delete(ctx, req.NamespacedName)
-		r.podCache.Delete(ctx, types.NamespacedName{Namespace: clusterNamespace, Name: cr.GetName()})
+		r.nodeCache.Delete(ctx, types.NamespacedName{Namespace: r.clusterName, Name: cr.GetName()})
+		r.podCache.Delete(ctx, types.NamespacedName{Namespace: r.clusterName, Name: cr.GetName()})
 		return reconcile.Result{}, nil
 	}
 
 	if meta.WasDeleted(cr) {
-		r.nodeCache.Delete(ctx, req.NamespacedName)
-		r.podCache.Delete(ctx, types.NamespacedName{Namespace: clusterNamespace, Name: cr.GetName()})
+		r.nodeCache.Delete(ctx, types.NamespacedName{Namespace: r.clusterName, Name: cr.GetName()})
+		r.podCache.Delete(ctx, types.NamespacedName{Namespace: r.clusterName, Name: cr.GetName()})
 		return ctrl.Result{}, nil
 	}
 
 	// update (add/update) node to cache
 	wn := r.getNode(cr)
-	r.nodeCache.Upsert(ctx, req.NamespacedName, wn)
+	r.nodeCache.Upsert(ctx, types.NamespacedName{Namespace: r.clusterName, Name: cr.GetName()}, wn)
 	// we add the node as a pod to make the resolution easier for wiring and endpoint creation
 	// this means the wirer sees everything as a pod
-	r.podCache.Upsert(ctx, types.NamespacedName{Namespace: clusterNamespace, Name: cr.GetName()}, wirepod.Pod{
+	r.podCache.Upsert(ctx, types.NamespacedName{Namespace: r.clusterName, Name: cr.GetName()}, wirepod.Pod{
 		Object:       wirer.Object{IsReady: true},
 		HostIP:       wn.HostIP,
 		HostNodeName: cr.GetName(),

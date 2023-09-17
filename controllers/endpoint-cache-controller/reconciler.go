@@ -87,11 +87,6 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	log := log.FromContext(ctx).WithValues("cluster", r.clusterName)
 	log.Info("reconcile endpoint")
 
-	clusterNamespace := r.clusterName
-	if clusterNamespace == "" {
-		clusterNamespace = "default"
-	}
-
 	cr := &invv1alpha1.Endpoint{}
 	if err := r.Get(ctx, req.NamespacedName, cr); err != nil {
 		// There's no need to requeue if we no longer exist. Otherwise we'll be

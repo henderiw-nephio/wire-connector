@@ -57,7 +57,7 @@ func (r *wc) EndpointUpSert(ctx context.Context, req *endpointpb.EndpointRequest
 	if _, err := r.nodeepCache.Get(epreq.GetNSN()); err != nil {
 		// not found -> create a new link
 		r.l.Info("node2ep upsert cache")
-		r.nodeepCache.Upsert(ctx, epreq.GetNSN(), NewNodeEndpoint(r.dispatcher, epreq))
+		r.nodeepCache.Upsert(ctx, epreq.GetNSN(), NewNodeEndpoint(ctx, r.dispatcher, epreq))
 	}
 	r.nodeepCreate(ctx, epreq, "api")
 	log.Info("node2ep creating...")
@@ -86,7 +86,7 @@ func (r *wc) nodeepCreate(ctx context.Context, req *NodeEpReq, origin string) {
 	log.Info("node2ep create ...start...")
 
 	// we want to resolve first to see if the daemon is available
-	resolvedData := r.resolveEndpoint(nsn, false)
+	resolvedData := r.resolveEndpoint(nsn, false, true)
 	r.l.Info("node2ep create resolution", "resolvedData", *resolvedData)
 	r.nodeepCache.Resolve(nsn, resolvedData)
 	if resolvedData.Success {
@@ -112,7 +112,7 @@ func (r *wc) nodeepDelete(ctx context.Context, req *NodeEpReq, origin string) {
 	log := log.FromContext(ctx).With("nsn", nsn, "origin", origin)
 	log.Info("node2ep delete ...start...")
 	// we want to resolve first to see if the daemon is available
-	resolvedData := r.resolveEndpoint(nsn, false)
+	resolvedData := r.resolveEndpoint(nsn, false, true)
 	log.Info("resolution", "resolvedData", *resolvedData)
 	r.nodeepCache.Resolve(nsn, resolvedData)
 	if resolvedData.Success {

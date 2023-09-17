@@ -17,15 +17,16 @@ limitations under the License.
 package wirecontroller
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 
-	"github.com/go-logr/logr"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/endpointpb"
 	"github.com/henderiw-nephio/wire-connector/pkg/wirer"
 	"github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/resolve"
 	"github.com/henderiw-nephio/wire-connector/pkg/wirer/state"
+	"github.com/henderiw/logger/log"
 	"k8s.io/apimachinery/pkg/types"
-	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 // Endoint provides the
@@ -36,21 +37,20 @@ type NodeEndpoint struct {
 	NodeEpReq  *NodeEpReq
 	NodeEpResp *EpResp
 	State      state.State
-	l          logr.Logger
+	l          *slog.Logger
 }
 
 type NodeEpReq struct {
 	*endpointpb.EndpointRequest
 }
 
-func NewNodeEndpoint(d Dispatcher, req *NodeEpReq) *NodeEndpoint {
-	l := ctrl.Log.WithName("nodeep").WithValues("nsn", req.GetNSN())
+func NewNodeEndpoint(ctx context.Context, d Dispatcher, req *NodeEpReq) *NodeEndpoint {
 	return &NodeEndpoint{
 		dispatcher: d,
 		NodeEpReq:  req,
 		NodeEpResp: newNodeEndpointResp(req),
 		State:      &state.Deleted{},
-		l:          l,
+		l:          log.FromContext(ctx).WithGroup("nodeep").With("nsn", req.GetNSN()),
 	}
 }
 
@@ -69,32 +69,31 @@ func (r *NodeEndpoint) GetAdditionalState(eventCtx *state.EventCtx) []state.Stat
 	return []state.StateCtx{}
 }
 
-func (r *NodeEndpoint) Transition(newState state.State, eventCtx *state.EventCtx, generatedEvents ...state.WorkerAction) {
-	log := r.l.WithValues("from/to", fmt.Sprintf("%s/%s", r.State, newState), "eventCtx", eventCtx)
+func (r *NodeEndpoint) Transition(ctx context.Context, newState state.State, eventCtx *state.EventCtx, generatedEvents ...state.WorkerAction) {
+	log := log.FromContext(ctx).With("from/to", fmt.Sprintf("%s/%s", r.State, newState), "eventCtx", eventCtx)
 	log.Info("transition", "wireResp", r.NodeEpResp, "generated events", generatedEvents)
 	r.State = newState
 	r.NodeEpResp.UpdateStatus(newState, eventCtx)
 
 	for _, ge := range generatedEvents {
-		r.l.Info("transition generated event", "ge", ge, "resolved", r.NodeEpReq.IsResolved())
+		log.Info("transition generated event", "ge", ge, "resolved", r.NodeEpReq.IsResolved())
 		if r.NodeEpReq.IsResolved() {
 			// should always resolve
 			workerNsn := types.NamespacedName{
-				Namespace: "default",
 				Name:      r.NodeEpReq.HostNodeName,
 			}
 
 			if err := r.dispatcher.Write(workerNsn, state.WorkerEvent{Action: ge, Req: r.NodeEpReq, EventCtx: eventCtx}); err != nil {
 				// should never happen, as it means the worker does not exist
-				r.HandleEvent(state.FailedEvent, eventCtx)
+				r.HandleEvent(ctx, state.FailedEvent, eventCtx)
 				continue
 			}
 		}
 	}
 }
 
-func (r *NodeEndpoint) HandleEvent(event state.Event, eventCtx *state.EventCtx) {
-	r.State.HandleEvent(event, eventCtx, r)
+func (r *NodeEndpoint) HandleEvent(ctx context.Context, event state.Event, eventCtx *state.EventCtx) {
+	r.State.HandleEvent(ctx, event, eventCtx, r)
 }
 
 func (r *NodeEndpoint) GetResponse() *endpointpb.EndpointResponse {

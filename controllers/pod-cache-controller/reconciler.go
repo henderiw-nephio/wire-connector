@@ -72,6 +72,7 @@ func (r *reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, c i
 	r.Client = mgr.GetClient()
 	r.podCache = cfg.PodCache
 	r.daemonCache = cfg.DaemonCache
+	r.clusterName = cfg.ClusterName
 
 	return nil,
 		ctrl.NewControllerManagedBy(mgr).
@@ -102,6 +103,13 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			return ctrl.Result{}, errors.Wrap(resource.IgnoreNotFound(err), errGetCr)
 		}
 		r.podCache.Delete(ctx, req.NamespacedName)
+		if len(cr.Labels) != 0 &&
+			cr.Labels["fn.kptgen.dev/controller"] == "wire-connector-daemon" {
+			hostNodeName, _ := r.getLeaseInfo(cr)
+			if hostNodeName != "" {
+				r.daemonCache.Delete(ctx, types.NamespacedName{Namespace: r.clusterName, Name: hostNodeName})
+			}
+		}
 		return reconcile.Result{}, nil
 	}
 
@@ -110,6 +118,13 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		// if so clean up the link wire
 		// delete the pod from the manager
 		r.podCache.Delete(ctx, req.NamespacedName)
+		if len(cr.Labels) != 0 &&
+			cr.Labels["fn.kptgen.dev/controller"] == "wire-connector-daemon" {
+			hostNodeName, _ := r.getLeaseInfo(cr)
+			if hostNodeName != "" {
+				r.daemonCache.Delete(ctx, types.NamespacedName{Namespace: r.clusterName, Name: hostNodeName})
+			}
+		}
 		return ctrl.Result{}, nil
 	}
 
@@ -127,7 +142,7 @@ func (r *reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 		hostNodeName, d := r.getLeaseInfo(cr)
 		if hostNodeName != "" {
-			r.daemonCache.Upsert(ctx, types.NamespacedName{Namespace: "default", Name: hostNodeName}, d)
+			r.daemonCache.Upsert(ctx, types.NamespacedName{Namespace: r.clusterName, Name: hostNodeName}, d)
 			return ctrl.Result{}, nil
 		}
 	}

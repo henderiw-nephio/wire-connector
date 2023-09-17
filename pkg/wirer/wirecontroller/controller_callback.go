@@ -94,6 +94,8 @@ func (r *wc) serviceCallback(ctx context.Context, a wirer.Action, nsn types.Name
 	log := log.FromContext(ctx).With("nsn", nsn, "action", a)
 	log.Info("serviceCallback ...start...")
 
+	workerNSN := types.NamespacedName{Name: nsn.Name}
+
 	service, ok := d.(wireservice.Service)
 	if !ok {
 		log.Info("expect Service", "got", reflect.TypeOf(d).Name())
@@ -103,10 +105,10 @@ func (r *wc) serviceCallback(ctx context.Context, a wirer.Action, nsn types.Name
 		address := fmt.Sprintf("%s:%s", service.GRPCAddress, service.GRPCPort)
 
 		// this is a safety
-		oldw, err := r.workerCache.Get(nsn)
+		oldw, err := r.workerCache.Get(workerNSN)
 		if err == nil {
 			oldw.Stop()
-			r.workerCache.Delete(ctx, nsn)
+			r.workerCache.Delete(ctx, workerNSN)
 		}
 		// create a new client
 		w, err := NewWorker(ctx, r.wireCache, r.nodeepCache, &client.Config{
@@ -121,13 +123,13 @@ func (r *wc) serviceCallback(ctx context.Context, a wirer.Action, nsn types.Name
 			log.Error("cannot start worker", "error", err)
 			return
 		}
-		r.workerCache.Upsert(ctx, nsn, w)
+		r.workerCache.Upsert(ctx, workerNSN, w)
 	} else {
-		c, err := r.workerCache.Get(nsn)
+		c, err := r.workerCache.Get(workerNSN)
 		if err == nil {
 			// worker found -> first stop and afterwards delete
 			c.Stop()
-			r.workerCache.Delete(ctx, nsn)
+			r.workerCache.Delete(ctx, workerNSN)
 		}
 	}
 	log.Info("serviceCallback ...call common callback...")
@@ -146,6 +148,8 @@ func (r *wc) daemonCallback(ctx context.Context, a wirer.Action, nsn types.Names
 	log := log.FromContext(ctx).With("nsn", nsn, "action", a, "data", d)
 	log.Info("daemonCallback ...start...")
 
+	workerNSN := types.NamespacedName{Name: nsn.Name}
+
 	daemon, ok := d.(wiredaemon.Daemon)
 	if !ok {
 		log.Info("expect Daemon", "got", reflect.TypeOf(d).Name())
@@ -160,10 +164,10 @@ func (r *wc) daemonCallback(ctx context.Context, a wirer.Action, nsn types.Names
 		log.Info("daemonCallback upsert")
 
 		// this is a safety
-		oldw, err := r.workerCache.Get(nsn)
+		oldw, err := r.workerCache.Get(workerNSN)
 		if err == nil {
 			oldw.Stop()
-			r.workerCache.Delete(ctx, nsn)
+			r.workerCache.Delete(ctx, workerNSN)
 		}
 		// create a new client
 		w, err := NewWorker(ctx, r.wireCache, r.nodeepCache, &client.Config{
@@ -178,14 +182,14 @@ func (r *wc) daemonCallback(ctx context.Context, a wirer.Action, nsn types.Names
 			log.Error("cannot start worker", "error", err)
 			return
 		}
-		r.workerCache.Upsert(ctx, nsn, w)
+		r.workerCache.Upsert(ctx, workerNSN, w)
 	} else {
 		// delete
-		c, err := r.workerCache.Get(nsn)
+		c, err := r.workerCache.Get(workerNSN)
 		if err == nil {
 			// worker found
 			c.Stop()
-			r.workerCache.Delete(ctx, nsn)
+			r.workerCache.Delete(ctx, workerNSN)
 		}
 	}
 	log.Info("daemonCallback ...call common callback...")
