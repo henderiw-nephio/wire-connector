@@ -20,15 +20,16 @@ import (
 	"context"
 
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/endpointpb"
+	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
 	"github.com/henderiw-nephio/wire-connector/pkg/wirer"
 	"github.com/henderiw-nephio/wire-connector/pkg/wirer/state"
+	"github.com/henderiw/logger/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"github.com/henderiw/logger/log"
 )
 
 func (r *wc) AddEndpointWatch(fn wirer.CallbackFn) {}
-func (r *wc) DeleteEndpointWatch()                {}
+func (r *wc) DeleteEndpointWatch()                 {}
 
 func (r *wc) EndpointGet(ctx context.Context, req *endpointpb.EndpointRequest) (*endpointpb.EndpointResponse, error) {
 	log := log.FromContext(ctx)
@@ -86,7 +87,7 @@ func (r *wc) nodeepCreate(ctx context.Context, req *NodeEpReq, origin string) {
 	log.Info("node2ep create ...start...")
 
 	// we want to resolve first to see if the daemon is available
-	resolvedData := r.resolveEndpoint(nsn, false, true)
+	resolvedData := r.resolveEndpoint(nsn, &wirepb.Endpoint{}, false)
 	r.l.Info("node2ep create resolution", "resolvedData", *resolvedData)
 	r.nodeepCache.Resolve(nsn, resolvedData)
 	if resolvedData.Success {
@@ -112,7 +113,7 @@ func (r *wc) nodeepDelete(ctx context.Context, req *NodeEpReq, origin string) {
 	log := log.FromContext(ctx).With("nsn", nsn, "origin", origin)
 	log.Info("node2ep delete ...start...")
 	// we want to resolve first to see if the daemon is available
-	resolvedData := r.resolveEndpoint(nsn, false, true)
+	resolvedData := r.resolveEndpoint(nsn, &wirepb.Endpoint{}, false)
 	log.Info("resolution", "resolvedData", *resolvedData)
 	r.nodeepCache.Resolve(nsn, resolvedData)
 	if resolvedData.Success {

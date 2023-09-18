@@ -237,11 +237,11 @@ func (r *wc) commonCallback(ctx context.Context, a wirer.Action, nsn types.Names
 			w := *wire
 			for epIdx := range wire.WireReq.Endpoints {
 				epIdx := epIdx
-				if w.WireReq.IsResolved(epIdx) && w.WireReq.HasLocalAction(epIdx) && w.WireReq.CompareName(epIdx, cbctx.Evaluate, nsn.Name) {
+				if w.WireReq.IsResolved(epIdx) && w.WireReq.Act(epIdx) && w.WireReq.CompareName(epIdx, cbctx.Evaluate, nsn.Name) {
 					wg.Add(1)
 					go func() {
 						defer wg.Done()
-						r.wireCache.UnResolve(wireNSN, epIdx)
+						r.wireCache.UnResolve(ctx, wireNSN, epIdx)
 						r.wireCache.HandleEvent(ctx, wireNSN, state.ResolutionFailedEvent, &state.EventCtx{
 							EpIdx:   epIdx,
 							Message: cbctx.Message,

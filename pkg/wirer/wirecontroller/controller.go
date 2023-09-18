@@ -65,7 +65,7 @@ func New(ctx context.Context, cfg *Config) (wirer.Wirer, error) {
 		wireCache:     NewWireCache(ctx, wirer.NewCache[*Wire](), cfg.VXLANClient),
 		dispatcher:    dispatcher,
 		workerCache:   workerCache,
-		l:             log.FromContext(ctx).WithGroup("wirer-daemon"),
+		l:             log.FromContext(ctx).WithGroup("wirer-controller"),
 	}
 
 	// used only for inter-cluster controller but dont do any harm

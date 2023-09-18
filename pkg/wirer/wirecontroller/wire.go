@@ -95,11 +95,11 @@ func (r *Wire) Transition(ctx context.Context, newState state.State, eventCtx *s
 		if r.WireReq.IsResolved(eventCtx.EpIdx) {
 			// should always resolve
 			workerNsn := types.NamespacedName{
-				Name:      r.WireReq.GetHostNodeName(eventCtx.EpIdx),
+				Name: r.WireReq.GetHostNodeName(eventCtx.EpIdx),
 			}
 			if os.Getenv("WIRER_INTERCLUSTER") == "true" {
 				workerNsn = types.NamespacedName{
-					Name:      r.WireReq.GetClusterName(eventCtx.EpIdx),
+					Name: r.WireReq.GetClusterName(eventCtx.EpIdx),
 				}
 			}
 			log.Info("transition generated event", "workerNsn", workerNsn)
@@ -115,7 +115,7 @@ func (r *Wire) Transition(ctx context.Context, newState state.State, eventCtx *s
 	}
 }
 
-func (r *Wire) HandleEvent(ctx context.Context,event state.Event, eventCtx *state.EventCtx) {
+func (r *Wire) HandleEvent(ctx context.Context, event state.Event, eventCtx *state.EventCtx) {
 	r.EndpointsState[eventCtx.EpIdx].HandleEvent(ctx, event, eventCtx, r)
 }
 
@@ -130,8 +130,8 @@ func (r *WireReq) GetNSN() types.NamespacedName {
 	}
 }
 
-func (r *WireReq) HasLocalAction(epIdx int) bool {
-	return r.Endpoints[epIdx].LocalAction
+func (r *WireReq) Act(epIdx int) bool {
+	return !r.Endpoints[epIdx].NoAction
 }
 
 func (r *WireReq) IsResolved(epIdx int) bool {
@@ -142,6 +142,7 @@ func (r *WireReq) Unresolve(epIdx int) {
 	r.Endpoints[epIdx].HostIP = ""
 	r.Endpoints[epIdx].HostNodeName = ""
 	r.Endpoints[epIdx].ServiceEndpoint = ""
+	r.Endpoints[epIdx].NoAction = false
 }
 
 func (r *WireReq) Resolve(resolvedData []*resolve.Data) {
@@ -150,7 +151,7 @@ func (r *WireReq) Resolve(resolvedData []*resolve.Data) {
 			r.Endpoints[epIdx].HostIP = res.HostIP
 			r.Endpoints[epIdx].HostNodeName = res.HostNodeName
 			r.Endpoints[epIdx].ServiceEndpoint = res.ServiceEndpoint
-			r.Endpoints[epIdx].LocalAction = res.Action
+			r.Endpoints[epIdx].NoAction = res.NoAction
 		} else {
 			r.Unresolve(epIdx)
 		}
@@ -166,6 +167,10 @@ func (r *WireReq) GetEndpointNodeNSN(epIdx int) types.NamespacedName {
 		Namespace: r.Endpoints[epIdx].Topology,
 		Name:      r.Endpoints[epIdx].NodeName,
 	}
+}
+
+func (r *WireReq) GetEndpoint(epIdx int) *wirepb.Endpoint {
+	return r.Endpoints[epIdx]
 }
 
 func (r *WireReq) GetHostNodeName(epIdx int) string {
@@ -191,10 +196,22 @@ func (r *WireReq) CompareName(epIdx int, evaluate EvaluateName, name string) boo
 }
 
 func newWireResp(req *WireReq) *WireResp {
+	// initialize the endpoint status -> for endpoints w/o an action we resolve to success
+	epStatus := make([]*wirepb.EndpointStatus, 0, len(req.Endpoints))
+	for _, epReq := range req.Endpoints {
+		if epReq.NoAction {
+			epStatus = append(epStatus, &wirepb.EndpointStatus{StatusCode: wirepb.StatusCode_OK, Reason: ""})
+		} else {
+			epStatus = append(epStatus, &wirepb.EndpointStatus{StatusCode: wirepb.StatusCode_NOK, Reason: "to be created"})
+		}
+	}
+
 	return &WireResp{
 		WireResponse: &wirepb.WireResponse{
 			WireKey:         req.GetWireKey(),
-			EndpointsStatus: []*wirepb.EndpointStatus{{Reason: ""}, {Reason: ""}},
+			StatusCode:      wirepb.StatusCode_NOK,
+			Reason:          "to be created",
+			EndpointsStatus: epStatus,
 		},
 	}
 }

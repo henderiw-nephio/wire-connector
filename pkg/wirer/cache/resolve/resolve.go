@@ -21,10 +21,10 @@ type Data struct {
 	Success bool
 	// Message indicates why the resolution failed
 	Message string
-	// Action indicates if the wirer should act wiring this endpoint.
+	// NoAction indicates if the wirer should act wiring this endpoint.
 	// For an intercluster wire the local cluster only wires its local endpoint, the other end
 	// provides the hostIP information for tunneling but no other information is required
-	Action bool
+	NoAction bool
 	// PodNodeName defines name of the pod
 	PodNodeName string
 	// ServiceEndpoint defines  ip address or dns name + port

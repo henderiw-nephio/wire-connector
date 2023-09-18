@@ -50,7 +50,7 @@ message Endpoint {
   string hostIP = 6;
   string serviceEndpoint = 7;
   string clusterName = 8; // only used in intercluster controller to ease the lookup to the cluster worker
-  bool localAction = 9;
+  bool NoAction = 9;
 }
 
 message WireResponse {

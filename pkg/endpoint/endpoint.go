@@ -146,25 +146,25 @@ func (r *ep) DeleteClaim(ctx context.Context, o client.Object) error {
 	log.Info("delete claim", "req", getCoreRef(o).String())
 
 	for _, ep := range r.epCache.List() {
-		if ep.Status.ClaimRef != nil &&
-			ep.Status.ClaimRef.APIVersion == o.GetObjectKind().GroupVersionKind().GroupVersion().String() &&
-			ep.Status.ClaimRef.Kind == o.GetObjectKind().GroupVersionKind().Kind &&
-			ep.Status.ClaimRef.Name == o.GetName() &&
-			ep.Status.ClaimRef.Namespace == o.GetNamespace() {
+		if ep.Endpoint.Status.ClaimRef != nil &&
+			ep.Endpoint.Status.ClaimRef.APIVersion == o.GetObjectKind().GroupVersionKind().GroupVersion().String() &&
+			ep.Endpoint.Status.ClaimRef.Kind == o.GetObjectKind().GroupVersionKind().Kind &&
+			ep.Endpoint.Status.ClaimRef.Name == o.GetName() &&
+			ep.Endpoint.Status.ClaimRef.Namespace == o.GetNamespace() {
 
 			ep.Status.ClaimRef = nil
 
 			t, err := r.topoCache.Get(types.NamespacedName{Name: ep.Namespace})
 			if err != nil {
-				return errors.Wrap(err, fmt.Sprintf("topology not found for ep %s in %s", fmt.Sprintf("%s/%s", ep.Spec.NodeName, ep.Spec.InterfaceName), getCoreRef(o).String()))
+				return errors.Wrap(err, fmt.Sprintf("topology not found for ep %s in %s", fmt.Sprintf("%s/%s", ep.Endpoint.Spec.NodeName, ep.Endpoint.Spec.InterfaceName), getCoreRef(o).String()))
 			}
 
 			c, err := r.clusterCache.Get(types.NamespacedName{Name: t.ClusterName})
 			if err != nil {
-				return errors.Wrap(err, fmt.Sprintf("cluster not found for ep %s in %s", fmt.Sprintf("%s/%s", ep.Spec.NodeName, ep.Spec.InterfaceName), getCoreRef(o).String()))
+				return errors.Wrap(err, fmt.Sprintf("cluster not found for ep %s in %s", fmt.Sprintf("%s/%s", ep.Endpoint.Spec.NodeName, ep.Endpoint.Spec.InterfaceName), getCoreRef(o).String()))
 			}
 
-			if err := c.Client.Status().Update(ctx, &ep); err != nil {
+			if err := c.Client.Status().Update(ctx, &ep.Endpoint); err != nil {
 				return err
 			}
 		}

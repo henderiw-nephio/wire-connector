@@ -19,6 +19,7 @@ package wirecontroller
 import (
 	"context"
 	"log/slog"
+	"os"
 
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/endpointpb"
 	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
@@ -87,6 +88,31 @@ func (r *worker) Start(ctx context.Context) error {
 					case *WireReq:
 						nsn := req.GetNSN()
 						log = log.With("nsn", nsn, "req", req.WireRequest)
+
+						if os.Getenv("WIRER_INTERCLUSTER") == "true" {
+							log.Info("get wire for create wire event")
+							resp, err := r.client.WireGet(ctx, req.WireRequest)
+							if err != nil {
+								log.Error("get wire event failed", "error", err)
+								eventCtx := e.EventCtx
+								eventCtx.Message = err.Error()
+								r.wireCache.HandleEvent(ctx, nsn, state.FailedEvent, eventCtx)
+								continue
+							}
+							if resp.StatusCode == wirepb.StatusCode_OK {
+								if resp.EndpointsStatus[e.EventCtx.EpIdx].StatusCode == wirepb.StatusCode_OK &&
+									resp.EndpointsStatus[e.EventCtx.EpIdx].Reason == "" {
+									// success
+									log.Info("create wire event success")
+									r.wireCache.HandleEvent(ctx, nsn, state.CreatedEvent, &state.EventCtx{
+										EpIdx: e.EventCtx.EpIdx,
+									})
+									continue
+								}
+							}
+							// the wire exists, so we need to handle the delete
+						}
+
 						log.Info("create wire event")
 						resp, err := r.client.WireCreate(ctx, req.WireRequest)
 						if err != nil {
@@ -101,6 +127,7 @@ func (r *worker) Start(ctx context.Context) error {
 							eventCtx := e.EventCtx
 							eventCtx.Message = resp.GetReason()
 							r.wireCache.HandleEvent(ctx, nsn, state.FailedEvent, eventCtx)
+							continue
 						}
 						// success
 						log.Info("create wire event success")
@@ -124,6 +151,7 @@ func (r *worker) Start(ctx context.Context) error {
 							eventCtx := e.EventCtx
 							eventCtx.Message = resp.GetReason()
 							r.epCache.HandleEvent(ctx, nsn, state.FailedEvent, eventCtx)
+							continue
 						}
 						// success
 						log.Error("create endpoint event success")
@@ -134,6 +162,28 @@ func (r *worker) Start(ctx context.Context) error {
 					case *WireReq:
 						nsn := req.GetNSN()
 						log = log.With("nsn", nsn, "req", req.WireRequest)
+
+						if os.Getenv("WIRER_INTERCLUSTER") == "true" {
+							log.Info("get wire for delete wire event")
+							resp, err := r.client.WireGet(ctx, req.WireRequest)
+							if err != nil {
+								log.Error("get wire for delete wire event failed", "error", err)
+								eventCtx := e.EventCtx
+								eventCtx.Message = err.Error()
+								r.wireCache.HandleEvent(ctx, nsn, state.FailedEvent, eventCtx)
+								continue
+							}
+							if resp.StatusCode == wirepb.StatusCode_NotFound {
+								// success
+								log.Info("get wire not found -> wire delete success")
+								r.wireCache.HandleEvent(ctx, nsn, state.DeletedEvent, &state.EventCtx{
+									EpIdx: e.EventCtx.EpIdx,
+								})
+								continue
+							}
+							// the wire exists, so we need to handle the delete
+						}
+
 						log.Info("create wire event")
 						resp, err := r.client.WireDelete(ctx, req.WireRequest)
 						if err != nil {
@@ -148,6 +198,7 @@ func (r *worker) Start(ctx context.Context) error {
 							eventCtx := e.EventCtx
 							eventCtx.Message = resp.GetReason()
 							r.wireCache.HandleEvent(ctx, nsn, state.FailedEvent, eventCtx)
+							continue
 						}
 						// success
 						log.Info("delete wire event success")
@@ -171,6 +222,7 @@ func (r *worker) Start(ctx context.Context) error {
 							eventCtx := e.EventCtx
 							eventCtx.Message = resp.GetReason()
 							r.epCache.HandleEvent(ctx, nsn, state.FailedEvent, eventCtx)
+							continue
 						}
 						// success
 						log.Info("delete endpoint event success")

@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/henderiw-nephio/wire-connector/pkg/proto/wirepb"
 	"github.com/henderiw-nephio/wire-connector/pkg/wirer/cache/resolve"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -29,7 +30,7 @@ import (
 // - check if the pod exists in the cache and if it is ready
 // -> if ready we get the nodeName the network pod is running on
 // - via the nodeName we can find the serviceendpoint in the daemon cache if the daemon is ready
-func (r *wc) resolveEndpoint(nsn types.NamespacedName, intercluster, localEndpoint bool) *resolve.Data {
+func (r *wc) resolveEndpoint(nsn types.NamespacedName, wirepbEP *wirepb.Endpoint, intercluster bool) *resolve.Data {
 	// for localEndpoint we dont need to perform topology lookups
 	// find the topology -> provides the clusterName or validates the name exists within the cluster
 	t, err := r.topologyCache.Get(types.NamespacedName{Name: nsn.Namespace})
@@ -37,9 +38,18 @@ func (r *wc) resolveEndpoint(nsn types.NamespacedName, intercluster, localEndpoi
 		// for intercluster wires we allow the resolution to topology resolution to fail
 		// since one ep can reside in the local cluster and the other ep can reside in a remote cluster
 		if intercluster {
+			if os.Getenv("WIRER_INTERCLUSTER") == "true" {
+				return &resolve.Data{Message: fmt.Sprintf("intercluster wires should always resolve a topology: %s", nsn.String())}
+			}
 			return &resolve.Data{
-				Success: true,
-				Action:  false,
+				Success:         true,
+				NoAction:        true,
+				// we copy the data from the wireReq since the mgmt cluster resolved them
+				PodNodeName:     wirepbEP.HostNodeName,
+				ServiceEndpoint: wirepbEP.ServiceEndpoint,
+				HostIP:          wirepbEP.HostIP,
+				HostNodeName:    wirepbEP.HostNodeName,
+				ClusterName:     wirepbEP.ClusterName,
 			}
 		}
 		return &resolve.Data{Message: fmt.Sprintf("topology not found: %s", nsn.String())}
@@ -48,6 +58,7 @@ func (r *wc) resolveEndpoint(nsn types.NamespacedName, intercluster, localEndpoi
 		return &resolve.Data{Message: fmt.Sprintf("topology not ready: %s", nsn.String())}
 	}
 	// the service is only resolved for intercluster wires
+	serviceEndpoint := ""
 	if intercluster && os.Getenv("WIRER_INTERCLUSTER") == "true" {
 		s, err := r.serviceCache.Get(types.NamespacedName{Name: t.ClusterName})
 		if err != nil {
@@ -56,11 +67,7 @@ func (r *wc) resolveEndpoint(nsn types.NamespacedName, intercluster, localEndpoi
 		if !s.IsReady {
 			return &resolve.Data{Message: fmt.Sprintf("service not ready: %s", nsn.String())}
 		}
-		return &resolve.Data{
-			Success:         true,
-			Action:          true,
-			ServiceEndpoint: fmt.Sprintf("%s:%s", s.GRPCAddress, s.GRPCPort),
-		}
+		serviceEndpoint = fmt.Sprintf("%s:%s", s.GRPCAddress, s.GRPCPort)
 	}
 
 	pod, err := r.podCache.Get(nsn)
@@ -80,19 +87,28 @@ func (r *wc) resolveEndpoint(nsn types.NamespacedName, intercluster, localEndpoi
 	if !d.IsReady {
 		return &resolve.Data{Message: fmt.Sprintf("wireDaemon not found: %s", daemonHostNodeNSN.String())}
 	}
-	// needed for incluster only -> seems we need it for both
-	//if os.Getenv("WIRER_INTERCLUSTER") == "true"
 	if d.GRPCAddress == "" || d.GRPCPort == "" {
 		return &resolve.Data{Message: fmt.Sprintf("wireDaemon no grpc address/port: %s", daemonHostNodeNSN.String())}
 	}
-	//}
 
+	if intercluster && os.Getenv("WIRER_INTERCLUSTER") == "true" {
+		return &resolve.Data{
+			Success:         true,
+			NoAction:        false,
+			PodNodeName:     pod.HostNodeName,
+			ServiceEndpoint: serviceEndpoint,
+			HostIP:          d.HostIP,
+			HostNodeName:    pod.HostNodeName,
+			ClusterName:     t.ClusterName,
+		}
+	}
 	return &resolve.Data{
 		Success:         true,
-		Action:          true,
+		NoAction:        false,
 		PodNodeName:     pod.HostNodeName,
 		ServiceEndpoint: fmt.Sprintf("%s:%s", d.GRPCAddress, d.GRPCPort),
 		HostIP:          d.HostIP,
 		HostNodeName:    pod.HostNodeName,
+		ClusterName:     t.ClusterName,
 	}
 }

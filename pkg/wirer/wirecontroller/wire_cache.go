@@ -41,8 +41,8 @@ type WireCache interface {
 	Delete(context.Context, types.NamespacedName)
 	List() map[types.NamespacedName]*Wire
 	SetDesiredAction(types.NamespacedName, DesiredAction)
-	Resolve(nsn types.NamespacedName, resolvedData []*resolve.Data)
-	UnResolve(nsn types.NamespacedName, epIdx int)
+	Resolve(ctx context.Context, nsn types.NamespacedName, resolvedData []*resolve.Data)
+	UnResolve(ctx context.Context, nsn types.NamespacedName, epIdx int)
 	HandleEvent(context.Context, types.NamespacedName, state.Event, *state.EventCtx) error
 }
 
@@ -87,19 +87,19 @@ func (r *wcache) SetDesiredAction(nsn types.NamespacedName, desiredAction Desire
 	}
 }
 
-func (r *wcache) Resolve(nsn types.NamespacedName, resolvedData []*resolve.Data) {
+func (r *wcache) Resolve(ctx context.Context, nsn types.NamespacedName, resolvedData []*resolve.Data) {
 	w, err := r.Get(nsn)
 	if err == nil {
 		w.WireReq.Resolve(resolvedData)
-		r.c.Upsert(context.Background(), nsn, w)
+		r.c.Upsert(ctx, nsn, w)
 	}
 }
 
-func (r *wcache) UnResolve(nsn types.NamespacedName, epIdx int) {
+func (r *wcache) UnResolve(ctx context.Context, nsn types.NamespacedName, epIdx int) {
 	w, err := r.Get(nsn)
 	if err == nil {
 		w.WireReq.Unresolve(epIdx)
-		r.c.Upsert(context.Background(), nsn, w)
+		r.c.Upsert(ctx, nsn, w)
 	}
 }
 
@@ -108,7 +108,7 @@ func (r *wcache) HandleEvent(ctx context.Context, nsn types.NamespacedName, even
 	if eventCtx.EpIdx < 0 || eventCtx.EpIdx > 1 {
 		return fmt.Errorf("cannot handleEvent, invalid endpoint index %d", eventCtx.EpIdx)
 	}
-	
+
 	w, err := r.Get(nsn)
 	if err != nil {
 		return fmt.Errorf("cannot handleEvent, nsn not found %s", nsn.String())
